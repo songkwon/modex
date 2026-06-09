@@ -3,13 +3,27 @@ package store
 import "time"
 
 type User struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	DisplayName string   `json:"display_name"`
-	Email       string   `json:"email"`
-	Department  string   `json:"department"`
-	Groups      []string `json:"groups"`
-	Roles       []string `json:"roles"`
+	ID          string    `json:"id"`
+	Username    string    `json:"username"`
+	DisplayName string    `json:"display_name"`
+	Email       string    `json:"email"`
+	Department  string    `json:"department"`
+	Groups      []string  `json:"groups"`
+	Roles       []string  `json:"roles"`
+	Source      string    `json:"source,omitempty"`
+	Status      string    `json:"status,omitempty"`
+	LastLoginAt time.Time `json:"last_login_at,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+}
+
+type Group struct {
+	ID        string    `json:"id"`
+	GroupKey  string    `json:"group_key"`
+	Name      string    `json:"name"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Category struct {
@@ -121,7 +135,71 @@ type Page struct {
 	CategoryIDs    []string  `json:"category_ids"`
 	Tags           []string  `json:"tags"`
 	ContentText    string    `json:"content_text"`
+	ContentHTML    string    `json:"content_html,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type NavItem struct {
+	Title    string    `json:"title"`
+	Path     string    `json:"path"`
+	Children []NavItem `json:"children,omitempty"`
+}
+
+type DeployEntry struct {
+	Key    string `json:"key"`
+	Title  string `json:"title"`
+	Type   string `json:"type"`
+	Source string `json:"source"`
+	Output string `json:"output,omitempty"`
+}
+
+type DeployDocument struct {
+	DocID          string   `json:"doc_id"`
+	ModuleKey      string   `json:"module_key"`
+	ModuleName     string   `json:"module_name"`
+	DocsVersion    string   `json:"docs_version"`
+	PackageVersion string   `json:"package_version"`
+	EntryKey       string   `json:"entry_key"`
+	EntryType      string   `json:"entry_type"`
+	Title          string   `json:"title"`
+	Description    string   `json:"description"`
+	Content        string   `json:"content"`
+	Path           string   `json:"path"`
+	SourceFile     string   `json:"source_file"`
+	Keywords       []string `json:"keywords"`
+	Status         string   `json:"status"`
+}
+
+type DeployArtifact struct {
+	ModuleKey      string
+	ModuleName     string
+	DocsVersion    string
+	PackageVersion string
+	Description    string
+	Authors        []string
+	Edition        string
+	Keywords       []string
+	Entries        []DeployEntry
+	Documents      []DeployDocument
+	Nav            []NavItem
+	SiteHTML       map[string]string
+	SiteFiles      map[string][]byte
+	Bytes          int64
+}
+
+type DeployResult struct {
+	Release        Release `json:"release"`
+	PagesIndexed   int     `json:"pages_indexed"`
+	EntriesIndexed int     `json:"entries_indexed"`
+	HTMLFiles      int     `json:"html_files"`
+	SiteFiles      int     `json:"site_files"`
+	BytesReceived  int64   `json:"bytes_received"`
+}
+
+type SiteFile struct {
+	Name        string
+	Content     []byte
+	ContentType string
 }
 
 type SearchLog struct {

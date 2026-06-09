@@ -24,13 +24,13 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
           <h2 className="text-xl font-semibold">{module.name}</h2>
           <p className="muted mt-2 text-sm leading-6">{module.description}</p>
         </div>
-        <button className="button" onClick={onClose} aria-label="关闭">
+        <button className="button icon-button" onClick={onClose} aria-label="关闭">
           <X size={16} />
         </button>
       </div>
-      <dl className="mt-5 grid gap-3">
+      <dl className="mt-5 grid gap-2 rounded-2xl border border-border bg-slate-50/70 p-4">
         {rows.map(([label, value]) => (
-          <div className="grid grid-cols-[120px_1fr] gap-3 text-sm" key={label}>
+          <div className="grid grid-cols-[120px_1fr] gap-3 border-t border-border py-2 text-sm first:border-t-0 first:pt-0 last:pb-0" key={label}>
             <dt className="muted">{label}</dt>
             <dd>{value}</dd>
           </div>

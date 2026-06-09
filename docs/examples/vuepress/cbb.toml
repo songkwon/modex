@@ -1,0 +1,8 @@
+[package]
+name = "VuePressGuide"
+version = "0.4.0"
+channel = "docs"
+description = "VuePress 文档站示例"
+authors = ["frontend-docs"]
+edition = "2025"
+keywords = ["vuepress", "frontend", "markdown"]

@@ -8,10 +8,10 @@ export default async function VersionPage({ params }: { params: { moduleKey: str
   ]);
   return (
     <main className="main">
-      <section className="panel">
-        <p className="muted">{module.category_path}</p>
-        <h1 className="mt-2 text-2xl font-semibold">{module.name} / {params.docsVersion}</h1>
-        <p className="mt-3 max-w-3xl leading-7">{module.description}</p>
+      <section className="hero-panel">
+        <span className="hero-eyebrow">{module.category_path}</span>
+        <h1 className="hero-title">{module.name}</h1>
+        <p className="hero-copy">{module.description}</p>
       </section>
       <section className="mt-5 card-grid">
         {entries.map((entry) => (

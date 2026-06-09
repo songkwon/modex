@@ -74,8 +74,8 @@ func Validate(root string) error {
 		if _, err := os.Stat(filepath.Join(root, e.Source)); err != nil {
 			return err
 		}
-		if e.Type == "vuepress" && (e.Build == "" || e.Output == "") {
-			return errors.New("vuepress entry requires build and output")
+		if (e.Type == "vuepress" || e.Type == "fumadocs") && (e.Build == "" || e.Output == "") {
+			return errors.New(e.Type + " entry requires build and output")
 		}
 	}
 	if _, err := os.Stat(filepath.Join(root, "cbb.toml")); err == nil {

@@ -26,10 +26,25 @@ export type ModuleInfo = {
 };
 
 export type User = {
+  id: string;
   username: string;
   display_name: string;
   email: string;
   department: string;
+  groups?: string[];
+  roles?: string[];
+  source?: string;
+  status?: string;
+  last_login_at?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type Group = {
+  id: string;
+  group_key: string;
+  name: string;
+  source: string;
 };
 
 export type AuthConfig = {

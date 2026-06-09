@@ -13,7 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <div className="shell">
           <header className="topbar">
-            <Link className="brand" href="/">Modex</Link>
+            <Link className="brand" href="/">
+              <span className="brand-mark">M</span>
+              <span>Modex</span>
+            </Link>
             <nav className="nav">
               <Link href="/search">搜索</Link>
               <Link href="/me/recent">最近访问</Link>

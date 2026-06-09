@@ -57,6 +57,13 @@ func (s *Service) BeginLogin(w http.ResponseWriter) (string, error) {
 }
 
 func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.ResponseWriter) (store.User, error) {
+	if providerErr := r.URL.Query().Get("error"); providerErr != "" {
+		desc := r.URL.Query().Get("error_description")
+		if desc == "" {
+			desc = providerErr
+		}
+		return store.User{}, fmt.Errorf("identity provider returned error %q: %s", providerErr, desc)
+	}
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
 	if code == "" || state == "" {
@@ -74,9 +81,20 @@ func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.Res
 	if err != nil {
 		return store.User{}, err
 	}
+	if err := s.CreateSession(w, user); err != nil {
+		return store.User{}, err
+	}
+	http.SetCookie(w, &http.Cookie{Name: s.cfg.StateCookie, Value: "", Domain: s.cfg.CookieDomain, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: sameSiteMode(s.cfg.CookieSameSite), Secure: s.cfg.CookieSecure})
+	return user, nil
+}
+
+// CreateSession issues a session cookie for the given user. It is shared by the
+// OIDC callback and the local mock-login endpoint so both paths produce a real,
+// cookie-backed session.
+func (s *Service) CreateSession(w http.ResponseWriter, user store.User) error {
 	sessionID, err := randomToken(32)
 	if err != nil {
-		return store.User{}, err
+		return err
 	}
 	s.mu.Lock()
 	s.sessions[sessionID] = user
@@ -91,8 +109,7 @@ func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.Res
 		SameSite: sameSiteMode(s.cfg.CookieSameSite),
 		Secure:   s.cfg.CookieSecure,
 	})
-	http.SetCookie(w, &http.Cookie{Name: s.cfg.StateCookie, Value: "", Domain: s.cfg.CookieDomain, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: sameSiteMode(s.cfg.CookieSameSite), Secure: s.cfg.CookieSecure})
-	return user, nil
+	return nil
 }
 
 func (s *Service) CurrentUser(r *http.Request) (store.User, bool) {

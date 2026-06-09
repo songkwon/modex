@@ -47,18 +47,15 @@ func Build(root, outDir string) error {
 			records = append(records, rec)
 			nav = append(nav, navItem)
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
-		case "vuepress":
-			if entry.Build != "" {
-				cmd := exec.Command("sh", "-c", entry.Build)
-				cmd.Dir = root
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				if err := cmd.Run(); err != nil {
-					return err
-				}
+		case "vuepress", "fumadocs":
+			if err := buildCommandEntry(root, outDir, entry); err != nil {
+				return err
 			}
-			copyDir(filepath.Join(root, entry.Output), filepath.Join(outDir, "site", entry.Key))
-			rec := recordFor(md, entry, "VuePress 文档已构建，详情见静态站点。")
+			label := "VuePress"
+			if entry.Type == "fumadocs" {
+				label = "Fumadocs"
+			}
+			rec := recordFor(md, entry, label+" 文档已构建，详情见静态站点。")
 			records = append(records, rec)
 			nav = append(nav, NavItem{Title: entry.Title, Path: "/" + entry.Key})
 		default:
@@ -86,6 +83,19 @@ func Build(root, outDir string) error {
 		}
 	}
 	return copyAssets(root, outDir)
+}
+
+func buildCommandEntry(root, outDir string, entry Entry) error {
+	if entry.Build != "" {
+		cmd := exec.Command("sh", "-c", entry.Build)
+		cmd.Dir = root
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+	return copyDir(filepath.Join(root, entry.Output), filepath.Join(outDir, "site", entry.Key))
 }
 
 func Package(buildDir, artifact string) error {

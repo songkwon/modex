@@ -1,0 +1,7 @@
+entries:
+  - key: guide
+    title: VuePress 文档站接入
+    type: vuepress
+    source: docs
+    build: node scripts/build-vuepress-sample.mjs
+    output: docs/.vuepress/dist

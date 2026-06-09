@@ -1,9 +1,14 @@
-import type { AnalyticsPages, AuthConfig, Category, ModuleInfo, SearchResponse, User } from "@/types/modex";
+import type { AnalyticsPages, AuthConfig, Category, Group, ModuleInfo, SearchResponse, User } from "@/types/modex";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
+const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
+const SERVER_API_BASE = process.env.INTERNAL_API_BASE_URL || PUBLIC_API_BASE;
+
+function apiBaseURL() {
+  return typeof window === "undefined" ? SERVER_API_BASE : PUBLIC_API_BASE;
+}
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBaseURL()}${path}`, {
     ...init,
     credentials: "include",
     headers: {
@@ -19,7 +24,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const getMe = () => api<User>("/api/auth/me");
-export const mockLogin = () => api<{ user: User }>("/api/auth/mock-login", { method: "POST", body: "{}" });
+export const mockLogin = (username?: string) =>
+  api<{ user: User }>("/api/auth/mock-login", { method: "POST", body: JSON.stringify(username ? { username } : {}) });
 export const logout = () => api<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
 export const getAuthConfig = () => api<AuthConfig>("/api/config");
 export const getCategories = () => api<Category[]>("/api/categories/tree");
@@ -36,3 +42,9 @@ export const recordReadProgress = (body: { doc_id: string; session_id: string; d
   api<{ status: string }>("/api/analytics/read-progress", { method: "POST", body: JSON.stringify(body) });
 
 export const getPageAnalytics = () => api<AnalyticsPages>("/api/admin/analytics/pages");
+
+export const getUsers = (keyword = "") => api<User[]>(`/api/admin/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`);
+export const createUser = (body: Partial<User>) => api<User>("/api/admin/users", { method: "POST", body: JSON.stringify(body) });
+export const updateUser = (id: string, body: Partial<User>) => api<User>(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const deleteUser = (id: string) => api<{ status: string }>(`/api/admin/users/${id}`, { method: "DELETE" });
+export const getGroups = () => api<Group[]>("/api/admin/groups");

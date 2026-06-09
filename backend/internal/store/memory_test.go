@@ -2,6 +2,69 @@ package store
 
 import "testing"
 
+func TestUserCRUDAndGroupAutoRegister(t *testing.T) {
+	s := NewSeeded()
+
+	created, err := s.CreateUser(User{Username: "carol", Department: "测试", Groups: []string{"qa-team"}, Roles: []string{"viewer"}})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if created.DisplayName != "carol" || created.Source != "manual" || created.Status != "active" {
+		t.Fatalf("CreateUser defaults wrong: %+v", created)
+	}
+	if _, err := s.CreateUser(User{Username: "CAROL"}); err != ErrConflict {
+		t.Fatalf("duplicate username err = %v, want ErrConflict", err)
+	}
+	// qa-team should have been auto-registered as a group.
+	var hasQA bool
+	for _, g := range s.Groups() {
+		if g.GroupKey == "qa-team" {
+			hasQA = true
+		}
+	}
+	if !hasQA {
+		t.Fatal("expected qa-team group to be auto-registered")
+	}
+
+	updated, err := s.UpdateUser(created.ID, User{Roles: []string{"maintainer"}, Status: "disabled"})
+	if err != nil {
+		t.Fatalf("UpdateUser: %v", err)
+	}
+	if len(updated.Roles) != 1 || updated.Roles[0] != "maintainer" || updated.Status != "disabled" {
+		t.Fatalf("UpdateUser result wrong: %+v", updated)
+	}
+
+	if err := s.DeleteUser(created.ID); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+	if _, err := s.UserByID(created.ID); err != ErrNotFound {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestUpsertUserSyncsOnLogin(t *testing.T) {
+	s := NewSeeded()
+	before := len(s.Users(""))
+
+	// Existing seeded user alice: upsert should update, not duplicate.
+	u := s.UpsertUser(User{ID: "u-alice", Username: "alice", Department: "新部门", Groups: []string{"cad-team", "release"}})
+	if u.Source != "oidc" || u.Department != "新部门" {
+		t.Fatalf("upsert existing wrong: %+v", u)
+	}
+	if u.LastLoginAt.IsZero() {
+		t.Fatal("expected LastLoginAt to be set on login")
+	}
+	if got := len(s.Users("")); got != before {
+		t.Fatalf("user count changed on upsert-existing: %d -> %d", before, got)
+	}
+
+	// New identity from provider: should be created.
+	s.UpsertUser(User{Username: "dave", Email: "dave@example.com", Groups: []string{"ops"}})
+	if got := len(s.Users("")); got != before+1 {
+		t.Fatalf("expected new user added, count %d -> %d", before, got)
+	}
+}
+
 func TestPageAnalyticsAggregatesViews(t *testing.T) {
 	s := NewSeeded()
 	doc := "DemoModule:latest:guide"
@@ -106,5 +169,58 @@ func TestRollbackRelease(t *testing.T) {
 	}
 	if _, err := s.RollbackRelease("missing"); err != ErrNotFound {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestIngestArtifactPublishesPagesNavAndHTML(t *testing.T) {
+	s := NewSeeded()
+	result, err := s.IngestArtifact(DeployArtifact{
+		ModuleKey:      "RuntimeDocs",
+		ModuleName:     "Runtime Docs",
+		DocsVersion:    "latest",
+		PackageVersion: "0.1.0",
+		Description:    "Runtime imported documentation.",
+		Authors:        []string{"platform"},
+		Keywords:       []string{"runtime", "docs"},
+		Entries: []DeployEntry{{
+			Key: "guide", Title: "Guide", Type: "markdown", Source: "docs/guide.md",
+		}},
+		Documents: []DeployDocument{{
+			DocID: "RuntimeDocs:latest:guide", EntryKey: "guide", EntryType: "markdown", Title: "Guide",
+			Description: "Guide page", Content: "runtime documentation content", Keywords: []string{"runtime"}, Status: "active",
+		}},
+		Nav:      []NavItem{{Title: "Guide", Path: "/guide"}},
+		SiteHTML: map[string]string{"site/guide/index.html": "<main><h1>Guide</h1></main>"},
+		SiteFiles: map[string][]byte{
+			"site/guide/index.html":     []byte("<main><h1>Guide</h1></main>"),
+			"site/guide/assets/app.css": []byte("body{color:#111}"),
+		},
+		Bytes: 123,
+	})
+	if err != nil {
+		t.Fatalf("IngestArtifact: %v", err)
+	}
+	if result.PagesIndexed != 1 || result.EntriesIndexed != 1 || result.HTMLFiles != 1 || result.SiteFiles != 2 {
+		t.Fatalf("unexpected deploy result: %+v", result)
+	}
+	page, err := s.PageByRoute("RuntimeDocs", "latest", "guide")
+	if err != nil {
+		t.Fatalf("PageByRoute: %v", err)
+	}
+	if page.ContentText != "runtime documentation content" {
+		t.Fatalf("content = %q", page.ContentText)
+	}
+	if got := s.PageHTML("RuntimeDocs", "latest", "guide"); got == "" {
+		t.Fatal("expected stored html")
+	}
+	if got := s.Nav("RuntimeDocs", "latest"); len(got) != 1 || got[0].Title != "Guide" {
+		t.Fatalf("unexpected nav: %+v", got)
+	}
+	file, err := s.SiteFile("RuntimeDocs", "latest", "guide", "assets/app.css")
+	if err != nil {
+		t.Fatalf("SiteFile: %v", err)
+	}
+	if file.ContentType != "text/css; charset=utf-8" {
+		t.Fatalf("content type = %q", file.ContentType)
 	}
 }

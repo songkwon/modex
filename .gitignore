@@ -5,6 +5,12 @@
 .idea/
 .vscode/
 
+# Agent/tooling skill installs and caches
+.claude/
+.codex/
+__pycache__/
+*.pyc
+
 # Env files (keep .env.example)
 .env
 deploy/.env

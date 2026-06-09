@@ -35,8 +35,12 @@ func FromEnv() Config {
 		issuer = keycloakBase + "/realms/" + realm
 	}
 	appBase := strings.TrimRight(env("APP_BASE_URL", "http://localhost:8671"), "/")
+	mode := env("AUTH_MODE", "mock")
+	if mode == "keycloak" {
+		mode = "oidc"
+	}
 	cfg := Config{
-		Mode:             env("AUTH_MODE", "mock"),
+		Mode:             mode,
 		AppBaseURL:       appBase,
 		FrontendBaseURL:  strings.TrimRight(env("FRONTEND_BASE_URL", "http://localhost:3000"), "/"),
 		IssuerURL:        issuer,

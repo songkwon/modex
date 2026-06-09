@@ -147,13 +147,19 @@ func keywordScore(query string, p store.Page) float64 {
 		return 1
 	}
 	hay := strings.ToLower(p.Title + " " + p.Description + " " + p.ContentText + " " + strings.Join(p.Tags, " "))
+	normalizedHay := normalizeText(hay)
 	score := 0.0
 	for _, term := range q {
+		normalizedTerm := normalizeText(term)
 		if strings.Contains(strings.ToLower(p.Title), term) {
 			score += 3
 		}
 		if strings.Contains(hay, term) {
 			score += 1
+			continue
+		}
+		if normalizedTerm != "" && strings.Contains(normalizedHay, normalizedTerm) {
+			score += 0.8
 		}
 	}
 	return score / float64(len(q)*4)
@@ -200,6 +206,11 @@ func snippet(query, content string) string {
 		end = len(content)
 	}
 	return strings.TrimSpace(content[start:end])
+}
+
+func normalizeText(s string) string {
+	replacer := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "，", "", "。", "", "、", "", "；", "", "：", "", ",", "", ".", "", ";", "", ":", "", "/", "", "-", "", "_", "", "与", "", "和", "")
+	return replacer.Replace(strings.ToLower(s))
 }
 
 func facets(pages []store.Page) map[string]map[string]int {

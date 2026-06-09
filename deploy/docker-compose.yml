@@ -73,6 +73,11 @@ services:
       MCP_TOKEN: ${MCP_TOKEN:-dev-token}
     ports:
       - "${BACKEND_PORT:-8671}:${BACKEND_PORT:-8671}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${BACKEND_PORT:-8671}/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
     depends_on:
       - postgres
       - minio
@@ -81,14 +86,20 @@ services:
   frontend:
     build:
       context: ../frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
+        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8671}
       NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres-data:

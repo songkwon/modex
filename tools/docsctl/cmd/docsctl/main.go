@@ -13,12 +13,32 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fatal("usage: docsctl validate|build|package|deploy")
+		fatal("usage: docsctl init|discover|validate|build|package|deploy")
 	}
 	root := env("DOCS_SOURCE_DIR", ".")
 	buildDir := env("DOCS_BUILD_DIR", filepath.Join(root, ".modex", "build"))
 	artifact := env("DOCS_ARTIFACT", filepath.Join(root, ".modex", "docs-artifact.zip"))
 	switch os.Args[1] {
+	case "init":
+		force := env("DOCS_INIT_FORCE", "false") == "true"
+		must(docs.Init(root, force))
+		fmt.Println("docsctl init ok:", filepath.Join(root, "docs.yaml"))
+	case "discover":
+		write := env("DOCS_DISCOVER_WRITE", "false") == "true"
+		force := env("DOCS_INIT_FORCE", "false") == "true"
+		maxDepth := envInt("DOCS_DISCOVER_DEPTH", 4)
+		found, err := docs.Discover(root, maxDepth, write, force)
+		must(err)
+		for _, project := range found {
+			status := "missing"
+			if project.HasConfig {
+				status = "ready"
+			} else if project.Written {
+				status = "created"
+			}
+			fmt.Printf("%s\t%s\t%s\t%s\n", status, project.Kind, project.RelPath, project.ConfigPath)
+		}
+		fmt.Printf("docsctl discover ok: %d projects\n", len(found))
 	case "validate":
 		must(docs.Validate(root))
 		fmt.Println("docsctl validate ok")
@@ -68,6 +88,18 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var n int
+	if _, err := fmt.Sscanf(v, "%d", &n); err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 func must(err error) {

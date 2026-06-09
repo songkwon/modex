@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, UserCircle } from "lucide-react";
+import { BookOpen, Clock3, Layers3, Search, UserCircle } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { ModuleCard } from "@/components/module-card";
 import { ModuleDrawer } from "@/components/module-drawer";
@@ -15,23 +15,57 @@ export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [keyword, setKeyword] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const frameworkCounts = modules.reduce<Record<string, number>>((acc, module) => {
+    const framework = module.keywords.includes("fumadocs") ? "Fumadocs" : module.keywords.includes("vuepress") ? "VuePress" : "Markdown";
+    acc[framework] = (acc[framework] || 0) + 1;
+    return acc;
+  }, {});
+  const ownerCounts = modules.reduce<Record<string, number>>((acc, module) => {
+    acc[module.owner_group] = (acc[module.owner_group] || 0) + 1;
+    return acc;
+  }, {});
+  const popularModules = [...modules].sort((a, b) => b.reads_30d - a.reads_30d).slice(0, 5);
+  const recentModules = [...modules].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, 5);
 
   useEffect(() => {
     getCategories().then(setCategories);
     getModules().then(setModules);
     getAuthConfig().then(setAuthConfig);
     getMe().then(setUser).catch(() => setUser(null));
+    const params = new URLSearchParams(window.location.search);
+    const loginError = params.get("login_error");
+    if (loginError) {
+      alert("登录失败：" + loginError);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
+
+  async function loadModules(value = keyword, category = selectedCategory) {
+    const params = new URLSearchParams();
+    if (value) params.set("keyword", value);
+    if (category) params.set("category_id", category.id);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    setModules(await getModules(query));
+  }
 
   async function runSearch(value: string) {
     setKeyword(value);
-    const q = value ? `?keyword=${encodeURIComponent(value)}` : "";
-    setModules(await getModules(q));
+    await loadModules(value, selectedCategory);
+  }
+
+  async function selectCategory(category: Category | null) {
+    setSelectedCategory(category);
+    await loadModules(keyword, category);
   }
 
   async function login() {
     if (authConfig?.auth_mode === "oidc") {
-      window.location.href = authConfig.login_url;
+      if (authConfig.login_url) {
+        window.location.href = authConfig.login_url;
+      } else {
+        alert("Keycloak OIDC 未完整配置：请检查 KEYCLOAK_BASE_URL / KEYCLOAK_REALM / OIDC_CLIENT_ID 等环境变量。");
+      }
       return;
     }
     const res = await mockLogin();
@@ -45,23 +79,57 @@ export default function HomePage() {
 
   return (
     <main className="main">
+      <section className="registry-hero mb-5">
+        <div className="registry-copy">
+          <div className="registry-kicker">
+            <Layers3 size={16} />
+            Modex Registry
+          </div>
+          <h1 className="registry-title">研发文档索引</h1>
+          <div className="registry-search">
+            <Search size={18} />
+            <input value={keyword} onChange={(e) => runSearch(e.target.value)} placeholder="搜索模块、Owner、VuePress、Fumadocs、构建..." />
+            <span>{selectedCategory?.name || "全部分类"}</span>
+          </div>
+        </div>
+        <div className="registry-metrics">
+          <div>
+            <span>Packages</span>
+            <strong>{modules.length}</strong>
+          </div>
+          <div>
+            <span>Frameworks</span>
+            <strong>{Object.keys(frameworkCounts).length}</strong>
+          </div>
+          <div>
+            <span>Owners</span>
+            <strong>{Object.keys(ownerCounts).length}</strong>
+          </div>
+        </div>
+      </section>
       <section className="grid home-grid">
-        <CategoryTree categories={categories} />
+        <CategoryTree activeID={selectedCategory?.id} categories={categories} onSelect={selectCategory} />
         <div className="grid">
-          <div className="panel">
-            <div className="flex items-center gap-3">
-              <Search size={18} />
-              <input value={keyword} onChange={(e) => runSearch(e.target.value)} placeholder="搜索模块、关键词、维护人" />
+          <div className="shelf-toolbar">
+            <div>
+              <h2>{selectedCategory ? selectedCategory.name : "全部文档"}</h2>
+              <p>{modules.length} 个文档集合，按最近发布和阅读热度混排。</p>
+            </div>
+            <div className="shelf-tabs compact">
+              {Object.entries(frameworkCounts).map(([name, count]) => (
+                <span className="shelf-tab" key={name}>{name} {count}</span>
+              ))}
             </div>
           </div>
-          <div className="card-grid">
+          <div className="package-list">
             {modules.map((module) => (
               <ModuleCard module={module} key={module.module_key} onInfo={setSelected} />
             ))}
+            {modules.length === 0 ? <div className="empty-state">没有匹配的文档集合</div> : null}
           </div>
         </div>
-        <aside className="grid content-start gap-4">
-          <div className="panel">
+        <aside className="grid content-start gap-4 rail">
+          <div className="identity-panel">
             <div className="flex items-center gap-3">
               <UserCircle size={22} />
               <div>
@@ -70,15 +138,32 @@ export default function HomePage() {
               </div>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button className="button" onClick={login}>{authConfig?.auth_mode === "oidc" ? "Keycloak 登录" : "Mock 登录"}</button>
+              <button className="button button-primary" onClick={login}>{authConfig?.auth_mode === "oidc" ? "Keycloak 登录" : "Mock 登录"}</button>
               {user ? <button className="button" onClick={signOut}>退出</button> : null}
             </div>
           </div>
           <div className="panel">
-            <h2 className="font-semibold">最近更新</h2>
-            <div className="mt-3 grid gap-2 text-sm">
-              {modules.slice(0, 3).map((m) => (
-                <div key={m.module_key}>
+            <div className="section-heading">
+              <h2>文档类型</h2>
+              <BookOpen size={16} className="text-blue-600" />
+            </div>
+            <div className="facet-stack">
+              {Object.entries(frameworkCounts).map(([name, count]) => (
+                <div className="facet-row" key={name}>
+                  <span>{name}</span>
+                  <strong>{count}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="panel">
+            <div className="section-heading">
+              <h2>最近更新</h2>
+              <Clock3 size={16} className="text-blue-600" />
+            </div>
+            <div className="text-sm">
+              {recentModules.map((m) => (
+                <div className="activity-row" key={m.module_key}>
                   <div>{m.name}</div>
                   <div className="muted">{m.updated_at.slice(0, 10)}</div>
                 </div>
@@ -86,10 +171,27 @@ export default function HomePage() {
             </div>
           </div>
           <div className="panel">
-            <h2 className="font-semibold">热门文档</h2>
-            <div className="mt-3 grid gap-2 text-sm">
-              {modules.map((m) => (
-                <div className="flex justify-between" key={m.module_key}>
+            <div className="section-heading">
+              <h2>按 Owner</h2>
+              <span className="tag">team</span>
+            </div>
+            <div className="text-sm">
+              {Object.entries(ownerCounts).map(([name, count]) => (
+                <div className="activity-row" key={name}>
+                  <span>{name}</span>
+                  <span className="muted">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="panel">
+            <div className="section-heading">
+              <h2>热门文档</h2>
+              <span className="tag">30d</span>
+            </div>
+            <div className="text-sm">
+              {popularModules.map((m) => (
+                <div className="activity-row" key={m.module_key}>
                   <span>{m.name}</span>
                   <span className="muted">{m.reads_30d}</span>
                 </div>

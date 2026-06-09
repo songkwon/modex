@@ -41,7 +41,7 @@ npm run dev
 
 ## Keycloak / OAuth2 Login
 
-Local development defaults to `AUTH_MODE=mock`. For the company Keycloak deployment, create a Keycloak client for Modex and set these values in `deploy/.env` or the production environment:
+Local development defaults to `AUTH_MODE=mock`. For the company Keycloak deployment, create a Keycloak client for Modex and set these values in `deploy/.env` or the production environment. `AUTH_MODE=keycloak` is accepted as an alias of `oidc`.
 
 ```env
 AUTH_MODE=oidc
@@ -78,29 +78,79 @@ If your Keycloak endpoints are non-standard, override `OIDC_ISSUER_URL` or the e
 The backend exposes:
 
 - `GET /api/auth/login`: redirects to Keycloak.
-- `GET /api/auth/callback`: exchanges the OAuth2 code, reads userinfo, and creates the Modex session cookie.
-- `GET /api/auth/me`: returns the current session user.
+- `GET /api/auth/callback`: exchanges the OAuth2 code, reads userinfo, creates the Modex session cookie, and syncs the user + groups into the directory. On failure it redirects to the portal with `?login_error=...` and logs the detail server-side.
+- `GET /api/auth/me`: returns the current session user (401 when not logged in).
 - `POST /api/auth/logout`: clears the Modex session cookie.
-- `GET /api/config`: returns the frontend-facing auth mode and login URL.
+- `GET /api/config`: returns the frontend-facing auth mode and login URL (empty when OIDC is not fully configured).
+
+### Login model
+
+Login is a real, cookie-backed action in **both** modes — the backend no longer
+silently impersonates a seeded user. Anonymous visitors can still browse the
+portal; `GET /api/auth/me` simply returns 401 until they log in.
+
+- `AUTH_MODE=oidc` (or `keycloak`): the portal "登录" button sends the browser to
+  `/api/auth/login` → Keycloak → `/api/auth/callback`, which sets the session cookie.
+- `AUTH_MODE=mock` (local dev): `POST /api/auth/mock-login` creates a real session
+  cookie. Pass `{"username":"alice"}` to log in as a specific seeded user.
+
+### Why Keycloak login can fail
+
+If `AUTH_MODE=oidc` is set but login does not work, check, in order:
+
+1. **`GET /api/config` shows `oidc_login_enabled: false`** → the issuer/endpoints or
+   `OIDC_CLIENT_ID` are missing. Set `KEYCLOAK_BASE_URL` + `KEYCLOAK_REALM` (or
+   `OIDC_ISSUER_URL`) and `OIDC_CLIENT_ID`.
+2. **Redirect URI mismatch** → `OIDC_REDIRECT_URL` must exactly equal the value
+   registered in the Keycloak client (`{APP_BASE_URL}/api/auth/callback`).
+3. **`login_url` points at the wrong host** → set `APP_BASE_URL` to the URL the
+   browser uses to reach the backend (e.g. `http://localhost:8671` locally).
+4. **CORS / cookies** → `CORS_ALLOW_ORIGINS` must include the frontend origin; for
+   cross-subdomain prod set `COOKIE_DOMAIN=.example.com`, `COOKIE_SECURE=true`.
+5. Otherwise read the backend log — callback errors (including provider
+   `error_description`) are logged and echoed to the portal via `?login_error=`.
+
+## User & Group Management
+
+The directory is managed from `/admin/users`:
+
+- `GET /api/admin/users` (optional `?keyword=`), `POST /api/admin/users`
+- `GET|PUT|DELETE /api/admin/users/{id}`
+- `GET /api/admin/groups`, `POST /api/admin/groups`
+
+OIDC logins upsert the user into this directory and refresh their groups and
+last-login timestamp. Groups referenced by a user are auto-registered.
 
 ## Deployment Configuration
 
 `deploy/.env.example` keeps deploy-time values out of code. The important groups are:
 
 - Public domains and ports: `APP_BASE_URL`, `FRONTEND_BASE_URL`, `BACKEND_PORT`, `FRONTEND_PORT`, `CORS_ALLOW_ORIGINS`
+- Frontend API routing: `NEXT_PUBLIC_API_BASE_URL` is used by browser-side requests; `INTERNAL_API_BASE_URL` is used by Next.js server rendering inside Docker. In Compose, keep it as `http://backend:8671` unless you change `BACKEND_PORT`.
 - PostgreSQL: `DATABASE_URL`, `POSTGRES_*`
 - MinIO: `MINIO_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT`, `MINIO_*`
 - Meilisearch: `MEILISEARCH_URL`, `MEILISEARCH_PUBLIC_URL`, `MEILI_*`
 - Embedding: `EMBEDDING_PROVIDER`, `EMBEDDING_HTTP_URL`, `EMBEDDING_HTTP_API_KEY`, `EMBEDDING_DIM`
 - MCP: `MCP_ENABLED`, `MCP_TOKEN`
 
-## docsctl Example
+## docsctl Examples
 
 ```bash
 cd tools/docsctl
+DOCS_SOURCE_DIR=/path/to/vuepress-project go run ./cmd/docsctl init
+DOCS_SOURCE_DIR=/path/to/wiki-root go run ./cmd/docsctl discover
+DOCS_SOURCE_DIR=/path/to/wiki-root DOCS_DISCOVER_WRITE=true go run ./cmd/docsctl discover
 go run ./cmd/docsctl validate
 DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl build
 DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl package
+DOCS_DEPLOY_URL=http://localhost:8671/api/deploy DOCS_ARTIFACT=../../docs/examples/markdown/.modex/docs-artifact.zip go run ./cmd/docsctl deploy
+```
+
+Additional examples:
+
+```bash
+DOCS_SOURCE_DIR=../../docs/examples/vuepress go run ./cmd/docsctl package
+DOCS_SOURCE_DIR=../../docs/examples/fumadocs go run ./cmd/docsctl package
 ```
 
 The artifact is written to `docs/examples/markdown/.modex/docs-artifact.zip` and includes:
@@ -113,6 +163,15 @@ The artifact is written to `docs/examples/markdown/.modex/docs-artifact.zip` and
 - `llms.txt`
 - optional `llms-full.txt`
 - `assets/`
+
+The VuePress and Fumadocs examples use small local build scripts so the packaging path can be tested without installing full framework dependencies. Real projects should replace those scripts with commands such as `pnpm docs:build`, `npm run build`, or the team-standard build command.
+
+For existing RD/VuePress sites, see `docs/vuepress-migration.md`.
+
+`docsctl discover` recursively scans existing documentation roots, detects
+VuePress, Fumadocs, static HTML, and Markdown projects, and can create
+`docs.yaml` in place when `DOCS_DISCOVER_WRITE=true` is set. Use
+`DOCS_DISCOVER_DEPTH` to control traversal depth.
 
 ## MCP Example
 

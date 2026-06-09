@@ -5,13 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"modex/backend/internal/auth"
+	"modex/backend/internal/deploy"
 	"modex/backend/internal/embedding"
 	"modex/backend/internal/search"
 	"modex/backend/internal/store"
@@ -71,6 +74,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/modules", s.handleAdminModules)
 	mux.HandleFunc("/api/admin/modules/", s.handleAdminModuleRoutes)
 	mux.HandleFunc("/api/admin/entries/", s.handleAdminEntryByID)
+	mux.HandleFunc("/api/admin/users", s.handleAdminUsers)
+	mux.HandleFunc("/api/admin/users/", s.handleAdminUserByID)
+	mux.HandleFunc("/api/admin/groups", s.handleAdminGroups)
 	mux.HandleFunc("/api/admin/", s.handleAdminAccepted)
 	return s.cors(recoverer(mux))
 }
@@ -92,7 +98,26 @@ func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "mock_login_disabled", "mock login is disabled when AUTH_MODE=oidc")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": s.store.CurrentUser(), "session": "mock-session"})
+	// Allow developers to choose which seeded identity to log in as.
+	var req struct {
+		Username string `json:"username"`
+	}
+	_ = decodeBody(r, &req)
+	user := s.store.CurrentUser()
+	if req.Username != "" {
+		for _, u := range s.store.Users("") {
+			if strings.EqualFold(u.Username, req.Username) {
+				user = u
+				break
+			}
+		}
+	}
+	user = s.store.UpsertUser(user)
+	if err := s.auth.CreateSession(w, user); err != nil {
+		writeError(w, http.StatusInternalServerError, "session_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -105,11 +130,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
-	if _, err := s.auth.CompleteLogin(r.Context(), r, w); err != nil {
-		writeError(w, http.StatusBadRequest, "oidc_callback_failed", err.Error())
+	user, err := s.auth.CompleteLogin(r.Context(), r, w)
+	frontend := s.auth.Config().FrontendBaseURL
+	if err != nil {
+		// Surface the failure to the user in the portal rather than a bare JSON
+		// 400, and log the detail server-side for diagnostics.
+		log.Printf("oidc callback failed: %v", err)
+		http.Redirect(w, r, frontend+"/?login_error="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, s.auth.Config().FrontendBaseURL, http.StatusFound)
+	// Sync the SSO identity (and its groups) into the user directory.
+	s.store.UpsertUser(user)
+	http.Redirect(w, r, frontend, http.StatusFound)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -119,10 +151,16 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := s.auth.Config()
+	loginURL := ""
+	// Advertise the login URL when a real login is available: always in mock
+	// mode, and in OIDC mode only once the provider is fully configured.
+	if cfg.Mode != "oidc" || cfg.LoginReady() {
+		loginURL = cfg.AppBaseURL + "/api/auth/login"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"auth_mode":          cfg.Mode,
 		"oidc_login_enabled": cfg.LoginReady(),
-		"login_url":          cfg.AppBaseURL + "/api/auth/login",
+		"login_url":          loginURL,
 		"frontend_base_url":  cfg.FrontendBaseURL,
 	})
 }
@@ -178,20 +216,51 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) >= 3 {
+		if len(parts) >= 4 && parts[3] == "site" {
+			s.handleDocSiteFile(w, module.ModuleKey, parts[1], parts[2], strings.Join(parts[4:], "/"))
+			return
+		}
 		if len(parts) == 4 && parts[3] == "nav" {
-			writeJSON(w, http.StatusOK, []map[string]string{{"title": "概览", "href": "#overview"}, {"title": "正文", "href": "#content"}, {"title": "元数据", "href": "#metadata"}})
+			nav := s.store.Nav(module.ModuleKey, parts[1])
+			if len(nav) == 0 {
+				writeJSON(w, http.StatusOK, []map[string]string{{"title": "概览", "path": "#overview"}, {"title": "正文", "path": "#content"}, {"title": "元数据", "path": "#metadata"}})
+				return
+			}
+			writeJSON(w, http.StatusOK, nav)
 			return
 		}
 		page, err := s.store.PageByRoute(module.ModuleKey, parts[1], parts[2])
-		writeResult(w, page, err)
+		if err != nil {
+			writeResult(w, page, err)
+			return
+		}
+		page.ContentHTML = s.store.PageHTML(module.ModuleKey, parts[1], parts[2])
+		writeJSON(w, http.StatusOK, page)
 		return
 	}
+}
+
+func (s *Server) handleDocSiteFile(w http.ResponseWriter, moduleKey, docsVersion, entryKey, name string) {
+	f, err := s.store.SiteFile(moduleKey, docsVersion, entryKey, name)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	w.Header().Set("Content-Type", f.ContentType)
+	w.Header().Set("Cache-Control", "private, max-age=60")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(f.Content)
 }
 
 func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 	docID := strings.TrimPrefix(r.URL.Path, "/api/docs/page/")
 	page, err := s.store.Page(docID)
-	writeResult(w, page, err)
+	if err != nil {
+		writeResult(w, page, err)
+		return
+	}
+	page.ContentHTML = s.store.PageHTML(page.ModuleKey, page.DocsVersion, page.EntryKey)
+	writeJSON(w, http.StatusOK, page)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -237,8 +306,21 @@ func (s *Server) handleEmbedText(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
-	n, _ := io.Copy(io.Discard, r.Body)
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "bytes_received": n})
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	artifact, err := deploy.ParseZip(r.Body, envInt64("DOCS_DEPLOY_MAX_BYTES", 100*1024*1024))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_artifact", err.Error())
+		return
+	}
+	result, err := s.store.IngestArtifact(toStoreArtifact(artifact))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "deploy_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "published", "result": result})
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
@@ -334,14 +416,11 @@ func (s *Server) handleMCPLog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "logged"})
 }
 
+// currentUser returns the authenticated user from the session cookie. Login is
+// a real, cookie-backed action in both mock and OIDC modes, so there is no
+// silent impersonation; anonymous callers simply get ok == false.
 func (s *Server) currentUser(r *http.Request) (store.User, bool) {
-	if user, ok := s.auth.CurrentUser(r); ok {
-		return user, true
-	}
-	if s.auth.Config().Mode != "oidc" {
-		return s.store.CurrentUser(), true
-	}
-	return store.User{}, false
+	return s.auth.CurrentUser(r)
 }
 
 func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
@@ -477,6 +556,65 @@ func (s *Server) handleReleaseRoutes(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, rel, err)
 }
 
+func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.store.Users(r.URL.Query().Get("keyword")))
+	case http.MethodPost:
+		var u store.User
+		if err := decodeBody(r, &u); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		created, err := s.store.CreateUser(u)
+		writeMutation(w, created, http.StatusCreated, err)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+	}
+}
+
+func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
+	switch r.Method {
+	case http.MethodGet:
+		u, err := s.store.UserByID(id)
+		writeResult(w, u, err)
+	case http.MethodPut:
+		var u store.User
+		if err := decodeBody(r, &u); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		updated, err := s.store.UpdateUser(id, u)
+		writeMutation(w, updated, http.StatusOK, err)
+	case http.MethodDelete:
+		if err := s.store.DeleteUser(id); err != nil {
+			writeResult(w, nil, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": id})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET, PUT or DELETE")
+	}
+}
+
+func (s *Server) handleAdminGroups(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.store.Groups())
+	case http.MethodPost:
+		var g store.Group
+		if err := decodeBody(r, &g); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		created, err := s.store.CreateGroup(g)
+		writeMutation(w, created, http.StatusCreated, err)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+	}
+}
+
 func (s *Server) handleAdminAccepted(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "note": "MVP admin mutation endpoint placeholder"})
 }
@@ -582,9 +720,62 @@ func recoverer(next http.Handler) http.Handler {
 	})
 }
 
+func toStoreArtifact(a deploy.Artifact) store.DeployArtifact {
+	out := store.DeployArtifact{
+		ModuleKey:      a.Metadata.ModuleKey,
+		ModuleName:     a.Metadata.ModuleName,
+		DocsVersion:    a.Metadata.DocsVersion,
+		PackageVersion: a.Metadata.PackageVersion,
+		Description:    a.Metadata.Description,
+		Authors:        append([]string(nil), a.Metadata.Authors...),
+		Edition:        a.Metadata.Edition,
+		Keywords:       append([]string(nil), a.Metadata.Keywords...),
+		Bytes:          a.Bytes,
+		SiteHTML:       map[string]string{},
+		SiteFiles:      map[string][]byte{},
+	}
+	for _, e := range a.Manifest.Entries {
+		out.Entries = append(out.Entries, store.DeployEntry{Key: e.Key, Title: e.Title, Type: e.Type, Source: e.Source, Output: e.Output})
+	}
+	for _, d := range a.Documents {
+		out.Documents = append(out.Documents, store.DeployDocument{
+			DocID: d.DocID, ModuleKey: d.ModuleKey, ModuleName: d.ModuleName, DocsVersion: d.DocsVersion,
+			PackageVersion: d.PackageVersion, EntryKey: d.EntryKey, EntryType: d.EntryType, Title: d.Title,
+			Description: d.Description, Content: d.Content, Path: d.Path, SourceFile: d.SourceFile,
+			Keywords: append([]string(nil), d.Keywords...), Status: d.Status,
+		})
+	}
+	for _, n := range a.Nav {
+		out.Nav = append(out.Nav, toStoreNav(n))
+	}
+	for name, html := range a.SiteHTML {
+		out.SiteHTML[name] = html
+	}
+	for name, content := range a.SiteFiles {
+		out.SiteFiles[name] = append([]byte(nil), content...)
+	}
+	return out
+}
+
+func toStoreNav(n deploy.NavItem) store.NavItem {
+	out := store.NavItem{Title: n.Title, Path: n.Path}
+	for _, child := range n.Children {
+		out.Children = append(out.Children, toStoreNav(child))
+	}
+	return out
+}
+
 func envFloat(key string, fallback float64) float64 {
 	v, err := strconv.ParseFloat(os.Getenv(key), 64)
 	if err != nil || v == 0 {
+		return fallback
+	}
+	return v
+}
+
+func envInt64(key string, fallback int64) int64 {
+	v, err := strconv.ParseInt(os.Getenv(key), 10, 64)
+	if err != nil || v <= 0 {
 		return fallback
 	}
 	return v
