@@ -1,10 +1,20 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Modex",
-  description: "Module Documentation Experience"
+  description: "Module Documentation Experience",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.png"
+  }
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0E1F30"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="shell">
           <header className="topbar">
             <Link className="brand" href="/">
-              <span className="brand-mark">M</span>
+              <Image src="/logo.svg" alt="Modex" width={28} height={28} priority style={{ borderRadius: 8 }} />
               <span>Modex</span>
             </Link>
             <nav className="nav">

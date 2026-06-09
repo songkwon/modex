@@ -222,16 +222,33 @@ otherwise computed lazily on first semantic/hybrid query and cached; keyword-onl
 search never calls the embedding provider. Publishing a new artifact invalidates
 the cached vectors for that module/version automatically.
 
+## Durable Store Snapshots
+
+Set `DATA_DIR` to make the registry survive restarts. On boot the backend loads
+`${DATA_DIR}/modex-store.json` (or seeds fresh data when absent), saves
+periodically (`DATA_SAVE_INTERVAL_SECONDS`, default 60), and writes a final
+snapshot on graceful shutdown (SIGINT/SIGTERM). Writes are atomic (temp file +
+rename). In Docker Compose this is a `backend-data` named volume mounted at
+`/data`, so `docker compose restart` keeps modules, users, analytics, and search
+indexes. Leave `DATA_DIR` empty for a pure in-memory store.
+
+## Branding
+
+The Modex mark lives at `frontend/app/icon.svg` (auto-served favicon),
+`frontend/app/apple-icon.png`, and `frontend/public/logo.svg` (header). PNG icon
+sizes and the web manifest are generated from the SVG; regenerate with
+`rsvg-convert -w <size> -h <size> app/icon.svg -o <out>.png`.
+
 ## MVP Notes
 
-The backend keeps the registry in memory, but the full product loop is functional
-end-to-end: `docsctl deploy` uploads an artifact to `POST /api/deploy`, which
-parses the zip and ingests modules, versions, entries, pages, nav, built HTML,
-and site assets so they immediately appear in the portal, search, and MCP. Mock +
-Keycloak/OIDC login, user/group management, analytics, admin CRUD, and real
-search/embedding reindexing are all implemented.
+The full product loop is functional end-to-end: `docsctl deploy` uploads an
+artifact to `POST /api/deploy`, which parses the zip and ingests modules,
+versions, entries, pages, nav, built HTML, and site assets so they immediately
+appear in the portal, search, and MCP. Mock + Keycloak/OIDC login, user/group
+management, analytics, admin CRUD, real search/embedding reindexing, and durable
+snapshot persistence are all implemented.
 
-The remaining work is durable storage: moving the in-memory store onto
-PostgreSQL (source of truth), MinIO (artifact/site bytes), Meilisearch (keyword
-index), and pgvector (embeddings). Configuration, the `001_init.sql` migration,
-and the `EmbeddingStore`/provider seams are already in place for that iteration.
+The next infrastructure iteration replaces the snapshot store with managed
+services: PostgreSQL (source of truth), MinIO (artifact/site bytes), Meilisearch
+(keyword index), and pgvector (embeddings). Configuration, the `001_init.sql`
+migration, and the provider seams are already in place for that work.

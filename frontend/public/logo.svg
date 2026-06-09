@@ -1,0 +1,41 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Modex">
+  <defs>
+    <clipPath id="shield">
+      <path d="M152 140 L360 140 Q384 140 384 164 L384 296 C384 360 330 398 256 432 C182 398 128 360 128 296 L128 164 Q128 140 152 140 Z"/>
+    </clipPath>
+    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2F6B4F"/><stop offset="1" stop-color="#27583F"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4F9E73"/><stop offset="1" stop-color="#3F8460"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7FC79B"/><stop offset="1" stop-color="#69B587"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#BCE9CD"/><stop offset="1" stop-color="#A2DCB8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="512" height="512" rx="104" fill="#0E1F30"/>
+
+  <!-- stacked book covers, clipped to a shield silhouette -->
+  <g clip-path="url(#shield)">
+    <rect x="128" y="198" width="66" height="240" fill="url(#g1)"/>
+    <rect x="192" y="174" width="66" height="264" fill="url(#g2)"/>
+    <rect x="256" y="150" width="66" height="288" fill="url(#g3)"/>
+    <rect x="320" y="138" width="66" height="300" fill="url(#g4)"/>
+
+    <!-- spine separations -->
+    <rect x="190" y="120" width="4" height="320" fill="#0E1F30" opacity="0.55"/>
+    <rect x="254" y="120" width="4" height="320" fill="#0E1F30" opacity="0.55"/>
+    <rect x="318" y="120" width="4" height="320" fill="#0E1F30" opacity="0.55"/>
+
+    <!-- top cover highlights -->
+    <rect x="128" y="198" width="66" height="6" fill="#ffffff" opacity="0.18"/>
+    <rect x="192" y="174" width="66" height="6" fill="#ffffff" opacity="0.20"/>
+    <rect x="256" y="150" width="66" height="6" fill="#ffffff" opacity="0.24"/>
+    <rect x="320" y="138" width="66" height="6" fill="#ffffff" opacity="0.30"/>
+  </g>
+</svg>

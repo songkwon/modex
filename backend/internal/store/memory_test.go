@@ -1,6 +1,61 @@
 package store
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
+
+func TestSnapshotRoundTrip(t *testing.T) {
+	s := NewSeeded()
+	if _, err := s.CreateUser(User{Username: "carol", Roles: []string{"viewer"}}); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	s.RecordPageView(PageView{DocID: "DemoModule:latest:guide", SessionID: "x"})
+	s.SetEmbedding("DemoModule:latest:guide", []float32{0.1, 0.2, 0.3})
+
+	path := filepath.Join(t.TempDir(), "snap.json")
+	if err := s.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := len(loaded.Users("")), len(s.Users("")); got != want {
+		t.Fatalf("users after reload = %d, want %d", got, want)
+	}
+	if _, err := loaded.UserByID(""); err == nil {
+		t.Fatal("expected lookup of empty id to fail")
+	}
+	if loaded.EmbeddingCount() != 1 {
+		t.Fatalf("embeddings after reload = %d, want 1", loaded.EmbeddingCount())
+	}
+	stats := loaded.PageAnalytics()
+	var pv int
+	for _, st := range stats {
+		if st.DocID == "DemoModule:latest:guide" {
+			pv = st.PV
+		}
+	}
+	if pv != 1 {
+		t.Fatalf("page view after reload = %d, want 1", pv)
+	}
+	// Verify new IDs continue past the persisted sequence (no collisions).
+	created, err := loaded.CreateModule(Module{ModuleKey: "PersistedModule"})
+	if err != nil {
+		t.Fatalf("CreateModule after reload: %v", err)
+	}
+	if created.ID == "" {
+		t.Fatal("expected generated module ID after reload")
+	}
+}
+
+func TestLoadMissingReturnsNotFound(t *testing.T) {
+	if _, err := Load(filepath.Join(t.TempDir(), "nope.json")); err != ErrNotFound {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
 
 func TestUserCRUDAndGroupAutoRegister(t *testing.T) {
 	s := NewSeeded()

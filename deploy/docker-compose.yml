@@ -38,6 +38,7 @@ services:
       context: ../backend
     environment:
       PORT: ${BACKEND_PORT:-8671}
+      DATA_DIR: ${DATA_DIR:-/data}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8671}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000}
@@ -73,6 +74,8 @@ services:
       MCP_TOKEN: ${MCP_TOKEN:-dev-token}
     ports:
       - "${BACKEND_PORT:-8671}:${BACKEND_PORT:-8671}"
+    volumes:
+      - backend-data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${BACKEND_PORT:-8671}/healthz"]
       interval: 10s
@@ -105,3 +108,4 @@ volumes:
   postgres-data:
   minio-data:
   meili-data:
+  backend-data:
