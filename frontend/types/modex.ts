@@ -70,6 +70,16 @@ export type SearchResult = {
   status: string;
   updated_at: string;
   keywords: string[];
+  breadcrumb: string;
+  entry_key: string;
+  match_terms: string[];
+};
+
+export type AskResponse = {
+  query: string;
+  answer: string;
+  provider: string;
+  sources: SearchResult[];
 };
 
 export type SearchResponse = {

@@ -1,4 +1,4 @@
-import type { AnalyticsPages, AuthConfig, Category, Group, ModuleInfo, SearchResponse, User } from "@/types/modex";
+import type { AnalyticsPages, AskResponse, AuthConfig, Category, Group, ModuleInfo, SearchResponse, User } from "@/types/modex";
 
 const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
 const SERVER_API_BASE = process.env.INTERNAL_API_BASE_URL || PUBLIC_API_BASE;
@@ -34,6 +34,7 @@ export const getModule = (moduleKey: string) => api<ModuleInfo>(`/api/modules/${
 export const getEntries = (moduleKey: string, version: string) => api<any[]>(`/api/modules/${moduleKey}/versions/${version}/entries`);
 export const getPage = (moduleKey: string, version: string, entry: string) => api<any>(`/api/docs/${moduleKey}/${version}/${entry}`);
 export const searchDocs = (body: unknown) => api<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify(body) });
+export const askAI = (query: string) => api<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query }) });
 
 export const recordPageView = (body: { doc_id: string; session_id: string; duration_seconds?: number; scroll_depth?: number }) =>
   api<{ status: string; view_id: string }>("/api/analytics/page-view", { method: "POST", body: JSON.stringify(body) });

@@ -2,6 +2,9 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: "Modex",
@@ -19,7 +22,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
       <body>
         <div className="shell">
           <header className="topbar">
@@ -32,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/me/recent">最近访问</Link>
               <Link href="/me/favorites">我的关注</Link>
               <Link href="/admin">管理</Link>
+              <ThemeToggle />
             </nav>
           </header>
           {children}

@@ -52,6 +52,9 @@ type Result struct {
 	Status         string   `json:"status"`
 	UpdatedAt      string   `json:"updated_at"`
 	Keywords       []string `json:"keywords"`
+	Breadcrumb     string   `json:"breadcrumb"`
+	EntryKey       string   `json:"entry_key"`
+	MatchTerms     []string `json:"match_terms"`
 }
 
 type Response struct {
@@ -90,6 +93,12 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		sw = 0.4
 	}
 	pages := s.Store.Pages()
+	// Resolve module -> category breadcrumb once so each result carries a path.
+	breadcrumbs := map[string]string{}
+	for _, m := range s.Store.Modules("", "") {
+		breadcrumbs[m.ModuleKey] = m.CategoryPath
+	}
+	terms := matchTerms(req.Query)
 	// Semantic and hybrid modes need a query embedding; keyword mode skips it to
 	// avoid an unnecessary embedding-provider call.
 	var queryVec []float32
@@ -119,11 +128,18 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		if strings.TrimSpace(req.Query) != "" && final <= 0 {
 			continue
 		}
+		breadcrumb := breadcrumbs[p.ModuleKey]
+		if breadcrumb != "" {
+			breadcrumb = breadcrumb + " / " + p.ModuleName
+		} else {
+			breadcrumb = p.ModuleName
+		}
 		scored = append(scored, Result{
 			DocID: p.DocID, Title: p.Title, Snippet: snippet(req.Query, p.ContentText), Path: p.Path,
 			Score: final, SearchMode: req.Mode, ModuleKey: p.ModuleKey, ModuleName: p.ModuleName,
 			DocsVersion: p.DocsVersion, PackageVersion: p.PackageVersion, EntryType: p.EntryType,
-			OwnerGroup: p.OwnerGroup, Status: p.Status, UpdatedAt: p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), Keywords: p.Tags,
+			OwnerGroup: p.OwnerGroup, Status: p.Status, UpdatedAt: p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			Keywords: p.Tags, Breadcrumb: breadcrumb, EntryKey: p.EntryKey, MatchTerms: terms,
 		})
 	}
 	sort.Slice(scored, func(i, j int) bool { return scored[i].Score > scored[j].Score })
@@ -234,28 +250,63 @@ func cosine(a, b []float32) float64 {
 	return (dot/math.Sqrt(an*bn) + 1) / 2
 }
 
+// snippet returns a rune-safe excerpt centered on the first matched term, with
+// surrounding context before/after and ellipses, so callers can highlight the
+// matched keywords. It never splits a multibyte (e.g. CJK) character.
 func snippet(query, content string) string {
-	content = strings.TrimSpace(content)
-	if len(content) <= 160 {
-		return content
+	runes := []rune(strings.TrimSpace(content))
+	const window = 140
+	if len(runes) <= window {
+		return string(runes)
 	}
-	q := strings.Fields(strings.ToLower(query))
-	lower := strings.ToLower(content)
-	pos := 0
-	if len(q) > 0 {
-		if idx := strings.Index(lower, q[0]); idx > 0 {
-			pos = idx
+	lower := strings.ToLower(string(runes))
+	matchByte := -1
+	for _, term := range matchTerms(query) {
+		if idx := strings.Index(lower, term); idx >= 0 {
+			matchByte = idx
+			break
 		}
 	}
-	start := pos - 40
+	center := 0
+	if matchByte >= 0 {
+		center = len([]rune(lower[:matchByte]))
+	}
+	start := center - 50
 	if start < 0 {
 		start = 0
 	}
-	end := start + 160
-	if end > len(content) {
-		end = len(content)
+	end := start + window
+	if end > len(runes) {
+		end = len(runes)
+		start = end - window
+		if start < 0 {
+			start = 0
+		}
 	}
-	return strings.TrimSpace(content[start:end])
+	out := strings.TrimSpace(string(runes[start:end]))
+	if start > 0 {
+		out = "…" + out
+	}
+	if end < len(runes) {
+		out = out + "…"
+	}
+	return out
+}
+
+// matchTerms extracts the distinct lowercase query tokens used both for snippet
+// centering and client-side keyword highlighting.
+func matchTerms(query string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range strings.Fields(strings.ToLower(query)) {
+		f = strings.Trim(f, ",.;:!?，。、；：！？\"'")
+		if f == "" || seen[f] {
+			continue
+		}
+		seen[f] = true
+		out = append(out, f)
+	}
+	return out
 }
 
 func normalizeText(s string) string {

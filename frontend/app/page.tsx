@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, Clock3, Layers3, Search, UserCircle } from "lucide-react";
+import { BookOpen, Clock3, Layers3, UserCircle } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { ModuleCard } from "@/components/module-card";
 import { ModuleDrawer } from "@/components/module-drawer";
+import { DocSearch } from "@/components/doc-search";
 import { getAuthConfig, getCategories, getMe, getModules, logout, mockLogin } from "@/lib/api";
 import type { AuthConfig, Category, ModuleInfo, User } from "@/types/modex";
 
@@ -14,7 +15,6 @@ export default function HomePage() {
   const [selected, setSelected] = useState<ModuleInfo | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
-  const [keyword, setKeyword] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const frameworkCounts = modules.reduce<Record<string, number>>((acc, module) => {
     const framework = module.keywords.includes("fumadocs") ? "Fumadocs" : module.keywords.includes("vuepress") ? "VuePress" : "Markdown";
@@ -41,22 +41,10 @@ export default function HomePage() {
     }
   }, []);
 
-  async function loadModules(value = keyword, category = selectedCategory) {
-    const params = new URLSearchParams();
-    if (value) params.set("keyword", value);
-    if (category) params.set("category_id", category.id);
-    const query = params.toString() ? `?${params.toString()}` : "";
-    setModules(await getModules(query));
-  }
-
-  async function runSearch(value: string) {
-    setKeyword(value);
-    await loadModules(value, selectedCategory);
-  }
-
   async function selectCategory(category: Category | null) {
     setSelectedCategory(category);
-    await loadModules(keyword, category);
+    const query = category ? `?category_id=${encodeURIComponent(category.id)}` : "";
+    setModules(await getModules(query));
   }
 
   async function login() {
@@ -79,32 +67,18 @@ export default function HomePage() {
 
   return (
     <main className="main">
-      <section className="registry-hero mb-5">
-        <div className="registry-copy">
-          <div className="registry-kicker">
-            <Layers3 size={16} />
-            Modex Registry
-          </div>
-          <h1 className="registry-title">研发文档索引</h1>
-          <div className="registry-search">
-            <Search size={18} />
-            <input value={keyword} onChange={(e) => runSearch(e.target.value)} placeholder="搜索模块、Owner、VuePress、Fumadocs、构建..." />
-            <span>{selectedCategory?.name || "全部分类"}</span>
-          </div>
+      <section className="home-hero mb-5">
+        <div className="registry-kicker">
+          <Layers3 size={16} />
+          Modex Registry
         </div>
-        <div className="registry-metrics">
-          <div>
-            <span>Packages</span>
-            <strong>{modules.length}</strong>
-          </div>
-          <div>
-            <span>Frameworks</span>
-            <strong>{Object.keys(frameworkCounts).length}</strong>
-          </div>
-          <div>
-            <span>Owners</span>
-            <strong>{Object.keys(ownerCounts).length}</strong>
-          </div>
+        <h1 className="registry-title">研发文档索引</h1>
+        <p className="home-hero-sub muted">统一检索公司各平台研发文档，或直接向 AI 提问。</p>
+        <DocSearch />
+        <div className="home-hero-metrics">
+          <span><strong>{modules.length}</strong> 文档集合</span>
+          <span><strong>{Object.keys(frameworkCounts).length}</strong> 文档框架</span>
+          <span><strong>{Object.keys(ownerCounts).length}</strong> Owner 团队</span>
         </div>
       </section>
       <section className="grid home-grid">

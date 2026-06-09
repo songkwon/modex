@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/docs/page/", s.handleDocPage)
 	mux.HandleFunc("/api/docs/", s.handleDocRoutes)
 	mux.HandleFunc("/api/search", s.handleSearch)
+	mux.HandleFunc("/api/ask", s.handleAsk)
 	mux.HandleFunc("/api/search/facets", s.handleFacets)
 	mux.HandleFunc("/api/search/reindex", s.handleSearchReindex)
 	mux.HandleFunc("/api/embeddings/embed-text", s.handleEmbedText)
@@ -282,6 +284,98 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	user, _ := s.currentUser(r)
 	s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleAsk answers a natural-language question using retrieval over the docs
+// (RAG). When ASK_HTTP_URL is configured it forwards the question plus retrieved
+// context to an external LLM; otherwise it returns an extractive answer built
+// from the top matches so the "Ask AI" flow works without an LLM key.
+func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	var req struct {
+		Query string `json:"query"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Query) == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "query is required")
+		return
+	}
+	resp, err := s.search.Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Page: 1, PageSize: 5})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "ask_failed", err.Error())
+		return
+	}
+	answer, provider := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
+	user, _ := s.currentUser(r)
+	s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"query":    req.Query,
+		"answer":   answer,
+		"provider": provider,
+		"sources":  resp.Results,
+	})
+}
+
+func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []search.Result) (string, string) {
+	if url := os.Getenv("ASK_HTTP_URL"); url != "" {
+		if answer, err := s.askExternalLLM(ctx, url, query, results); err == nil && strings.TrimSpace(answer) != "" {
+			return answer, "http"
+		}
+	}
+	if len(results) == 0 {
+		return "未在文档库中找到与该问题相关的内容。可以换个关键词，或在左侧按平台浏览。", "extractive"
+	}
+	var b strings.Builder
+	b.WriteString("根据文档库中最相关的内容，整理如下：\n\n")
+	for i, r := range results {
+		if i >= 3 {
+			break
+		}
+		b.WriteString(fmt.Sprintf("%d. 【%s】%s\n", i+1, r.ModuleName, r.Title))
+		if r.Snippet != "" {
+			b.WriteString("   " + r.Snippet + "\n")
+		}
+	}
+	b.WriteString("\n以上内容来自下方引用文档，点击可查看完整页面。")
+	return b.String(), "extractive"
+}
+
+func (s *Server) askExternalLLM(ctx context.Context, url, query string, results []search.Result) (string, error) {
+	var ctxBuilder strings.Builder
+	for i, r := range results {
+		ctxBuilder.WriteString(fmt.Sprintf("[%d] %s (%s)\n%s\n\n", i+1, r.Title, r.Breadcrumb, r.Snippet))
+	}
+	payload, _ := json.Marshal(map[string]any{"query": query, "context": ctxBuilder.String()})
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(payload)))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if key := os.Getenv("ASK_HTTP_API_KEY"); key != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+key)
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer httpResp.Body.Close()
+	if httpResp.StatusCode >= 300 {
+		return "", fmt.Errorf("ask endpoint returned %d", httpResp.StatusCode)
+	}
+	var out struct {
+		Answer string `json:"answer"`
+	}
+	if err := json.NewDecoder(httpResp.Body).Decode(&out); err != nil {
+		return "", err
+	}
+	return out.Answer, nil
 }
 
 func (s *Server) handleFacets(w http.ResponseWriter, r *http.Request) {
