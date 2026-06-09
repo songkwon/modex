@@ -64,3 +64,25 @@ export type SearchResponse = {
   results: SearchResult[];
   facets: Record<string, Record<string, number>>;
 };
+
+export type PageStat = {
+  doc_id: string;
+  title: string;
+  module_key: string;
+  module_name: string;
+  docs_version: string;
+  path: string;
+  pv: number;
+  uv: number;
+  reads_7d: number;
+  reads_30d: number;
+  avg_duration_seconds: number;
+  last_viewed_at: string;
+};
+
+export type AnalyticsPages = {
+  popular_pages: PageStat[];
+  total_pv: number;
+  reads_7d: number;
+  events: string[];
+};

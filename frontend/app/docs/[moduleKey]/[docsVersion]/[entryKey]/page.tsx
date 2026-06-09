@@ -1,5 +1,6 @@
 import { GitBranch, Search } from "lucide-react";
 import { getEntries, getModule, getPage } from "@/lib/api";
+import { PageViewTracker } from "@/components/page-view-tracker";
 
 export default async function DocPage({ params }: { params: { moduleKey: string; docsVersion: string; entryKey: string } }) {
   const [module, entries, page] = await Promise.all([
@@ -9,6 +10,7 @@ export default async function DocPage({ params }: { params: { moduleKey: string;
   ]);
   return (
     <main className="main">
+      <PageViewTracker docId={page.doc_id} />
       <div className="panel mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="muted text-sm">{module.category_path} / {params.docsVersion}</p>

@@ -1,12 +1,61 @@
-import { api } from "@/lib/api";
+import { getPageAnalytics } from "@/lib/api";
 
 export default async function AnalyticsPage() {
-  const data = await api<any>("/api/admin/analytics/pages");
+  const data = await getPageAnalytics();
   return (
     <main className="main">
       <section className="panel">
         <h1 className="text-2xl font-semibold">阅读统计</h1>
-        <pre className="mt-4 overflow-auto text-sm">{JSON.stringify(data, null, 2)}</pre>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm">
+          <div className="rounded-lg border border-slate-200 px-4 py-3">
+            <div className="muted">总 PV</div>
+            <div className="text-xl font-semibold">{data.total_pv}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 px-4 py-3">
+            <div className="muted">近 7 天阅读</div>
+            <div className="text-xl font-semibold">{data.reads_7d}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 px-4 py-3">
+            <div className="muted">页面数</div>
+            <div className="text-xl font-semibold">{data.popular_pages.length}</div>
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="muted border-b border-slate-200">
+              <tr>
+                <th className="py-2 pr-4">文档</th>
+                <th className="py-2 pr-4">模块</th>
+                <th className="py-2 pr-4">版本</th>
+                <th className="py-2 pr-4">PV</th>
+                <th className="py-2 pr-4">UV</th>
+                <th className="py-2 pr-4">近7天</th>
+                <th className="py-2 pr-4">近30天</th>
+                <th className="py-2 pr-4">平均时长(s)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.popular_pages.map((p) => (
+                <tr key={p.doc_id} className="border-b border-slate-100">
+                  <td className="py-2 pr-4">
+                    <a className="font-medium" href={p.path}>{p.title}</a>
+                    <div className="muted text-xs">{p.doc_id}</div>
+                  </td>
+                  <td className="py-2 pr-4">{p.module_name}</td>
+                  <td className="py-2 pr-4">{p.docs_version}</td>
+                  <td className="py-2 pr-4">{p.pv}</td>
+                  <td className="py-2 pr-4">{p.uv}</td>
+                  <td className="py-2 pr-4">{p.reads_7d}</td>
+                  <td className="py-2 pr-4">{p.reads_30d}</td>
+                  <td className="py-2 pr-4">{p.avg_duration_seconds}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="muted mt-4 text-xs">埋点事件：{data.events.join(" / ")}</p>
       </section>
     </main>
   );

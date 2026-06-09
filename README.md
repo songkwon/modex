@@ -130,6 +130,26 @@ Send JSON-RPC lines on stdin:
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_docs","arguments":{"query":"构建缓存怎么清理","mode":"hybrid","limit":5}}}
 ```
 
+## Analytics & Admin APIs
+
+Reading statistics are tracked in the backend and surfaced in the admin portal:
+
+- `POST /api/analytics/page-view`: records a page view (`doc_id`, `session_id`).
+- `POST /api/analytics/read-progress`: updates dwell time and scroll depth.
+- `GET /api/admin/analytics/pages`: aggregated PV / UV / 7-day / 30-day reads per page.
+
+The docs reading page records views automatically via the `PageViewTracker`
+client component, and `frontend/lib/analytics.ts` holds the PostHog init and
+`capture()` event helpers (enabled by setting `NEXT_PUBLIC_POSTHOG_KEY`).
+
+Admin registry mutations are implemented against the in-memory store:
+
+- Categories: `POST /api/admin/categories`, `PUT|DELETE /api/admin/categories/{id}`
+- Modules: `POST /api/admin/modules`, `PUT /api/admin/modules/{module_key}`
+- Versions: `POST /api/admin/modules/{module_key}/versions`, `PUT .../versions/{docs_version}`
+- Entries: `POST .../versions/{docs_version}/entries`, `PUT|DELETE /api/admin/entries/{entry_id}`
+- Releases: `GET /api/admin/releases/{release_id}`, `POST /api/admin/releases/{release_id}/rollback`
+
 ## MVP Notes
 
-The first iteration uses seeded in-memory registry data in the backend so the portal, search, and MCP flows are immediately usable. PostgreSQL, MinIO, Meilisearch, pgvector, Keycloak/OIDC, and PostHog integration points are wired through configuration and migrations for the next storage-backed iteration.
+The first iteration uses seeded in-memory registry data in the backend so the portal, search, MCP, analytics, and admin-mutation flows are immediately usable. PostgreSQL, MinIO, Meilisearch, pgvector, Keycloak/OIDC, and PostHog integration points are wired through configuration and migrations for the next storage-backed iteration.

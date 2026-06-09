@@ -144,3 +144,32 @@ type MCPLog struct {
 	ResultCount int       `json:"result_count"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+type PageView struct {
+	ID              string    `json:"id"`
+	PageID          string    `json:"page_id"`
+	DocID           string    `json:"doc_id"`
+	ModuleKey       string    `json:"module_key"`
+	DocsVersion     string    `json:"docs_version"`
+	UserID          string    `json:"user_id"`
+	SessionID       string    `json:"session_id"`
+	DurationSeconds int       `json:"duration_seconds"`
+	ScrollDepth     float64   `json:"scroll_depth"`
+	ViewedAt        time.Time `json:"viewed_at"`
+}
+
+// PageStat is an aggregated reading-statistics row for one document page.
+type PageStat struct {
+	DocID          string    `json:"doc_id"`
+	Title          string    `json:"title"`
+	ModuleKey      string    `json:"module_key"`
+	ModuleName     string    `json:"module_name"`
+	DocsVersion    string    `json:"docs_version"`
+	Path           string    `json:"path"`
+	PV             int       `json:"pv"`
+	UV             int       `json:"uv"`
+	Reads7d        int       `json:"reads_7d"`
+	Reads30d       int       `json:"reads_30d"`
+	AvgDurationSec int       `json:"avg_duration_seconds"`
+	LastViewedAt   time.Time `json:"last_viewed_at"`
+}
