@@ -45,7 +45,7 @@ func deploy(artifact string) error {
 	if err != nil {
 		return err
 	}
-	url := env("DOCS_DEPLOY_URL", "http://localhost:8080/api/deploy")
+	url := env("DOCS_DEPLOY_URL", "http://localhost:8671/api/deploy")
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return err

@@ -8,5 +8,5 @@ RUN go build -o /out/modex-api ./cmd/modex-api
 FROM alpine:3.20
 WORKDIR /app
 COPY --from=build /out/modex-api /usr/local/bin/modex-api
-EXPOSE 8080
+EXPOSE 8671
 CMD ["modex-api"]

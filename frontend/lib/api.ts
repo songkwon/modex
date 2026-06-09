@@ -1,6 +1,6 @@
 import type { AnalyticsPages, AuthConfig, Category, ModuleInfo, SearchResponse, User } from "@/types/modex";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

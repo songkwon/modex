@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	addr := ":" + env("PORT", "8080")
+	addr := ":" + env("PORT", "8671")
 	srv := api.New(store.NewSeeded())
 	log.Printf("modex-api listening on %s", addr)
 	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {

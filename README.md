@@ -22,7 +22,7 @@ docker-compose up --build
 Open:
 
 - Frontend: <http://localhost:3000>
-- Backend health: <http://localhost:8080/healthz>
+- Backend health: <http://localhost:8671/healthz>
 - MinIO console: <http://localhost:9001>
 - Meilisearch: <http://localhost:7700>
 
@@ -120,7 +120,7 @@ Start the backend first, then run:
 
 ```bash
 cd mcp
-DOCS_API_BASE_URL=http://localhost:8080 MCP_TOKEN=dev-token go run ./cmd/docs-mcp-server
+DOCS_API_BASE_URL=http://localhost:8671 MCP_TOKEN=dev-token go run ./cmd/docs-mcp-server
 ```
 
 Send JSON-RPC lines on stdin:
