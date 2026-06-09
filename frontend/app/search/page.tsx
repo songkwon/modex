@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Filter, Search, X } from "lucide-react";
 import { searchDocs } from "@/lib/api";
+import { highlight } from "@/lib/highlight";
 import type { SearchResponse } from "@/types/modex";
 
 const modes = ["keyword", "semantic", "hybrid"];
@@ -12,6 +13,7 @@ type Filters = {
   entry_types?: string[];
   owners?: string[];
   docs_versions?: string[];
+  category_ids?: string[];
 };
 
 export default function SearchPage() {
@@ -74,12 +76,12 @@ export default function SearchPage() {
           </div>
           {response?.results.map((item) => (
             <article className="card result-card" key={item.doc_id}>
+              <p className="ds-crumb">{item.breadcrumb} · {item.docs_version} · {item.entry_type}</p>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <Link href={`/docs/${item.module_key}/${item.docs_version}/${item.path.replace("/", "")}`} className="text-xl font-semibold">{item.title}</Link>
+                <Link href={item.path} className="text-xl font-semibold">{highlight(item.title, item.match_terms)}</Link>
                 <span className="tag">score {item.score.toFixed(3)}</span>
               </div>
-              <p className="muted mt-2 text-sm">{item.module_name} / {item.docs_version} / {item.entry_type} / {item.owner_group}</p>
-              <p className="mt-4 leading-7 text-slate-700">{item.snippet}</p>
+              <p className="mt-3 leading-7" style={{ color: "hsl(var(--muted))" }}>{highlight(item.snippet, item.match_terms)}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {item.keywords.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
               </div>
@@ -104,9 +106,10 @@ export default function SearchPage() {
             ) : null}
             {response?.facets ? (
               <div className="grid gap-5">
-                <FacetGroup active={filters.modules || []} items={response.facets.modules || {}} label="模块" onToggle={(value) => toggleFilter("modules", value)} />
+                <FacetGroup active={filters.category_ids || []} items={response.facets.categories || {}} label="文档分类" onToggle={(value) => toggleFilter("category_ids", value)} />
                 <FacetGroup active={filters.entry_types || []} items={response.facets.entry_types || {}} label="文档类型" onToggle={(value) => toggleFilter("entry_types", value)} />
-                <FacetGroup active={filters.owners || []} items={response.facets.owners || {}} label="Owner" onToggle={(value) => toggleFilter("owners", value)} />
+                <FacetGroup active={filters.owners || []} items={response.facets.owners || {}} label="所有者" onToggle={(value) => toggleFilter("owners", value)} />
+                <FacetGroup active={filters.modules || []} items={response.facets.modules || {}} label="模块" onToggle={(value) => toggleFilter("modules", value)} />
                 <FacetGroup active={filters.docs_versions || []} items={response.facets.docs_versions || {}} label="版本" onToggle={(value) => toggleFilter("docs_versions", value)} />
               </div>
             ) : null}

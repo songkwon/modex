@@ -316,7 +316,7 @@ func normalizeText(s string) string {
 
 func facets(pages []store.Page) map[string]map[string]int {
 	out := map[string]map[string]int{
-		"modules": {}, "docs_versions": {}, "entry_types": {}, "keywords": {}, "owners": {}, "status": {},
+		"modules": {}, "docs_versions": {}, "entry_types": {}, "keywords": {}, "owners": {}, "status": {}, "categories": {},
 	}
 	for _, p := range pages {
 		out["modules"][p.ModuleKey]++
@@ -324,6 +324,9 @@ func facets(pages []store.Page) map[string]map[string]int {
 		out["entry_types"][p.EntryType]++
 		out["owners"][p.OwnerGroup]++
 		out["status"][p.Status]++
+		for _, c := range p.CategoryIDs {
+			out["categories"][c]++
+		}
 		for _, tag := range p.Tags {
 			out["keywords"][tag]++
 		}

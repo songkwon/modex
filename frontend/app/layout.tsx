@@ -2,7 +2,9 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
@@ -34,11 +36,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <span>Modex</span>
             </Link>
             <nav className="nav">
-              <Link href="/search">搜索</Link>
-              <Link href="/me/recent">最近访问</Link>
-              <Link href="/me/favorites">我的关注</Link>
-              <Link href="/admin">管理</Link>
+              <Link className="button icon-button" href="/search" title="搜索文档" aria-label="搜索文档"><Search size={16} /></Link>
               <ThemeToggle />
+              <UserMenu />
             </nav>
           </header>
           {children}

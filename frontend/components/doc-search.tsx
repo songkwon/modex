@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookText, FileText, Layers, Search, Sparkles, Loader2, CornerDownLeft } from "lucide-react";
 import { askAI, searchDocs } from "@/lib/api";
+import { highlight } from "@/lib/highlight";
 import type { AskResponse, SearchResult } from "@/types/modex";
 
 function entryIcon(type: string) {
@@ -12,19 +13,15 @@ function entryIcon(type: string) {
   return BookText;
 }
 
-// highlight wraps matched terms (case-insensitive) in <mark>, rune/CJK-safe.
-function highlight(text: string, terms: string[]) {
-  if (!text || terms.length === 0) return text;
-  const escaped = terms.filter(Boolean).map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  if (escaped.length === 0) return text;
-  const re = new RegExp(`(${escaped.join("|")})`, "gi");
-  const parts = text.split(re);
-  return parts.map((part, i) =>
-    re.test(part) ? <mark key={i} className="ds-mark">{part}</mark> : <span key={i}>{part}</span>
-  );
-}
-
-export function DocSearch() {
+export function DocSearch({
+  onAiActiveChange,
+  moduleKey,
+  placeholder
+}: {
+  onAiActiveChange?: (active: boolean) => void;
+  moduleKey?: string;
+  placeholder?: string;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -43,6 +40,11 @@ export function DocSearch() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  // Signal focus mode (hide the rest of the page) while the AI conversation is active.
+  useEffect(() => {
+    onAiActiveChange?.(asking || answer !== null);
+  }, [asking, answer, onAiActiveChange]);
+
   useEffect(() => {
     clearTimeout(debounce.current);
     if (!query.trim()) {
@@ -52,7 +54,9 @@ export function DocSearch() {
     setLoading(true);
     debounce.current = setTimeout(async () => {
       try {
-        const res = await searchDocs({ query, mode: "hybrid", page_size: 8 });
+        const body: Record<string, unknown> = { query, mode: "hybrid", page_size: 8 };
+        if (moduleKey) body.filters = { modules: [moduleKey] };
+        const res = await searchDocs(body);
         setResults(res.results || []);
         setOpen(true);
       } catch {
@@ -62,7 +66,7 @@ export function DocSearch() {
       }
     }, 220);
     return () => clearTimeout(debounce.current);
-  }, [query]);
+  }, [query, moduleKey]);
 
   async function runAsk() {
     if (!query.trim()) return;
@@ -96,7 +100,7 @@ export function DocSearch() {
               if (results[0]) go(results[0].path);
             }
           }}
-          placeholder="搜索文档，或向 AI 提问…"
+          placeholder={placeholder || "搜索文档，或向 AI 提问…"}
           aria-label="搜索文档或提问"
         />
         {loading ? <Loader2 size={18} className="ds-spin muted" /> : null}

@@ -1,6 +1,7 @@
-import { Bot, GitBranch, Search } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import { getEntries, getModule, getPage } from "@/lib/api";
 import { PageViewTracker } from "@/components/page-view-tracker";
+import { ModuleSearch } from "@/components/module-search";
 
 export default async function DocPage({ params }: { params: { moduleKey: string; docsVersion: string; entryKey: string } }) {
   const [module, entries, pagePayload] = await Promise.all([
@@ -19,8 +20,7 @@ export default async function DocPage({ params }: { params: { moduleKey: string;
           <h1 className="text-xl font-semibold">{module.name}</h1>
         </div>
         <div className="flex gap-2">
-          <button className="button"><Search size={16} />本模块搜索</button>
-          <button className="button"><Bot size={16} />Ask AI</button>
+          <ModuleSearch moduleKey={module.module_key} moduleName={module.name} />
           <a className="button button-primary" href={module.repo_url}><GitBranch size={16} />查看源码</a>
         </div>
       </div>
