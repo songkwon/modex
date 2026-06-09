@@ -1,0 +1,10 @@
+include:
+  - project: 'devops/docs-ci-templates'
+    ref: main
+    file: '/templates/docs-deploy.yml'
+
+variables:
+  DOCS_MODULE: "DemoModule"
+  DOCS_VERSION: "latest"
+  DOCS_BUILDER: "markdown"
+  DOCS_SOURCE_DIR: "docs"

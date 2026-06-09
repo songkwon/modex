@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Env files (keep .env.example)
+.env
+deploy/.env
+*.local
+
+# Go
+*.exe
+*.test
+*.out
+/backend/bin/
+/mcp/bin/
+/tools/docsctl/bin/
+
+# docsctl build output
+**/.modex/
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+*.log

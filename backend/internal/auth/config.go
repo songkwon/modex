@@ -1,0 +1,107 @@
+package auth
+
+import (
+	"net/url"
+	"os"
+	"strings"
+)
+
+type Config struct {
+	Mode             string
+	AppBaseURL       string
+	FrontendBaseURL  string
+	IssuerURL        string
+	AuthURL          string
+	TokenURL         string
+	UserInfoURL      string
+	EndSessionURL    string
+	ClientID         string
+	ClientSecret     string
+	RedirectURL      string
+	Scopes           []string
+	SessionCookie    string
+	StateCookie      string
+	CookieDomain     string
+	CookieSameSite   string
+	CookieSecure     bool
+	CORSAllowOrigins []string
+}
+
+func FromEnv() Config {
+	keycloakBase := strings.TrimRight(os.Getenv("KEYCLOAK_BASE_URL"), "/")
+	realm := os.Getenv("KEYCLOAK_REALM")
+	issuer := strings.TrimRight(os.Getenv("OIDC_ISSUER_URL"), "/")
+	if issuer == "" && keycloakBase != "" && realm != "" {
+		issuer = keycloakBase + "/realms/" + realm
+	}
+	appBase := strings.TrimRight(env("APP_BASE_URL", "http://localhost:8080"), "/")
+	cfg := Config{
+		Mode:             env("AUTH_MODE", "mock"),
+		AppBaseURL:       appBase,
+		FrontendBaseURL:  strings.TrimRight(env("FRONTEND_BASE_URL", "http://localhost:3000"), "/"),
+		IssuerURL:        issuer,
+		AuthURL:          os.Getenv("OIDC_AUTH_URL"),
+		TokenURL:         os.Getenv("OIDC_TOKEN_URL"),
+		UserInfoURL:      os.Getenv("OIDC_USERINFO_URL"),
+		EndSessionURL:    os.Getenv("OIDC_END_SESSION_URL"),
+		ClientID:         os.Getenv("OIDC_CLIENT_ID"),
+		ClientSecret:     os.Getenv("OIDC_CLIENT_SECRET"),
+		RedirectURL:      os.Getenv("OIDC_REDIRECT_URL"),
+		Scopes:           splitList(env("OIDC_SCOPES", "openid profile email")),
+		SessionCookie:    env("SESSION_COOKIE_NAME", "modex_session"),
+		StateCookie:      env("OAUTH_STATE_COOKIE_NAME", "modex_oauth_state"),
+		CookieDomain:     os.Getenv("COOKIE_DOMAIN"),
+		CookieSameSite:   env("COOKIE_SAME_SITE", "lax"),
+		CookieSecure:     env("COOKIE_SECURE", "false") == "true",
+		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3000")),
+	}
+	if cfg.AuthURL == "" && issuer != "" {
+		cfg.AuthURL = issuer + "/protocol/openid-connect/auth"
+	}
+	if cfg.TokenURL == "" && issuer != "" {
+		cfg.TokenURL = issuer + "/protocol/openid-connect/token"
+	}
+	if cfg.UserInfoURL == "" && issuer != "" {
+		cfg.UserInfoURL = issuer + "/protocol/openid-connect/userinfo"
+	}
+	if cfg.EndSessionURL == "" && issuer != "" {
+		cfg.EndSessionURL = issuer + "/protocol/openid-connect/logout"
+	}
+	if cfg.RedirectURL == "" {
+		cfg.RedirectURL = appBase + "/api/auth/callback"
+	}
+	return cfg
+}
+
+func (c Config) LoginReady() bool {
+	return c.Mode == "oidc" && c.AuthURL != "" && c.TokenURL != "" && c.UserInfoURL != "" && c.ClientID != ""
+}
+
+func (c Config) LoginURL(state string) string {
+	u, _ := url.Parse(c.AuthURL)
+	q := u.Query()
+	q.Set("client_id", c.ClientID)
+	q.Set("redirect_uri", c.RedirectURL)
+	q.Set("response_type", "code")
+	q.Set("scope", strings.Join(c.Scopes, " "))
+	q.Set("state", state)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func splitList(v string) []string {
+	var out []string
+	for _, item := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }) {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
