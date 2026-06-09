@@ -35,6 +35,35 @@ func (s *Service) Config() Config {
 	return s.cfg
 }
 
+// IsSuperAdmin reports whether the user matches a SUPER_ADMIN_USERS entry
+// (matched against username or email, case-insensitive).
+func (s *Service) IsSuperAdmin(user store.User) bool {
+	for _, id := range s.cfg.SuperAdmins {
+		if id == "" {
+			continue
+		}
+		if strings.EqualFold(id, user.Username) || strings.EqualFold(id, user.Email) {
+			return true
+		}
+	}
+	return false
+}
+
+// applySuperAdmin grants the admin role to a configured super admin so the role
+// travels with the session and the persisted user record.
+func (s *Service) applySuperAdmin(user store.User) store.User {
+	if !s.IsSuperAdmin(user) {
+		return user
+	}
+	for _, r := range user.Roles {
+		if r == "admin" {
+			return user
+		}
+	}
+	user.Roles = append(user.Roles, "admin")
+	return user
+}
+
 func (s *Service) BeginLogin(w http.ResponseWriter) (string, error) {
 	if !s.cfg.LoginReady() {
 		return "", errors.New("OIDC login is not configured")
@@ -92,6 +121,7 @@ func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.Res
 // OIDC callback and the local mock-login endpoint so both paths produce a real,
 // cookie-backed session.
 func (s *Service) CreateSession(w http.ResponseWriter, user store.User) error {
+	user = s.applySuperAdmin(user)
 	sessionID, err := randomToken(32)
 	if err != nil {
 		return err

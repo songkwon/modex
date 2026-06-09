@@ -10,7 +10,10 @@ type User struct {
 	Department  string    `json:"department"`
 	Groups      []string  `json:"groups"`
 	Roles       []string  `json:"roles"`
-	Source      string    `json:"source,omitempty"`
+	// ManagedCategories lists the platform/category IDs this user may manage.
+	// Super admins manage everything regardless of this list.
+	ManagedCategories []string `json:"managed_categories,omitempty"`
+	Source            string   `json:"source,omitempty"`
 	Status      string    `json:"status,omitempty"`
 	LastLoginAt time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time `json:"created_at,omitempty"`

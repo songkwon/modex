@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
-import { createUser, deleteUser, getGroups, getUsers, updateUser } from "@/lib/api";
+import { createUser, deleteUser, getCategories, getGroups, getUsers, updateUser } from "@/lib/api";
 import type { Group, User } from "@/types/modex";
 
 const ROLES = ["admin", "maintainer", "viewer"];
@@ -20,7 +20,8 @@ export default function AdminUsersPage() {
   const [keyword, setKeyword] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<User | null>(null);
-  const [form, setForm] = useState({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer" });
+  const [form, setForm] = useState({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "" });
+  const [platforms, setPlatforms] = useState<string[]>([]);
 
   async function refresh(kw = keyword) {
     try {
@@ -33,6 +34,14 @@ export default function AdminUsersPage() {
   useEffect(() => {
     refresh("");
     getGroups().then(setGroups).catch(() => {});
+    getCategories()
+      .then((tree) => {
+        const ids: string[] = [];
+        const walk = (nodes: typeof tree) => nodes.forEach((n) => { ids.push(n.id); if (n.children) walk(n.children); });
+        walk(tree);
+        setPlatforms(ids);
+      })
+      .catch(() => {});
   }, []);
 
   async function submitCreate() {
@@ -44,9 +53,10 @@ export default function AdminUsersPage() {
         email: form.email,
         department: form.department,
         groups: parseList(form.groups),
-        roles: parseList(form.roles)
+        roles: parseList(form.roles),
+        managed_categories: parseList(form.managed)
       });
-      setForm({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer" });
+      setForm({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "" });
       await refresh();
       getGroups().then(setGroups).catch(() => {});
     } catch (e) {
@@ -64,6 +74,7 @@ export default function AdminUsersPage() {
         department: editing.department,
         groups: editing.groups,
         roles: editing.roles,
+        managed_categories: editing.managed_categories,
         status: editing.status
       });
       setEditing(null);
@@ -98,10 +109,11 @@ export default function AdminUsersPage() {
           <input className="input" placeholder="部门" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
           <input className="input" placeholder="用户组(逗号分隔)" value={form.groups} onChange={(e) => setForm({ ...form, groups: e.target.value })} />
           <input className="input" placeholder="角色(逗号分隔)" value={form.roles} onChange={(e) => setForm({ ...form, roles: e.target.value })} />
+          <input className="input" placeholder="可管理平台 ID(逗号分隔)" value={form.managed} onChange={(e) => setForm({ ...form, managed: e.target.value })} />
         </div>
         <div className="mt-3 flex gap-2">
           <button className="button button-primary" onClick={submitCreate} disabled={!form.username}>创建</button>
-          <span className="muted text-xs" style={{ alignSelf: "center" }}>已知用户组: {groups.map((g) => g.group_key).join(" / ") || "无"}</span>
+          <span className="muted text-xs" style={{ alignSelf: "center" }}>可选平台: {platforms.join(" / ") || "无"}</span>
         </div>
       </section>
 
@@ -120,6 +132,7 @@ export default function AdminUsersPage() {
               <th>部门</th>
               <th>用户组</th>
               <th>角色</th>
+              <th>可管理平台</th>
               <th>来源</th>
               <th>状态</th>
               <th>最近登录</th>
@@ -136,11 +149,12 @@ export default function AdminUsersPage() {
                 <td>{u.department || "—"}</td>
                 <td>{(u.groups || []).map((g) => <span className="tag mr-1" key={g}>{g}</span>)}</td>
                 <td>{(u.roles || []).map((r) => <span className="tag mr-1" key={r}>{r}</span>)}</td>
+                <td>{u.is_super_admin ? <span className="tag">全部（超管）</span> : (u.managed_categories || []).map((c) => <span className="tag mr-1" key={c}>{c}</span>)}</td>
                 <td>{u.source || "—"}</td>
                 <td><span className="status-dot mr-2" />{u.status || "active"}</td>
                 <td className="muted text-xs">{u.last_login_at && !u.last_login_at.startsWith("0001") ? u.last_login_at.slice(0, 19).replace("T", " ") : "—"}</td>
                 <td>
-                  <button className="button" onClick={() => setEditing({ ...u, groups: u.groups || [], roles: u.roles || [] })}>编辑</button>
+                  <button className="button" onClick={() => setEditing({ ...u, groups: u.groups || [], roles: u.roles || [], managed_categories: u.managed_categories || [] })}>编辑</button>
                   <button className="button ml-1" onClick={() => remove(u)}>删除</button>
                 </td>
               </tr>
@@ -164,6 +178,9 @@ export default function AdminUsersPage() {
             </label>
             <label className="grid gap-1 text-sm">用户组(逗号分隔)
               <input className="input" value={(editing.groups || []).join(", ")} onChange={(e) => setEditing({ ...editing, groups: parseList(e.target.value) })} />
+            </label>
+            <label className="grid gap-1 text-sm">可管理平台 ID(逗号分隔)
+              <input className="input" value={(editing.managed_categories || []).join(", ")} onChange={(e) => setEditing({ ...editing, managed_categories: parseList(e.target.value) })} />
             </label>
             <label className="grid gap-1 text-sm">状态
               <select className="input" value={editing.status || "active"} onChange={(e) => setEditing({ ...editing, status: e.target.value })}>

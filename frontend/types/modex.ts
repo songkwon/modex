@@ -33,6 +33,8 @@ export type User = {
   department: string;
   groups?: string[];
   roles?: string[];
+  managed_categories?: string[];
+  is_super_admin?: boolean;
   source?: string;
   status?: string;
   last_login_at?: string;

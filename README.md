@@ -110,9 +110,9 @@ If `AUTH_MODE=oidc` is set but login does not work, check, in order:
 5. Otherwise read the backend log — callback errors (including provider
    `error_description`) are logged and echoed to the portal via `?login_error=`.
 
-## User & Group Management
+## User, Group & Permission Management
 
-The directory is managed from `/admin/users`:
+The directory is managed from `/admin/users` (super-admin only):
 
 - `GET /api/admin/users` (optional `?keyword=`), `POST /api/admin/users`
 - `GET|PUT|DELETE /api/admin/users/{id}`
@@ -120,6 +120,35 @@ The directory is managed from `/admin/users`:
 
 OIDC logins upsert the user into this directory and refresh their groups and
 last-login timestamp. Groups referenced by a user are auto-registered.
+
+### Roles & platform permissions
+
+- **Super admin**: configured via `SUPER_ADMIN_USERS` (comma-separated
+  usernames/emails). Matched on login (mock or OIDC), granted the `admin` role,
+  and may manage every platform plus users/permissions. `GET /api/auth/me`
+  reports `is_super_admin`.
+- **Platform admin**: a user with the `admin` role and `managed_categories`
+  set to the platform (category) IDs they govern. A managed platform covers its
+  sub-platforms (e.g. `engineering` covers `engineering.cbb`).
+
+Platform-scoped writes are enforced server-side:
+
+- Create/update/delete categories, modules, versions, entries require manage
+  rights on the relevant platform (super admins bypass).
+- Top-level platform creation and all user/group/permission management are
+  super-admin only.
+- Search/embedding reindex requires an admin session.
+- `POST /api/admin/modules/{key}/migrate` reassigns a module to other
+  platform(s) and requires manage rights on **both** source and target
+  (super admins bypass).
+
+## AI Search
+
+The home page has a centered search (ChatGPT-style). As you type it shows live
+results with an entry-type icon, platform breadcrumb, title, a context snippet,
+and highlighted matched keywords. The sparkle **询问 AI** action calls
+`POST /api/ask`, which retrieves the top documents and either forwards them to an
+external LLM (`ASK_HTTP_URL`) or returns an extractive answer with cited sources.
 
 ## Deployment Configuration
 

@@ -89,7 +89,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	if user, ok := s.currentUser(r); ok {
-		writeJSON(w, http.StatusOK, user)
+		writeJSON(w, http.StatusOK, struct {
+			store.User
+			IsSuperAdmin bool `json:"is_super_admin"`
+		}{User: user, IsSuperAdmin: s.auth.IsSuperAdmin(user)})
 		return
 	}
 	writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
@@ -404,6 +407,12 @@ func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
 		return
 	}
+	if user, ok := s.requireUser(w, r); !ok {
+		return
+	} else if !isAdmin(user) && !s.auth.IsSuperAdmin(user) {
+		writeError(w, http.StatusForbidden, "forbidden", "admin required")
+		return
+	}
 	count, err := s.search.Reindex(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "embedding_reindex_failed", err.Error())
@@ -420,6 +429,12 @@ func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleSearchReindex(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	if user, ok := s.requireUser(w, r); !ok {
+		return
+	} else if !isAdmin(user) && !s.auth.IsSuperAdmin(user) {
+		writeError(w, http.StatusForbidden, "forbidden", "admin required")
 		return
 	}
 	// The keyword index is computed from the in-memory page set, so reindexing
@@ -554,6 +569,84 @@ func (s *Server) currentUser(r *http.Request) (store.User, bool) {
 	return s.auth.CurrentUser(r)
 }
 
+func isAdmin(u store.User) bool {
+	for _, r := range u.Roles {
+		if r == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
+// canManageCategory reports whether the user may manage the given platform.
+// A managed category id covers its descendants (e.g. "engineering" covers
+// "engineering.cbb").
+func canManageCategory(u store.User, categoryID string) bool {
+	for _, m := range u.ManagedCategories {
+		if m == categoryID || strings.HasPrefix(categoryID, m+".") {
+			return true
+		}
+	}
+	return false
+}
+
+func canManageCategories(u store.User, categoryIDs []string) bool {
+	for _, id := range categoryIDs {
+		if canManageCategory(u, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// requireUser writes 401 and returns false when no valid session is present.
+func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (store.User, bool) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "login required")
+		return store.User{}, false
+	}
+	return user, true
+}
+
+// requireSuperAdmin gates super-admin-only actions (e.g. user/permission mgmt).
+func (s *Server) requireSuperAdmin(w http.ResponseWriter, r *http.Request) (store.User, bool) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return store.User{}, false
+	}
+	if !s.auth.IsSuperAdmin(user) {
+		writeError(w, http.StatusForbidden, "forbidden", "super admin required")
+		return store.User{}, false
+	}
+	return user, true
+}
+
+// requirePlatform gates platform-scoped writes: super admins pass; otherwise the
+// user must have management rights on at least one of the target categories.
+func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categoryIDs []string) (store.User, bool) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return store.User{}, false
+	}
+	if s.auth.IsSuperAdmin(user) {
+		return user, true
+	}
+	if isAdmin(user) && canManageCategories(user, categoryIDs) {
+		return user, true
+	}
+	writeError(w, http.StatusForbidden, "forbidden", "no management permission for this platform")
+	return store.User{}, false
+}
+
+// moduleCategories resolves the category IDs attached to a module key.
+func (s *Server) moduleCategories(moduleKey string) []string {
+	if m, err := s.store.Module(moduleKey); err == nil {
+		return m.CategoryIDs
+	}
+	return nil
+}
+
 func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusOK, s.store.CategoryTree())
@@ -564,12 +657,24 @@ func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	// Top-level platforms are super-admin only; sub-platforms can be created by
+	// a manager of the parent platform.
+	if c.ParentID == "" {
+		if _, ok := s.requireSuperAdmin(w, r); !ok {
+			return
+		}
+	} else if _, ok := s.requirePlatform(w, r, []string{c.ParentID}); !ok {
+		return
+	}
 	created, err := s.store.CreateCategory(c)
 	writeMutation(w, created, http.StatusCreated, err)
 }
 
 func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/categories/")
+	if _, ok := s.requirePlatform(w, r, []string{id}); !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodPut:
 		var c store.Category
@@ -600,6 +705,9 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	if _, ok := s.requirePlatform(w, r, m.CategoryIDs); !ok {
+		return
+	}
 	created, err := s.store.CreateModule(m)
 	writeMutation(w, created, http.StatusCreated, err)
 }
@@ -611,6 +719,15 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	moduleKey := parts[0]
+	// Migration (reassign platform/owner) has its own dual-platform permission
+	// check, so handle it before the generic platform gate.
+	if len(parts) == 2 && parts[1] == "migrate" && r.Method == http.MethodPost {
+		s.handleMigrateModule(w, r, moduleKey)
+		return
+	}
+	if _, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey)); !ok {
+		return
+	}
 	switch {
 	case len(parts) == 1 && r.Method == http.MethodPut:
 		var m store.Module
@@ -649,8 +766,54 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// handleMigrateModule reassigns a module to different platform(s) (and
+// optionally a new owner). The caller must be able to manage both the source
+// and destination platforms (super admins bypass the check).
+func (s *Server) handleMigrateModule(w http.ResponseWriter, r *http.Request, moduleKey string) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		CategoryIDs []string `json:"category_ids"`
+		OwnerGroup  string   `json:"owner_group"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if len(req.CategoryIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "category_ids is required")
+		return
+	}
+	if !s.auth.IsSuperAdmin(user) {
+		source := s.moduleCategories(moduleKey)
+		if !isAdmin(user) || !canManageCategories(user, source) || !canManageCategories(user, req.CategoryIDs) {
+			writeError(w, http.StatusForbidden, "forbidden", "need management permission on both source and target platforms")
+			return
+		}
+	}
+	names := make([]string, 0, len(req.CategoryIDs))
+	for _, id := range req.CategoryIDs {
+		names = append(names, s.store.CategoryName(id))
+	}
+	updated, err := s.store.UpdateModule(moduleKey, store.Module{
+		CategoryIDs:  req.CategoryIDs,
+		CategoryPath: strings.Join(names, " / "),
+		OwnerGroup:   req.OwnerGroup,
+	})
+	writeMutation(w, updated, http.StatusOK, err)
+}
+
 func (s *Server) handleAdminEntryByID(w http.ResponseWriter, r *http.Request) {
 	entryID := strings.TrimPrefix(r.URL.Path, "/api/admin/entries/")
+	if moduleKey, ok := s.store.EntryModuleKey(entryID); ok {
+		if _, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey)); !ok {
+			return
+		}
+	} else if _, ok := s.requireUser(w, r); !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodPut:
 		var e store.Entry
@@ -688,6 +851,9 @@ func (s *Server) handleReleaseRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, s.store.Users(r.URL.Query().Get("keyword")))
@@ -705,6 +871,9 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
 	switch r.Method {
 	case http.MethodGet:
@@ -730,6 +899,9 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminGroups(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, s.store.Groups())

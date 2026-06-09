@@ -25,6 +25,7 @@ type Config struct {
 	CookieSameSite   string
 	CookieSecure     bool
 	CORSAllowOrigins []string
+	SuperAdmins      []string
 }
 
 func FromEnv() Config {
@@ -58,6 +59,7 @@ func FromEnv() Config {
 		CookieSameSite:   env("COOKIE_SAME_SITE", "lax"),
 		CookieSecure:     env("COOKIE_SECURE", "false") == "true",
 		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3000")),
+		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
 	}
 	if cfg.AuthURL == "" && issuer != "" {
 		cfg.AuthURL = issuer + "/protocol/openid-connect/auth"

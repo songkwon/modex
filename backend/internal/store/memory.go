@@ -188,6 +188,9 @@ func (s *Store) UpdateUser(id string, patch User) (User, error) {
 		if patch.Roles != nil {
 			u.Roles = patch.Roles
 		}
+		if patch.ManagedCategories != nil {
+			u.ManagedCategories = patch.ManagedCategories
+		}
 		if patch.Status != "" {
 			u.Status = patch.Status
 		}
@@ -311,6 +314,30 @@ func (s *Store) ensureGroupsLocked(keys []string) {
 			s.groups = append(s.groups, Group{ID: s.nextIDLocked("g"), GroupKey: key, Name: key, Source: "auto", CreatedAt: now, UpdatedAt: now})
 		}
 	}
+}
+
+// CategoryName returns the display name for a category id (or the id if unknown).
+func (s *Store) CategoryName(id string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, c := range s.categories {
+		if c.ID == id {
+			return c.Name
+		}
+	}
+	return id
+}
+
+// EntryModuleKey returns the module key that owns an entry, for permission checks.
+func (s *Store) EntryModuleKey(entryID string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, e := range s.entries {
+		if e.ID == entryID {
+			return e.ModuleKey, true
+		}
+	}
+	return "", false
 }
 
 func (s *Store) CategoryTree() []Category {
