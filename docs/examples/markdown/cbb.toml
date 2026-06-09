@@ -1,7 +1,6 @@
 [package]
 name = "DemoModule"
 version = "1.2.3"
-channel = "default"
 description = "示例模块"
 authors = ["alice"]
 edition = "2025"

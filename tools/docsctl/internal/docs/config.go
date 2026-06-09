@@ -93,7 +93,6 @@ func LoadMetadata(root string, cfg Config) Metadata {
 		ModuleName:     module,
 		DocsVersion:    firstEnv("DOCS_VERSION", "", "latest"),
 		PackageVersion: firstEnv("DOCS_PACKAGE_VERSION", cbb.Version, ""),
-		Channel:        firstEnv("DOCS_CHANNEL", cbb.Channel, ""),
 		Description:    firstEnv("DOCS_DESCRIPTION", cbb.Description, ""),
 		Authors:        cbb.Authors,
 		Edition:        firstEnv("DOCS_EDITION", cbb.Edition, ""),
@@ -108,7 +107,6 @@ func LoadMetadata(root string, cfg Config) Metadata {
 type CBBPackage struct {
 	Name        string
 	Version     string
-	Channel     string
 	Description string
 	Authors     []string
 	Edition     string
@@ -145,8 +143,6 @@ func LoadCBBToml(path string) (CBBPackage, error) {
 			pkg.Name = tomlString(val)
 		case "version":
 			pkg.Version = tomlString(val)
-		case "channel":
-			pkg.Channel = tomlString(val)
 		case "description":
 			pkg.Description = tomlString(val)
 		case "authors":

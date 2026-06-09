@@ -160,7 +160,7 @@ func recordFor(md Metadata, entry Entry, content string) DocumentRecord {
 	}
 	return DocumentRecord{
 		DocID: md.ModuleKey + ":" + md.DocsVersion + ":" + entry.Key, ModuleKey: md.ModuleKey, ModuleName: md.ModuleName,
-		DocsVersion: md.DocsVersion, PackageVersion: md.PackageVersion, Channel: md.Channel, EntryKey: entry.Key,
+		DocsVersion: md.DocsVersion, PackageVersion: md.PackageVersion, EntryKey: entry.Key,
 		EntryType: entry.Type, Title: entry.Title, Description: desc, Content: content, Path: "/" + entry.Key,
 		SourceFile: entry.Source, Keywords: md.Keywords, Status: "active",
 	}
@@ -215,7 +215,6 @@ func llms(md Metadata, entries []Entry) string {
 	b.WriteString("Description: " + md.Description + "\n")
 	b.WriteString("Docs Version: " + md.DocsVersion + "\n")
 	b.WriteString("Package Version: " + md.PackageVersion + "\n")
-	b.WriteString("Channel: " + md.Channel + "\n")
 	b.WriteString("Keywords: " + strings.Join(md.Keywords, ", ") + "\n\n")
 	b.WriteString("## Entries\n\n")
 	for _, e := range entries {

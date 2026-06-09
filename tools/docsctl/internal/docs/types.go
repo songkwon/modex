@@ -18,7 +18,6 @@ type Metadata struct {
 	ModuleName     string   `json:"module_name"`
 	DocsVersion    string   `json:"docs_version"`
 	PackageVersion string   `json:"package_version"`
-	Channel        string   `json:"channel"`
 	Description    string   `json:"description"`
 	Authors        []string `json:"authors"`
 	Edition        string   `json:"edition"`
@@ -46,7 +45,6 @@ type DocumentRecord struct {
 	ModuleName     string   `json:"module_name"`
 	DocsVersion    string   `json:"docs_version"`
 	PackageVersion string   `json:"package_version"`
-	Channel        string   `json:"channel"`
 	EntryKey       string   `json:"entry_key"`
 	EntryType      string   `json:"entry_type"`
 	Title          string   `json:"title"`
