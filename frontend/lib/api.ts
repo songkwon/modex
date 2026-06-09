@@ -48,3 +48,6 @@ export const createUser = (body: Partial<User>) => api<User>("/api/admin/users",
 export const updateUser = (id: string, body: Partial<User>) => api<User>(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const deleteUser = (id: string) => api<{ status: string }>(`/api/admin/users/${id}`, { method: "DELETE" });
 export const getGroups = () => api<Group[]>("/api/admin/groups");
+
+export const reindexSearch = () => api<Record<string, unknown>>("/api/search/reindex", { method: "POST", body: "{}" });
+export const reindexEmbeddings = () => api<Record<string, unknown>>("/api/embeddings/reindex", { method: "POST", body: "{}" });

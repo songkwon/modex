@@ -90,14 +90,22 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		sw = 0.4
 	}
 	pages := s.Store.Pages()
-	queryVec, _ := s.Embedder.EmbedText(ctx, req.Query)
+	// Semantic and hybrid modes need a query embedding; keyword mode skips it to
+	// avoid an unnecessary embedding-provider call.
+	var queryVec []float32
+	if req.Mode != ModeKeyword && strings.TrimSpace(req.Query) != "" {
+		queryVec, _ = s.Embedder.EmbedText(ctx, req.Query)
+	}
 	var scored []Result
 	for _, p := range pages {
 		if !matchFilters(p, req.Filters) {
 			continue
 		}
 		kScore := keywordScore(req.Query, p)
-		sScore := semanticScore(queryVec, p.ContentText)
+		var sScore float64
+		if len(queryVec) > 0 {
+			sScore = cosine(queryVec, s.pageVector(ctx, p))
+		}
 		var final float64
 		switch req.Mode {
 		case ModeKeyword:
@@ -165,23 +173,65 @@ func keywordScore(query string, p store.Page) float64 {
 	return score / float64(len(q)*4)
 }
 
-func semanticScore(queryVec []float32, text string) float64 {
-	if len(queryVec) == 0 || text == "" {
+// Reindex (re)computes and caches an embedding for every page using the
+// configured provider. It powers POST /api/embeddings/reindex and pre-warms the
+// cache so semantic search does not pay an embedding call on the hot path.
+func (s Service) Reindex(ctx context.Context) (int, error) {
+	s.Store.ClearEmbeddings()
+	pages := s.Store.Pages()
+	count := 0
+	for _, p := range pages {
+		text := embedText(p)
+		if text == "" {
+			continue
+		}
+		vec, err := s.Embedder.EmbedText(ctx, text)
+		if err != nil {
+			return count, err
+		}
+		s.Store.SetEmbedding(p.DocID, vec)
+		count++
+	}
+	return count, nil
+}
+
+// pageVector returns the page's embedding from cache, computing and caching it
+// on demand the first time it is needed.
+func (s Service) pageVector(ctx context.Context, p store.Page) []float32 {
+	if vec, ok := s.Store.Embedding(p.DocID); ok {
+		return vec
+	}
+	text := embedText(p)
+	if text == "" {
+		return nil
+	}
+	vec, err := s.Embedder.EmbedText(ctx, text)
+	if err != nil {
+		return nil
+	}
+	s.Store.SetEmbedding(p.DocID, vec)
+	return vec
+}
+
+func embedText(p store.Page) string {
+	return strings.TrimSpace(p.Title + "\n" + p.Description + "\n" + p.ContentText)
+}
+
+// cosine returns a 0..1 similarity (cosine distance shifted into [0,1]).
+func cosine(a, b []float32) float64 {
+	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
 		return 0
 	}
-	// Deterministic MVP approximation: compare hashed text vector to query vector.
-	mock := embedding.MockProvider{Dim: len(queryVec)}
-	vec, _ := mock.EmbedText(context.Background(), text)
-	var dot, qn, vn float64
-	for i := range queryVec {
-		dot += float64(queryVec[i] * vec[i])
-		qn += float64(queryVec[i] * queryVec[i])
-		vn += float64(vec[i] * vec[i])
+	var dot, an, bn float64
+	for i := range a {
+		dot += float64(a[i] * b[i])
+		an += float64(a[i] * a[i])
+		bn += float64(b[i] * b[i])
 	}
-	if qn == 0 || vn == 0 {
+	if an == 0 || bn == 0 {
 		return 0
 	}
-	return (dot/math.Sqrt(qn*vn) + 1) / 2
+	return (dot/math.Sqrt(an*bn) + 1) / 2
 }
 
 func snippet(query, content string) string {

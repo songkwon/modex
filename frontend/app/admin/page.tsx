@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BarChart3, Boxes, FolderTree, History, MessageSquareText, Search, Users } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { ReindexControls } from "@/components/reindex-controls";
 
 const links = [
   ["/admin/categories", "分类管理", "维护层级分类、排序和状态", FolderTree],
@@ -27,6 +28,7 @@ export default function AdminPage() {
           </Link>
         ))}
       </section>
+      <ReindexControls />
     </AdminShell>
   );
 }

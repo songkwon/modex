@@ -209,6 +209,29 @@ Admin registry mutations are implemented against the in-memory store:
 - Entries: `POST .../versions/{docs_version}/entries`, `PUT|DELETE /api/admin/entries/{entry_id}`
 - Releases: `GET /api/admin/releases/{release_id}`, `POST /api/admin/releases/{release_id}/rollback`
 
+## Search Index Maintenance
+
+Semantic and hybrid search use embeddings produced by the configured provider
+and cached per document. Rebuild the cache after publishing new content:
+
+- `POST /api/embeddings/reindex`: (re)embeds every page and returns the count.
+- `POST /api/search/reindex`: rebuilds the index and reports document counts.
+
+Both are also available from the **索引维护** panel on `/admin`. Embeddings are
+otherwise computed lazily on first semantic/hybrid query and cached; keyword-only
+search never calls the embedding provider. Publishing a new artifact invalidates
+the cached vectors for that module/version automatically.
+
 ## MVP Notes
 
-The first iteration uses seeded in-memory registry data in the backend so the portal, search, MCP, analytics, and admin-mutation flows are immediately usable. PostgreSQL, MinIO, Meilisearch, pgvector, Keycloak/OIDC, and PostHog integration points are wired through configuration and migrations for the next storage-backed iteration.
+The backend keeps the registry in memory, but the full product loop is functional
+end-to-end: `docsctl deploy` uploads an artifact to `POST /api/deploy`, which
+parses the zip and ingests modules, versions, entries, pages, nav, built HTML,
+and site assets so they immediately appear in the portal, search, and MCP. Mock +
+Keycloak/OIDC login, user/group management, analytics, admin CRUD, and real
+search/embedding reindexing are all implemented.
+
+The remaining work is durable storage: moving the in-memory store onto
+PostgreSQL (source of truth), MinIO (artifact/site bytes), Meilisearch (keyword
+index), and pgvector (embeddings). Configuration, the `001_init.sql` migration,
+and the `EmbeddingStore`/provider seams are already in place for that iteration.

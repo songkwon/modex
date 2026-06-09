@@ -35,6 +35,7 @@ type Store struct {
 	navs       map[string][]NavItem
 	html       map[string]string
 	siteFiles  map[string]SiteFile
+	embeddings map[string][]float32
 	seq        int64
 }
 
@@ -53,9 +54,10 @@ func NewSeeded() *Store {
 			{ID: "g-cad", GroupKey: "cad-team", Name: "CAD 团队", Source: "seed", CreatedAt: now, UpdatedAt: now},
 			{ID: "g-frontend", GroupKey: "frontend-platform", Name: "前端平台", Source: "seed", CreatedAt: now, UpdatedAt: now},
 		},
-		navs:      map[string][]NavItem{},
-		html:      map[string]string{},
-		siteFiles: map[string]SiteFile{},
+		navs:       map[string][]NavItem{},
+		html:       map[string]string{},
+		siteFiles:  map[string]SiteFile{},
+		embeddings: map[string][]float32{},
 		categories: []Category{
 			{ID: "engineering", Key: "engineering", Name: "工程化", Description: "研发效能、构建、CI/CD 与质量平台", Icon: "wrench", SortOrder: 10, Status: "active"},
 			{ID: "engineering.cbb", ParentID: "engineering", Key: "engineering.cbb", Name: "CBB", Description: "CBB 构建与模块治理", Icon: "package", SortOrder: 11, Status: "active"},
@@ -444,6 +446,41 @@ func (s *Store) Pages() []Page {
 	return append([]Page(nil), s.pages...)
 }
 
+// Embedding returns the cached embedding vector for a document, if present.
+func (s *Store) Embedding(docID string) ([]float32, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.embeddings[docID]
+	if !ok {
+		return nil, false
+	}
+	return append([]float32(nil), v...), true
+}
+
+// SetEmbedding stores (or replaces) the embedding vector for a document.
+func (s *Store) SetEmbedding(docID string, vec []float32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.embeddings == nil {
+		s.embeddings = map[string][]float32{}
+	}
+	s.embeddings[docID] = append([]float32(nil), vec...)
+}
+
+// EmbeddingCount reports how many documents currently have cached embeddings.
+func (s *Store) EmbeddingCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.embeddings)
+}
+
+// ClearEmbeddings drops the entire embedding cache (used before a full reindex).
+func (s *Store) ClearEmbeddings() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.embeddings = map[string][]float32{}
+}
+
 func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 	if strings.TrimSpace(a.ModuleKey) == "" || strings.TrimSpace(a.DocsVersion) == "" || len(a.Entries) == 0 || len(a.Documents) == 0 {
 		return DeployResult{}, ErrInvalid
@@ -561,6 +598,16 @@ func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 		})
 	}
 	s.pages = removePages(s.pages, a.ModuleKey, a.DocsVersion)
+	// Drop cached embeddings for this module/version so re-published content is
+	// re-embedded on the next reindex (or lazily during search).
+	if s.embeddings != nil {
+		embPrefix := a.ModuleKey + ":" + a.DocsVersion + ":"
+		for docID := range s.embeddings {
+			if strings.HasPrefix(docID, embPrefix) {
+				delete(s.embeddings, docID)
+			}
+		}
+	}
 	for _, d := range a.Documents {
 		entryKey := firstNonEmpty(d.EntryKey, entryKeyFromDocID(d.DocID))
 		docID := firstNonEmpty(d.DocID, a.ModuleKey+":"+a.DocsVersion+":"+entryKey)

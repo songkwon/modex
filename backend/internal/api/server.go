@@ -57,9 +57,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/docs/", s.handleDocRoutes)
 	mux.HandleFunc("/api/search", s.handleSearch)
 	mux.HandleFunc("/api/search/facets", s.handleFacets)
-	mux.HandleFunc("/api/search/reindex", s.handleAccepted("search_reindex_started"))
+	mux.HandleFunc("/api/search/reindex", s.handleSearchReindex)
 	mux.HandleFunc("/api/embeddings/embed-text", s.handleEmbedText)
-	mux.HandleFunc("/api/embeddings/reindex", s.handleAccepted("embedding_reindex_started"))
+	mux.HandleFunc("/api/embeddings/reindex", s.handleEmbeddingReindex)
 	mux.HandleFunc("/api/deploy", s.handleDeploy)
 	mux.HandleFunc("/api/analytics/page-view", s.handlePageView)
 	mux.HandleFunc("/api/analytics/read-progress", s.handleReadProgress)
@@ -303,6 +303,43 @@ func (s *Server) handleEmbedText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"provider": s.search.Embedder.Name(), "dimension": len(vec), "embedding": vec})
+}
+
+func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	count, err := s.search.Reindex(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "embedding_reindex_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":           "reindexed",
+		"provider":         s.search.Embedder.Name(),
+		"embedded_pages":   count,
+		"cached_documents": s.store.EmbeddingCount(),
+	})
+}
+
+func (s *Server) handleSearchReindex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	// The keyword index is computed from the in-memory page set, so reindexing
+	// primarily (re)builds the embedding cache used by semantic/hybrid search.
+	count, err := s.search.Reindex(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "search_reindex_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":             "reindexed",
+		"indexed_documents":  len(s.store.Pages()),
+		"embedded_documents": count,
+	})
 }
 
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
@@ -629,12 +666,6 @@ func writeMutation(w http.ResponseWriter, v any, successStatus int, err error) {
 		return
 	}
 	writeJSON(w, successStatus, v)
-}
-
-func (s *Server) handleAccepted(status string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusAccepted, map[string]any{"status": status})
-	}
 }
 
 func writeResult(w http.ResponseWriter, v any, err error) {
