@@ -1,0 +1,41 @@
+# Example application configuration for Modex.
+# This file is intended for settings that describe *how the application behaves*
+# with external systems (especially identity data), as opposed to per-deployment
+# infrastructure and secrets (which belong in environment variables).
+#
+# How to use with docker-compose (recommended):
+#   cd deploy
+#   cp config.example.yaml config.yaml
+#   # edit config.yaml (especially auth.user_mapping)
+#   # then edit docker-compose.yml and UNCOMMENT the volume line under backend:
+#   #   - ./config.yaml:/app/config.yaml:ro
+#   # and make sure CONFIG_FILE=/app/config.yaml is active (either in .env or in the compose file)
+#
+# You can also run the binary directly and point CONFIG_FILE at this file.
+#
+# Precedence (lowest → highest):
+#   1. Hardcoded defaults in the code
+#   2. This YAML file
+#   3. Environment variables (OIDC_CLAIM_* etc.) — these win for quick overrides
+
+auth:
+  user_mapping:
+    # Which claim's *value* is used as the user's stable unique identifier.
+    # The company standard is to use email as the cross-system primary key for users.
+    # If your Keycloak realm uses a more stable employee ID / sub-attribute, change it here.
+    unique_id_claim: email
+
+    # Claim containing the avatar / profile photo URL.
+    # "picture" is the standard OIDC claim. Many enterprises use custom mappers
+    # such as "wxPhotoURL", "avatar", "photo", or "user.attributes.avatar".
+    avatar_claim: picture
+    # avatar_claim: wxPhotoURL
+
+    # The primary display name shown in headers, menus, and user lists.
+    # Common choices: "name", "given_name", "preferred_username", or a custom full-name mapper.
+    display_name_claim: name
+
+    # Information displayed below the primary name (e.g. in the user menu and admin user table).
+    # In the current UI this value is stored in the "department" field for compatibility.
+    # You can point it at "department", "org", "organization", "title", "company", etc.
+    secondary_info_claim: department

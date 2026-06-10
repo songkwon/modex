@@ -31,6 +31,7 @@ export type User = {
   display_name: string;
   email: string;
   department: string;
+  avatar?: string;
   groups?: string[];
   roles?: string[];
   managed_categories?: string[];

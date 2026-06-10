@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"modex/backend/internal/config"
 )
 
 type Config struct {
@@ -26,6 +28,10 @@ type Config struct {
 	CookieSecure     bool
 	CORSAllowOrigins []string
 	SuperAdmins      []string
+
+	// UserMapping controls which OIDC claims are used for core user identity fields.
+	// Values are resolved from an optional config file + environment variable overrides.
+	UserMapping config.UserMapping
 }
 
 func FromEnv() Config {
@@ -59,7 +65,12 @@ func FromEnv() Config {
 		CookieSameSite:   env("COOKIE_SAME_SITE", "lax"),
 		CookieSecure:     env("COOKIE_SECURE", "false") == "true",
 		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3000")),
-		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
+		SuperAdmins: splitList(os.Getenv("SUPER_ADMIN_USERS")),
+
+		// UserMapping comes from a combination of (optional) config file + env overrides.
+		// See internal/config for precedence rules and why some settings live in files
+		// while connection secrets stay in the environment.
+		UserMapping: resolveUserMapping(),
 	}
 	if cfg.AuthURL == "" && issuer != "" {
 		cfg.AuthURL = issuer + "/protocol/openid-connect/auth"
@@ -110,4 +121,26 @@ func splitList(v string) []string {
 		}
 	}
 	return out
+}
+
+// resolveUserMapping loads the user attribute mapping with the following precedence:
+//   1. Values from config file (if CONFIG_FILE or conventional locations exist)
+//   2. OIDC_CLAIM_* environment variables (explicit overrides)
+//   3. Reasonable defaults (company prefers email as unique id)
+func resolveUserMapping() config.UserMapping {
+	m := config.LoadUserMapping()
+
+	if m.UniqueIDClaim == "" {
+		m.UniqueIDClaim = "email"
+	}
+	if m.AvatarClaim == "" {
+		m.AvatarClaim = "picture"
+	}
+	if m.DisplayNameClaim == "" {
+		m.DisplayNameClaim = "name"
+	}
+	if m.SecondaryInfoClaim == "" {
+		m.SecondaryInfoClaim = "department"
+	}
+	return m
 }

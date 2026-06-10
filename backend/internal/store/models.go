@@ -8,6 +8,7 @@ type User struct {
 	DisplayName string    `json:"display_name"`
 	Email       string    `json:"email"`
 	Department  string    `json:"department"`
+	Avatar      string    `json:"avatar,omitempty"`
 	Groups      []string  `json:"groups"`
 	Roles       []string  `json:"roles"`
 	// ManagedCategories lists the platform/category IDs this user may manage.

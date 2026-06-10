@@ -232,6 +232,9 @@ func (s *Store) UpsertUser(u User) User {
 			if u.Department != "" {
 				existing.Department = u.Department
 			}
+			if u.Avatar != "" {
+				existing.Avatar = u.Avatar
+			}
 			if len(u.Groups) > 0 {
 				existing.Groups = u.Groups
 			}

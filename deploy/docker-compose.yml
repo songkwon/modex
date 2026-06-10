@@ -75,10 +75,30 @@ services:
       HYBRID_SEMANTIC_WEIGHT: ${HYBRID_SEMANTIC_WEIGHT:-0.4}
       MCP_ENABLED: ${MCP_ENABLED:-true}
       MCP_TOKEN: ${MCP_TOKEN:-dev-token}
+      # CONFIG_FILE: set this (e.g. to /app/config.yaml) when you mount a config file below.
+      # Leave empty or unset to use only environment variables (the old behavior).
+      CONFIG_FILE: ${CONFIG_FILE:-}
     ports:
       - "${BACKEND_PORT:-8671}:${BACKEND_PORT:-8671}"
     volumes:
       - backend-data:/data
+      # === Optional Application Config (config.yaml) ===
+      # This is the recommended way to configure things like OIDC claim mappings
+      # (unique_id_claim, avatar_claim, display_name_claim, secondary_info_claim).
+      #
+      # Steps to enable:
+      #   1. cp deploy/config.example.yaml deploy/config.yaml
+      #   2. Edit deploy/config.yaml (especially the auth.user_mapping section)
+      #   3. Uncomment the volume mount below
+      #   4. Make sure CONFIG_FILE is set to /app/config.yaml (you can put it in your .env)
+      #
+      # - ./config.yaml:/app/config.yaml:ro
+      #
+      # You can also mount to other paths and set CONFIG_FILE accordingly, e.g.:
+      # - ./my-oidc-config.yaml:/etc/modex/config.yaml:ro
+      # and CONFIG_FILE=/etc/modex/config.yaml
+      #
+      # The app will also auto-discover common locations if CONFIG_FILE is not set.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${BACKEND_PORT:-8671}/healthz"]
       interval: 10s

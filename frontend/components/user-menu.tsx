@@ -11,6 +11,28 @@ function initials(name: string) {
   return n ? n.slice(0, 1).toUpperCase() : "?";
 }
 
+function UserAvatar({ user }: { user: { display_name?: string; username?: string; avatar?: string } }) {
+  const name = user.display_name || user.username || "";
+  if (user.avatar) {
+    return (
+      <img
+        src={user.avatar}
+        alt={name}
+        className="user-avatar"
+        style={{ objectFit: "cover" }}
+        onError={(e) => {
+          // fallback to initials on broken image
+          const span = document.createElement("span");
+          span.className = "user-avatar";
+          span.textContent = initials(name);
+          e.currentTarget.replaceWith(span);
+        }}
+      />
+    );
+  }
+  return <span className="user-avatar">{initials(name)}</span>;
+}
+
 export function UserMenu() {
   const [user, setUser] = useState<User | null>(null);
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
@@ -56,7 +78,7 @@ export function UserMenu() {
   return (
     <div className="user-menu" ref={ref} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button className="user-menu-trigger" onClick={() => setOpen((v) => !v)}>
-        <span className="user-avatar">{initials(user.display_name || user.username)}</span>
+        <UserAvatar user={user} />
         <span className="user-meta">
           <span className="user-name">{user.display_name || user.username}</span>
           <span className="user-dept">{user.department || "—"}</span>

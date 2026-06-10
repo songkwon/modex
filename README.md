@@ -75,6 +75,79 @@ If your Keycloak endpoints are non-standard, override `OIDC_ISSUER_URL` or the e
 - `OIDC_USERINFO_URL`
 - `OIDC_END_SESSION_URL`
 
+### Configuration philosophy: Environment variables vs config file
+
+We follow a pragmatic split:
+
+- **Environment variables** — for infrastructure, secrets, and deployment-specific wiring:
+  - `AUTH_MODE`, `KEYCLOAK_*`, all `OIDC_*` endpoint / client / redirect settings
+  - `COOKIE_*`, `SUPER_ADMIN_USERS`
+  - Database, MinIO, Meilisearch, embedding provider URLs and keys
+  - `PORT`, `DATA_DIR`, CORS origins, etc.
+
+- **Application config file (YAML)** — for higher-level, semantic configuration that describes *how the app should interpret data from external systems*. These are good to keep in a version-controlled file (with comments) so changes are reviewable.
+
+  Currently the main candidate is **OIDC user attribute mapping**.
+
+#### OIDC user attribute mapping
+
+Different Keycloak realms and mappers expose user profile data under different claim names.
+
+You can configure the mapping in two ways (they combine with clear precedence):
+
+1. **Recommended for teams**: Put it in a config file (`config.yaml` or similar).
+2. **Quick override / CI / one-off**: Use the `OIDC_CLAIM_*` environment variables.
+
+**Precedence (lowest to highest):**
+1. Hardcoded defaults in the code (`email`, `picture`, `name`, `department`)
+2. Values from the YAML config file
+3. Explicit `OIDC_CLAIM_*` environment variables (these always win)
+
+##### Using a config file
+
+Set the `CONFIG_FILE` environment variable, or place the file in one of the conventional locations:
+
+- `config.yaml` / `config.yml` (next to the working directory)
+- `configs/config.yaml`
+- `/etc/modex/config.yaml`
+
+Example (`deploy/config.example.yaml`):
+
+```yaml
+auth:
+  user_mapping:
+    unique_id_claim: email          # company convention: email is the stable user key
+    avatar_claim: picture           # or wxPhotoURL, avatar, etc.
+    display_name_claim: name
+    secondary_info_claim: department
+```
+
+In docker / k8s you typically mount the file:
+
+```yaml
+volumes:
+  - ./config.yaml:/app/config.yaml:ro
+environment:
+  CONFIG_FILE: /app/config.yaml
+```
+
+##### Environment variable overrides (still supported)
+
+You can continue to (or temporarily) use only environment variables:
+
+```env
+OIDC_CLAIM_UNIQUE_ID=email
+OIDC_CLAIM_AVATAR=wxPhotoURL
+OIDC_CLAIM_DISPLAY_NAME=name
+OIDC_CLAIM_SECONDARY_INFO=department
+```
+
+These take priority over anything in the config file.
+
+The backend merges claims from **both the ID token and the userinfo endpoint** (ID token is especially useful for custom protocol mappers).
+
+When `unique_id_claim` is set to `email`, the email value becomes the internal `User.ID`. Only use email as the unique key if emails are guaranteed to be stable in your organization.
+
 The backend exposes:
 
 - `GET /api/auth/login`: redirects to Keycloak.
