@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, BookOpen, Info, Star } from "lucide-react";
+import { ArrowUpRight, BookOpen, Info } from "lucide-react";
 import Link from "next/link";
 import type { ModuleInfo } from "@/types/modex";
 
@@ -14,7 +14,7 @@ export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (mo
             <span>{module.name}</span>
           </div>
         </Link>
-        <p className="mt-3 text-sm leading-6 text-slate-600">{module.description}</p>
+        <p className="muted mt-3 text-sm leading-6">{module.description}</p>
         <div className="package-meta">
           <span>{module.category_path}</span>
           <span>owner: {module.owner_group}</span>
@@ -45,7 +45,6 @@ export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (mo
           <dd>{module.updated_at.slice(0, 10)}</dd>
         </div>
         <div className="flex gap-2 pt-1">
-          <button className="button icon-button" aria-label="关注"><Star size={15} /></button>
           <button className="button icon-button" aria-label="模块信息" onClick={() => onInfo(module)}><Info size={15} /></button>
           <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>打开 <ArrowUpRight size={14} /></Link>
         </div>

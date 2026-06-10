@@ -354,3 +354,35 @@ The next infrastructure iteration replaces the snapshot store with managed
 services: PostgreSQL (source of truth), MinIO (artifact/site bytes), Meilisearch
 (keyword index), and pgvector (embeddings). Configuration, the `001_init.sql`
 migration, and the provider seams are already in place for that work.
+
+## GitLab 集成（参考 Mintlify）
+
+我们采用**与 Mintlify 类似的 CI 驱动方式**实现 GitLab 对接：
+
+- **推荐流程**（编译发生在源仓库）：
+  1. 在 modex 后台为 Module 配置 `repo_url`、`source_type: "gitlab"`、`gitlab_branch`、`gitlab_path`（仓库内 docs 子目录）。
+  2. 生成该 Module 的 **Deploy Token**（通过 admin API `PUT /api/admin/modules/{key}` 设置 `deploy_token`，或未来 UI）。
+  3. 在**文档仓库**（例如你的 rd-doc）的 `.gitlab-ci.yml` 中：
+     - 运行你的原生构建（`npm run build` for VitePress/VuePress 等）。
+     - 使用 `docsctl package`（或 `build` + `package`）生成标准 artifact（包含预构建的 site/ HTML、nav、documents.jsonl 等）。
+     - `docsctl deploy`（或直接 curl）把 zip POST 到 modex 的 `/api/deploy`，带 `X-Modex-Deploy-Token` 头。
+  4. 推送后自动同步。文档归属到该 Module 关联的“领域”（Category 树中的指定位置）。
+
+- **一个仓库映射到多个位置**（rd-doc 例子）：
+  rd-doc 仓库有 `docs/standard/`（规范）、`docs/tools/version-control/` 等。
+  你可以用不同 CI job（或 matrix）分别设置 `DOCS_MODULE=rd-standard` + `DOCS_SOURCE_DIR=docs/standard`，
+  部署为不同的 Module，然后在 modex 管理后台把它们分配到不同领域（标准规范、工具规范…）。
+
+- **为什么推荐“同步后编译”**：
+  - 编译使用仓库自己的环境（正确 Node 版本、依赖、主题、插件）。
+  - modex 接收的是**预构建 artifact**（HTML + 静态资源 + 结构化内容 + nav），无需在 modex 里实现各种渲染器。
+  - 纯 Markdown 仓库也可以用 `DOCS_BUILDER=markdown` 轻量打包（docsctl 支持）。
+
+- **文档内容与 MinIO**：
+  是的。Artifact 中的 `site/`（构建后的 HTML、JS、CSS、图片等静态资源）在生产环境应持久化到 MinIO（当前 MVP 用内存 + snapshot 存储，便于开发和快照恢复；`StorageURI` 字段已预留 `minio://` 路径）。搜索元数据和文本内容进入 store / Meilisearch。
+
+示例 pipeline 见 `docs/pipeline/docs-deploy.example.yml` 和 `tools/docsctl`。
+
+部署鉴权已在 `/api/deploy` 实现（支持全局 `DOCS_DEPLOY_TOKEN` 或 per-module token）。
+
+这使得 rd-doc 这样的外部仓库可以持续、结构化地同步到 modex 的指定领域，同时保持构建的完整性。

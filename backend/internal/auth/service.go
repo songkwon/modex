@@ -35,9 +35,15 @@ func (s *Service) Config() Config {
 	return s.cfg
 }
 
-// IsSuperAdmin reports whether the user matches a SUPER_ADMIN_USERS entry
-// (matched against username or email, case-insensitive).
+// IsSuperAdmin reports whether the user is a super administrator.
+// It returns true if either:
+//   - the persisted user.SuperAdmin flag is set (can be toggled via /admin/users by another super admin), or
+//   - the username or email matches an entry in the SUPER_ADMIN_USERS environment variable
+//     (case-insensitive; intended for bootstrap / infra-defined super admins).
 func (s *Service) IsSuperAdmin(user store.User) bool {
+	if user.SuperAdmin {
+		return true
+	}
 	for _, id := range s.cfg.SuperAdmins {
 		if id == "" {
 			continue

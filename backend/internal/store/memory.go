@@ -23,6 +23,7 @@ type Store struct {
 	user       User
 	users      []User
 	groups     []Group
+	teams      []Team
 	categories []Category
 	modules    []Module
 	versions   []Version
@@ -39,6 +40,30 @@ type Store struct {
 	seq        int64
 }
 
+// New returns a completely empty store. This is the default for a fresh start
+// ("从0开始"). No demo users, categories, modules or documents are created.
+// Use NewSeeded() only for tests or when you explicitly want demo data.
+func New() *Store {
+	return &Store{
+		users:      []User{},
+		groups:     []Group{},
+		teams:      []Team{},
+		categories: []Category{},
+		modules:    []Module{},
+		versions:   []Version{},
+		entries:    []Entry{},
+		releases:   []Release{},
+		pages:      []Page{},
+		searchLogs: []SearchLog{},
+		mcpLogs:    []MCPLog{},
+		pageViews:  []PageView{},
+		navs:       map[string][]NavItem{},
+		html:       map[string]string{},
+		siteFiles:  map[string]SiteFile{},
+		embeddings: map[string][]float32{},
+	}
+}
+
 func NewSeeded() *Store {
 	now := time.Now().UTC()
 	s := &Store{
@@ -53,19 +78,30 @@ func NewSeeded() *Store {
 			{ID: "g-engineering", GroupKey: "engineering", Name: "工程化", Source: "seed", CreatedAt: now, UpdatedAt: now},
 			{ID: "g-cad", GroupKey: "cad-team", Name: "CAD 团队", Source: "seed", CreatedAt: now, UpdatedAt: now},
 			{ID: "g-frontend", GroupKey: "frontend-platform", Name: "前端平台", Source: "seed", CreatedAt: now, UpdatedAt: now},
+			{ID: "g-standards", GroupKey: "standards", Name: "研发规范", Source: "seed", CreatedAt: now, UpdatedAt: now},
+		},
+		teams: []Team{
+			{ID: "t-cad", Key: "cad-team", Name: "CAD 团队", Description: "CAD 内核与插件文档维护团队", Leader: "alice", Members: []string{"alice", "bob"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-eng", Key: "engineering", Name: "工程化团队", Description: "工程化平台与 CBB 规范维护", Leader: "dev", Members: []string{"dev", "alice"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-fe", Key: "frontend-platform", Name: "前端平台团队", Description: "前端文档框架与组件规范", Leader: "bob", Members: []string{"bob", "dev"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-std", Key: "standards", Name: "研发规范团队", Description: "通用研发规范、流程与工具规范维护团队 (参考 GitBook/Mintlify 层级领域)", Leader: "alice", Members: []string{"alice", "dev"}, CreatedAt: now, UpdatedAt: now},
 		},
 		navs:       map[string][]NavItem{},
 		html:       map[string]string{},
 		siteFiles:  map[string]SiteFile{},
 		embeddings: map[string][]float32{},
 		categories: []Category{
-			{ID: "engineering", Key: "engineering", Name: "工程化", Description: "研发效能、构建、CI/CD 与质量平台", Icon: "wrench", SortOrder: 10, Status: "active"},
-			{ID: "engineering.cbb", ParentID: "engineering", Key: "engineering.cbb", Name: "CBB", Description: "CBB 构建与模块治理", Icon: "package", SortOrder: 11, Status: "active"},
-			{ID: "cad", Key: "cad", Name: "CAD", Description: "CAD 内核、插件与图形渲染", Icon: "box", SortOrder: 20, Status: "active"},
-			{ID: "cad.demo", ParentID: "cad", Key: "cad.demo", Name: "示例模块", Description: "示例与接入指南", Icon: "book", SortOrder: 21, Status: "active"},
-			{ID: "frontend", Key: "frontend", Name: "前端", Description: "前端平台、组件库和文档框架", Icon: "layout", SortOrder: 25, Status: "active"},
-			{ID: "frontend.docs", ParentID: "frontend", Key: "frontend.docs", Name: "文档框架", Description: "VuePress、Fumadocs 与静态站点", Icon: "book-open", SortOrder: 26, Status: "active"},
+			{ID: "engineering", Key: "engineering", Name: "工程化", Description: "研发效能、构建、CI/CD 与质量平台", Icon: "wrench", SortOrder: 10, Status: "active", ResponsibleTeam: "engineering"},
+			{ID: "engineering.cbb", ParentID: "engineering", Key: "engineering.cbb", Name: "CBB", Description: "CBB 构建与模块治理", Icon: "package", SortOrder: 11, Status: "active", ResponsibleTeam: "engineering"},
+			{ID: "cad", Key: "cad", Name: "CAD", Description: "CAD 内核、插件与图形渲染", Icon: "box", SortOrder: 20, Status: "active", ResponsibleTeam: "cad-team"},
+			{ID: "cad.demo", ParentID: "cad", Key: "cad.demo", Name: "示例模块", Description: "示例与接入指南", Icon: "book", SortOrder: 21, Status: "active", ResponsibleTeam: "cad-team"},
+			{ID: "frontend", Key: "frontend", Name: "前端", Description: "前端平台、组件库和文档框架", Icon: "layout", SortOrder: 25, Status: "active", ResponsibleTeam: "frontend-platform"},
+			{ID: "frontend.docs", ParentID: "frontend", Key: "frontend.docs", Name: "文档框架", Description: "VuePress、Fumadocs 与静态站点", Icon: "book-open", SortOrder: 26, Status: "active", ResponsibleTeam: "frontend-platform"},
 			{ID: "app", Key: "app", Name: "应用", Description: "业务应用、订单、设备联网", Icon: "layers", SortOrder: 30, Status: "active"},
+			{ID: "standards", Key: "standards", Name: "研发规范", Description: "编码规范、流程规范、工具规范与领域文档结构 (可由团队负责人维护层级)", Icon: "book", SortOrder: 40, Status: "active", ResponsibleTeam: "standards"},
+			{ID: "standards.standard", ParentID: "standards", Key: "standards.standard", Name: "基础规范", Description: "编程规范、设计原则等 (对应 rd-doc/standard)", Icon: "file-text", SortOrder: 41, Status: "active", ResponsibleTeam: "standards"},
+			{ID: "standards.tools", ParentID: "standards", Key: "standards.tools", Name: "工具规范", Description: "版本控制、CI 流程、协作工具规范 (对应 rd-doc/tools/*)", Icon: "tool", SortOrder: 42, Status: "active", ResponsibleTeam: "standards"},
+			{ID: "standards.tools.version", ParentID: "standards.tools", Key: "standards.tools.version", Name: "代码版本管理", Description: "Git 工作流与版本规范", Icon: "git-branch", SortOrder: 421, Status: "active", ResponsibleTeam: "standards"},
 		},
 		modules: []Module{
 			{ID: "m-demo", ModuleKey: "DemoModule", Name: "DemoModule", Description: "示例模块文档，覆盖模块落地、维护和发布流程。", OwnerGroup: "cad-team", RepoType: "gitlab", RepoURL: "https://gitlab.example.com/cad/demo-module", DefaultVersion: "latest", Visibility: "internal", Status: "active", PackageName: "DemoModule", PackageVersion: "1.2.3", Channel: "default", Edition: "2025", Keywords: []string{"demo", "cad", "markdown"}, Maintainers: []string{"alice", "bob"}, CategoryIDs: []string{"cad", "cad.demo"}, CategoryPath: "CAD / 示例模块", UpdatedAt: now, Reads7d: 128, Reads30d: 520},
@@ -159,6 +195,7 @@ func (s *Store) CreateUser(u User) (User, error) {
 	now := time.Now().UTC()
 	u.CreatedAt = now
 	u.UpdatedAt = now
+	// SuperAdmin can be set at creation time (usually only by another super admin via the admin UI).
 	s.users = append(s.users, u)
 	s.ensureGroupsLocked(u.Groups)
 	return u, nil
@@ -194,6 +231,8 @@ func (s *Store) UpdateUser(id string, patch User) (User, error) {
 		if patch.Status != "" {
 			u.Status = patch.Status
 		}
+		// SuperAdmin is a bool; the admin UI (which is itself super-admin only) sends the desired value explicitly.
+		u.SuperAdmin = patch.SuperAdmin
 		u.UpdatedAt = time.Now().UTC()
 		return *u, nil
 	}
@@ -265,7 +304,7 @@ func (s *Store) UpsertUser(u User) User {
 func (s *Store) Groups() []Group {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := append([]Group(nil), s.groups...)
+	out := append([]Group{}, s.groups...) // non-nil
 	sort.Slice(out, func(i, j int) bool { return out[i].GroupKey < out[j].GroupKey })
 	return out
 }
@@ -319,6 +358,199 @@ func (s *Store) ensureGroupsLocked(keys []string) {
 	}
 }
 
+// ensureTeamGroupLocked ensures a team's key exists as a group (for owner_group compat).
+func (s *Store) ensureTeamGroupLocked(key string) {
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	for _, g := range s.groups {
+		if strings.EqualFold(g.GroupKey, key) {
+			return
+		}
+	}
+	now := time.Now().UTC()
+	s.groups = append(s.groups, Group{ID: s.nextIDLocked("g"), GroupKey: key, Name: key, Source: "team", CreatedAt: now, UpdatedAt: now})
+}
+
+// Teams returns all teams sorted by key.
+func (s *Store) Teams() []Team {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := append([]Team{}, s.teams...) // always non-nil, even if s.teams was nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+// Team returns a team by key (preferred) or ID.
+func (s *Store) Team(key string) (Team, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	k := strings.ToLower(strings.TrimSpace(key))
+	for _, t := range s.teams {
+		if strings.EqualFold(t.Key, k) || t.ID == key {
+			return t, nil
+		}
+	}
+	return Team{}, ErrNotFound
+}
+
+// CreateTeam creates a maintenance team. Key is required and unique. Leader is
+// auto-added to members if provided and not present.
+func (s *Store) CreateTeam(t Team) (Team, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(t.Key) == "" {
+		return Team{}, ErrInvalid
+	}
+	for _, existing := range s.teams {
+		if strings.EqualFold(existing.Key, t.Key) {
+			return Team{}, ErrConflict
+		}
+	}
+	if t.ID == "" {
+		t.ID = s.nextIDLocked("t")
+	}
+	if t.Name == "" {
+		t.Name = t.Key
+	}
+	if t.Leader != "" && !contains(t.Members, t.Leader) {
+		t.Members = append([]string{t.Leader}, t.Members...)
+	}
+	now := time.Now().UTC()
+	t.CreatedAt = now
+	t.UpdatedAt = now
+	s.teams = append(s.teams, t)
+	s.ensureTeamGroupLocked(t.Key)
+	return t, nil
+}
+
+// UpdateTeam patches name/desc/leader/members.
+func (s *Store) UpdateTeam(key string, patch Team) (Team, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.teams {
+		if !strings.EqualFold(s.teams[i].Key, key) && s.teams[i].ID != key {
+			continue
+		}
+		tm := &s.teams[i]
+		if patch.Name != "" {
+			tm.Name = patch.Name
+		}
+		if patch.Description != "" {
+			tm.Description = patch.Description
+		}
+		if patch.Leader != "" {
+			tm.Leader = patch.Leader
+			if !contains(tm.Members, patch.Leader) {
+				tm.Members = append(tm.Members, patch.Leader)
+			}
+		}
+		if patch.Members != nil {
+			tm.Members = cloneStrings(patch.Members)
+			if tm.Leader != "" && !contains(tm.Members, tm.Leader) {
+				tm.Members = append([]string{tm.Leader}, tm.Members...)
+			}
+		}
+		tm.UpdatedAt = time.Now().UTC()
+		s.ensureTeamGroupLocked(tm.Key)
+		return *tm, nil
+	}
+	return Team{}, ErrNotFound
+}
+
+// DeleteTeam removes a team (no cascade; modules/categories keep the key as string ref).
+func (s *Store) DeleteTeam(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.teams {
+		if strings.EqualFold(s.teams[i].Key, key) || s.teams[i].ID == key {
+			s.teams = append(s.teams[:i], s.teams[i+1:]...)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+// AddTeamMember adds a username (or id) to the team's members. Idempotent.
+func (s *Store) AddTeamMember(key, member string) (Team, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	member = strings.TrimSpace(member)
+	if member == "" {
+		return Team{}, ErrInvalid
+	}
+	for i := range s.teams {
+		if !strings.EqualFold(s.teams[i].Key, key) && s.teams[i].ID != key {
+			continue
+		}
+		tm := &s.teams[i]
+		if !contains(tm.Members, member) {
+			tm.Members = append(tm.Members, member)
+		}
+		tm.UpdatedAt = time.Now().UTC()
+		return *tm, nil
+	}
+	return Team{}, ErrNotFound
+}
+
+// RemoveTeamMember removes a member. Leader is not auto-removed (call SetTeamLeader first if needed).
+func (s *Store) RemoveTeamMember(key, member string) (Team, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	member = strings.TrimSpace(member)
+	for i := range s.teams {
+		if !strings.EqualFold(s.teams[i].Key, key) && s.teams[i].ID != key {
+			continue
+		}
+		tm := &s.teams[i]
+		out := tm.Members[:0]
+		for _, m := range tm.Members {
+			if !strings.EqualFold(m, member) {
+				out = append(out, m)
+			}
+		}
+		tm.Members = out
+		tm.UpdatedAt = time.Now().UTC()
+		return *tm, nil
+	}
+	return Team{}, ErrNotFound
+}
+
+// SetTeamLeader sets leader and ensures they are in members.
+func (s *Store) SetTeamLeader(key, leader string) (Team, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	leader = strings.TrimSpace(leader)
+	if leader == "" {
+		return Team{}, ErrInvalid
+	}
+	for i := range s.teams {
+		if !strings.EqualFold(s.teams[i].Key, key) && s.teams[i].ID != key {
+			continue
+		}
+		tm := &s.teams[i]
+		tm.Leader = leader
+		if !contains(tm.Members, leader) {
+			tm.Members = append(tm.Members, leader)
+		}
+		tm.UpdatedAt = time.Now().UTC()
+		return *tm, nil
+	}
+	return Team{}, ErrNotFound
+}
+
+// TeamMembers returns the member list for a team (for permission/display).
+func (s *Store) TeamMembers(key string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, t := range s.teams {
+		if strings.EqualFold(t.Key, key) || t.ID == key {
+			return cloneStrings(t.Members)
+		}
+	}
+	return nil
+}
+
 // CategoryName returns the display name for a category id (or the id if unknown).
 func (s *Store) CategoryName(id string) string {
 	s.mu.RLock()
@@ -361,7 +593,11 @@ func (s *Store) CategoryTree() []Category {
 		}
 		return nodes
 	}
-	return attach("")
+	res := attach("")
+	if res == nil {
+		return []Category{}
+	}
+	return res
 }
 
 func (s *Store) Modules(categoryID, keyword string) []Module {
@@ -915,6 +1151,8 @@ func (s *Store) UpdateCategory(id string, c Category) (Category, error) {
 			if c.ParentID != "" {
 				s.categories[i].ParentID = c.ParentID
 			}
+			// Always accept ResponsibleTeam from patch (send "" explicitly to clear assignment to a team).
+			s.categories[i].ResponsibleTeam = c.ResponsibleTeam
 			out := s.categories[i]
 			out.Children = nil
 			return out, nil
@@ -1019,6 +1257,18 @@ func (s *Store) UpdateModule(moduleKey string, patch Module) (Module, error) {
 			}
 			if patch.CategoryPath != "" {
 				m.CategoryPath = patch.CategoryPath
+			}
+			if patch.SourceType != "" {
+				m.SourceType = patch.SourceType
+			}
+			if patch.GitLabBranch != "" {
+				m.GitLabBranch = patch.GitLabBranch
+			}
+			if patch.GitLabPath != "" {
+				m.GitLabPath = patch.GitLabPath
+			}
+			if patch.DeployToken != "" {
+				m.DeployToken = patch.DeployToken
 			}
 			m.UpdatedAt = time.Now().UTC()
 			out := *m

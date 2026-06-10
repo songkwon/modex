@@ -43,7 +43,7 @@ export function ThemeToggle() {
 
   return (
     <button className="button icon-button" onClick={cycle} title={`主题：${label}（点击切换）`} aria-label={`主题：${label}`}>
-      <Icon size={16} />
+      <Icon size={18} />
     </button>
   );
 }

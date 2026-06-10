@@ -19,7 +19,7 @@ export default async function SearchLogsPage() {
         {data.length === 0 ? (
           <div className="empty-state">
             <div>
-              <div className="font-semibold text-slate-700">暂无搜索日志</div>
+              <div className="font-semibold text-foreground">暂无搜索日志</div>
               <p className="mt-2 text-sm">在搜索页执行一次查询后，这里会显示记录。</p>
             </div>
           </div>

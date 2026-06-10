@@ -3,6 +3,10 @@ export type Category = {
   key: string;
   name: string;
   description: string;
+  icon?: string;
+  parent_id?: string;
+  sort_order?: number;
+  responsible_team?: string;
   children?: Category[];
 };
 
@@ -11,6 +15,7 @@ export type ModuleInfo = {
   name: string;
   description: string;
   owner_group: string;
+  repo_type?: string;
   repo_url: string;
   default_version: string;
   status: string;
@@ -19,7 +24,16 @@ export type ModuleInfo = {
   edition: string;
   keywords: string[];
   maintainers: string[];
+  category_ids?: string[];
   category_path: string;
+
+  // GitLab integration fields (for CI-driven sync like Mintlify)
+  source_type?: string;      // "gitlab" | "manual"
+  gitlab_branch?: string;
+  gitlab_path?: string;      // subdir in repo, e.g. "docs/standard"
+  last_synced_commit?: string;
+  last_synced_at?: string;
+
   updated_at: string;
   reads_7d: number;
   reads_30d: number;
@@ -48,6 +62,19 @@ export type Group = {
   group_key: string;
   name: string;
   source: string;
+};
+
+// Team = 文档维护团队. Leader (负责人) can add/remove members ("拉人").
+// Can be assigned as responsible_team on a Category (领域) to own its doc structure & modules.
+export type Team = {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  leader: string;
+  members?: string[];
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type AuthConfig = {

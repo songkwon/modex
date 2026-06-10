@@ -9,6 +9,9 @@ const config: Config = {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         muted: "hsl(var(--muted))",
+        "muted-panel": "hsl(var(--muted-panel))",
+        panel: "hsl(var(--panel))",
+        "panel-subtle": "hsl(var(--panel-subtle))",
         accent: "hsl(var(--accent))"
       }
     }

@@ -132,7 +132,18 @@ func Package(buildDir, artifact string) error {
 }
 
 func buildMarkdown(root, outDir string, md Metadata, entry Entry) (DocumentRecord, NavItem, string, error) {
-	b, err := os.ReadFile(filepath.Join(root, entry.Source))
+	src := filepath.Join(root, entry.Source)
+	if fi, err := os.Stat(src); err == nil && fi.IsDir() {
+		// better support for pure MD subdirectories: copy the dir and generate index from .md files
+		entryDir := filepath.Join(outDir, "site", entry.Key)
+		if err := copyDir(src, entryDir); err != nil {
+			return DocumentRecord{}, NavItem{}, "", err
+		}
+		text := extractMDFilesSummary(src)
+		rec := recordFor(md, entry, text)
+		return rec, NavItem{Title: entry.Title, Path: "/" + entry.Key}, text, nil
+	}
+	b, err := os.ReadFile(src)
 	if err != nil {
 		return DocumentRecord{}, NavItem{}, "", err
 	}
@@ -148,6 +159,25 @@ func buildMarkdown(root, outDir string, md Metadata, entry Entry) (DocumentRecor
 	}
 	rec := recordFor(md, entry, stripMarkdown(text))
 	return rec, NavItem{Title: entry.Title, Path: "/" + entry.Key, Children: headings(text)}, stripMarkdown(text), nil
+}
+
+func extractMDFilesSummary(dir string) string {
+	var out strings.Builder
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err == nil {
+			out.WriteString(stripMarkdown(string(b)))
+			out.WriteString("\n\n")
+		}
+		return nil
+	})
+	if out.Len() == 0 {
+		return "Markdown documentation directory"
+	}
+	return strings.Join(strings.Fields(out.String())[:min(50, len(strings.Fields(out.String())))], " ") + "..."
 }
 
 func buildStatic(root, outDir string, md Metadata, entry Entry) (DocumentRecord, NavItem, string, error) {
@@ -320,4 +350,11 @@ func extractHTMLText(dir string) string {
 		return nil
 	})
 	return strings.Join(strings.Fields(out.String()), " ")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -20,7 +20,7 @@ export default function AdminUsersPage() {
   const [keyword, setKeyword] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<User | null>(null);
-  const [form, setForm] = useState({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "" });
+  const [form, setForm] = useState({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "", super_admin: false });
   const [platforms, setPlatforms] = useState<string[]>([]);
 
   async function refresh(kw = keyword) {
@@ -54,9 +54,10 @@ export default function AdminUsersPage() {
         department: form.department,
         groups: parseList(form.groups),
         roles: parseList(form.roles),
-        managed_categories: parseList(form.managed)
+        managed_categories: parseList(form.managed),
+        is_super_admin: form.super_admin,
       });
-      setForm({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "" });
+      setForm({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "", super_admin: false });
       await refresh();
       getGroups().then(setGroups).catch(() => {});
     } catch (e) {
@@ -111,7 +112,15 @@ export default function AdminUsersPage() {
           <input className="input" placeholder="角色(逗号分隔)" value={form.roles} onChange={(e) => setForm({ ...form, roles: e.target.value })} />
           <input className="input" placeholder="可管理平台 ID(逗号分隔)" value={form.managed} onChange={(e) => setForm({ ...form, managed: e.target.value })} />
         </div>
-        <div className="mt-3 flex gap-2">
+        <label className="mt-2 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.super_admin}
+            onChange={(e) => setForm({ ...form, super_admin: e.target.checked })}
+          />
+          超级管理员（拥有全部权限，可管理所有用户与领域）
+        </label>
+        <div className="mt-2 flex gap-2">
           <button className="button button-primary" onClick={submitCreate} disabled={!form.username}>创建</button>
           <span className="muted text-xs" style={{ alignSelf: "center" }}>可选平台: {platforms.join(" / ") || "无"}</span>
         </div>
@@ -207,6 +216,14 @@ export default function AdminUsersPage() {
                 ))}
               </div>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!editing.is_super_admin}
+                onChange={(e) => setEditing({ ...editing, is_super_admin: e.target.checked })}
+              />
+              超级管理员（拥有全部权限，可管理所有用户与领域）
+            </label>
           </div>
           <div className="mt-3 flex gap-2">
             <button className="button button-primary" onClick={saveEdit}>保存</button>

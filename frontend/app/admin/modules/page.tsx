@@ -13,6 +13,8 @@ export default async function AdminModulesPage() {
               <th>模块</th>
               <th>分类</th>
               <th>Owner</th>
+              <th>来源</th>
+              <th>最后同步</th>
               <th>默认版本</th>
               <th>工程版本</th>
               <th>状态</th>
@@ -27,6 +29,11 @@ export default async function AdminModulesPage() {
                 </td>
                 <td>{m.category_path}</td>
                 <td>{m.owner_group}</td>
+                <td>{m.source_type || "manual"}{m.gitlab_branch ? ` @${m.gitlab_branch}` : ""}</td>
+                <td className="text-xs">
+                  {m.last_synced_commit ? m.last_synced_commit.substring(0, 8) : "-"}
+                  {m.last_synced_at ? <div className="muted">{new Date(m.last_synced_at).toLocaleString()}</div> : ""}
+                </td>
                 <td><span className="tag">{m.default_version}</span></td>
                 <td>{m.package_version}</td>
                 <td><span className="status-dot mr-2" />{m.status}</td>

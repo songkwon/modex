@@ -19,6 +19,20 @@ CREATE TABLE IF NOT EXISTS groups (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Teams: document maintenance teams with leader + members.
+-- A team can be assigned as responsible_team on docs_category (领域 owner).
+-- Members/leaders get implicit management rights on assigned domains (see canManageViaResponsibleTeam).
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  leader TEXT,
+  members JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS user_groups (
   user_id TEXT REFERENCES users(id),
   group_id TEXT REFERENCES groups(id),
@@ -34,6 +48,7 @@ CREATE TABLE IF NOT EXISTS docs_category (
   icon TEXT,
   sort_order INT DEFAULT 0,
   status TEXT DEFAULT 'active',
+  responsible_team TEXT,  -- team key owning this 领域 (domain); members get mgmt rights
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );

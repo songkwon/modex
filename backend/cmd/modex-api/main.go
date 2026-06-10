@@ -55,15 +55,16 @@ func main() {
 func loadStore() (*store.Store, string) {
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
-		return store.NewSeeded(), ""
+		log.Printf("DATA_DIR not set; starting with empty store (no demo data)")
+		return store.New(), ""
 	}
 	path := filepath.Join(dataDir, "modex-store.json")
 	if st, err := store.Load(path); err == nil {
 		log.Printf("loaded store snapshot from %s", path)
 		return st, path
 	} else {
-		log.Printf("no usable snapshot at %s (%v); starting from seed", path, err)
-		return store.NewSeeded(), path
+		log.Printf("no usable snapshot at %s (%v); starting from clean empty store", path, err)
+		return store.New(), path
 	}
 }
 

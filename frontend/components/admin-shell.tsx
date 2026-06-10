@@ -2,14 +2,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const adminLinks = [
-  ["/admin", "Overview"],
-  ["/admin/categories", "Categories"],
-  ["/admin/modules", "Modules"],
-  ["/admin/users", "Users"],
-  ["/admin/releases", "Releases"],
-  ["/admin/analytics", "Analytics"],
-  ["/admin/search-logs", "Search Logs"],
-  ["/admin/mcp-logs", "MCP Logs"]
+  ["/admin", "概览"],
+  ["/admin/categories", "分类管理"],
+  ["/admin/teams", "团队管理"],
+  ["/admin/modules", "模块管理"],
+  ["/admin/users", "用户管理"],
+  ["/admin/releases", "发布记录"],
+  ["/admin/analytics", "阅读统计"],
+  ["/admin/search-logs", "搜索日志"],
+  ["/admin/mcp-logs", "MCP 日志"]
 ];
 
 export function AdminShell({ title, kicker, description, children }: { title: string; kicker?: string; description?: string; children: ReactNode }) {

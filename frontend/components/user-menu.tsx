@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Clock3, Star, Terminal, Shield, LogOut, LogIn, ChevronDown } from "lucide-react";
+import { Terminal, Shield, LogOut, LogIn, ChevronDown } from "lucide-react";
 import { getAuthConfig, getMe, logout, mockLogin } from "@/lib/api";
 import type { AuthConfig, User } from "@/types/modex";
 
@@ -76,8 +76,8 @@ export function UserMenu() {
   const isAdmin = (user.roles || []).includes("admin") || user.is_super_admin;
 
   return (
-    <div className="user-menu" ref={ref} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button className="user-menu-trigger" onClick={() => setOpen((v) => !v)}>
+    <div className="user-menu" ref={ref}>
+      <button className="user-menu-trigger" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}>
         <UserAvatar user={user} />
         <span className="user-meta">
           <span className="user-name">{user.display_name || user.username}</span>
@@ -93,8 +93,6 @@ export function UserMenu() {
             {user.is_super_admin ? <span className="tag mt-2">超级管理员</span> : null}
           </div>
           <div className="user-dropdown-list">
-            <Link className="user-dropdown-item" href="/me/recent" onClick={() => setOpen(false)}><Clock3 size={16} />最近访问</Link>
-            <Link className="user-dropdown-item" href="/me/favorites" onClick={() => setOpen(false)}><Star size={16} />我的关注</Link>
             <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />MCP 使用</Link>
             {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />管理控制台</Link> : null}
           </div>

@@ -1,4 +1,4 @@
-import type { AnalyticsPages, AskResponse, AuthConfig, Category, Group, ModuleInfo, SearchResponse, User } from "@/types/modex";
+import type { AnalyticsPages, AskResponse, AuthConfig, Category, Group, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
 
 const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
 const SERVER_API_BASE = process.env.INTERNAL_API_BASE_URL || PUBLIC_API_BASE;
@@ -30,11 +30,13 @@ export const logout = () => api<{ ok: boolean }>("/api/auth/logout", { method: "
 export const getAuthConfig = () => api<AuthConfig>("/api/config");
 export const getCategories = () => api<Category[]>("/api/categories/tree");
 export const getModules = (query = "") => api<ModuleInfo[]>(`/api/modules${query}`);
+export const updateModule = (moduleKey: string, body: Partial<ModuleInfo> & { deploy_token?: string }) => api<ModuleInfo>(`/api/admin/modules/${moduleKey}`, { method: "PUT", body: JSON.stringify(body) });
 export const getModule = (moduleKey: string) => api<ModuleInfo>(`/api/modules/${moduleKey}/info`);
 export const getEntries = (moduleKey: string, version: string) => api<any[]>(`/api/modules/${moduleKey}/versions/${version}/entries`);
 export const getPage = (moduleKey: string, version: string, entry: string) => api<any>(`/api/docs/${moduleKey}/${version}/${entry}`);
 export const searchDocs = (body: unknown) => api<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify(body) });
-export const askAI = (query: string) => api<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query }) });
+export const askAI = (query: string, scope?: { module_key?: string; category_ids?: string[] }) =>
+  api<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, ...(scope || {}) }) });
 
 export const recordPageView = (body: { doc_id: string; session_id: string; duration_seconds?: number; scroll_depth?: number }) =>
   api<{ status: string; view_id: string }>("/api/analytics/page-view", { method: "POST", body: JSON.stringify(body) });
@@ -49,6 +51,20 @@ export const createUser = (body: Partial<User>) => api<User>("/api/admin/users",
 export const updateUser = (id: string, body: Partial<User>) => api<User>(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const deleteUser = (id: string) => api<{ status: string }>(`/api/admin/users/${id}`, { method: "DELETE" });
 export const getGroups = () => api<Group[]>("/api/admin/groups");
+
+export const getTeams = () => api<Team[]>("/api/admin/teams");
+export const createTeam = (body: Partial<Team>) => api<Team>("/api/admin/teams", { method: "POST", body: JSON.stringify(body) });
+export const updateTeam = (key: string, body: Partial<Team>) => api<Team>(`/api/admin/teams/${key}`, { method: "PUT", body: JSON.stringify(body) });
+export const deleteTeam = (key: string) => api<{ status: string }>(`/api/admin/teams/${key}`, { method: "DELETE" });
+export const addTeamMember = (key: string, username: string) =>
+  api<Team>(`/api/admin/teams/${key}/members`, { method: "POST", body: JSON.stringify({ username }) });
+export const removeTeamMember = (key: string, username: string) =>
+  api<Team>(`/api/admin/teams/${key}/members/${encodeURIComponent(username)}`, { method: "DELETE" });
+
+// Admin category mutations (for 领域/分类 ownership + hierarchy mgmt). Public tree is /api/categories/tree.
+export const createCategory = (body: Partial<Category>) => api<Category>("/api/admin/categories", { method: "POST", body: JSON.stringify(body) });
+export const updateCategory = (id: string, body: Partial<Category>) => api<Category>(`/api/admin/categories/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const deleteCategory = (id: string) => api<{ status: string; id: string }>(`/api/admin/categories/${id}`, { method: "DELETE" });
 
 export const reindexSearch = () => api<Record<string, unknown>>("/api/search/reindex", { method: "POST", body: "{}" });
 export const reindexEmbeddings = () => api<Record<string, unknown>>("/api/embeddings/reindex", { method: "POST", body: "{}" });

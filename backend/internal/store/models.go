@@ -15,7 +15,12 @@ type User struct {
 	// Super admins manage everything regardless of this list.
 	ManagedCategories []string `json:"managed_categories,omitempty"`
 	Source            string   `json:"source,omitempty"`
-	Status      string    `json:"status,omitempty"`
+	Status            string   `json:"status,omitempty"`
+	// SuperAdmin is a persisted flag that marks the user as a platform super administrator.
+	// It is combined with SUPER_ADMIN_USERS env (see auth service) so that
+	// super admin status can be granted either statically (env, for bootstrap)
+	// or dynamically via the admin UI.
+	SuperAdmin  bool      `json:"is_super_admin,omitempty"`
 	LastLoginAt time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time `json:"created_at,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at,omitempty"`
@@ -30,16 +35,33 @@ type Group struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// Team represents a document maintenance team (文档维护团队).
+// A team has a leader (负责人) who can add/remove members. Teams can be
+// assigned as responsible_party for one or more Categories (领域/分类),
+// owning the doc structure and maintenance under those domains.
+// Team.Key can be used as owner_group / group reference for compatibility.
+type Team struct {
+	ID          string    `json:"id"`
+	Key         string    `json:"key"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Leader      string    `json:"leader"`
+	Members     []string  `json:"members"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type Category struct {
-	ID          string     `json:"id"`
-	ParentID    string     `json:"parent_id,omitempty"`
-	Key         string     `json:"key"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Icon        string     `json:"icon"`
-	SortOrder   int        `json:"sort_order"`
-	Status      string     `json:"status"`
-	Children    []Category `json:"children,omitempty"`
+	ID              string     `json:"id"`
+	ParentID        string     `json:"parent_id,omitempty"`
+	Key             string     `json:"key"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Icon            string     `json:"icon"`
+	SortOrder       int        `json:"sort_order"`
+	Status          string     `json:"status"`
+	ResponsibleTeam string     `json:"responsible_team,omitempty"`
+	Children        []Category `json:"children,omitempty"`
 }
 
 type Module struct {
@@ -48,7 +70,7 @@ type Module struct {
 	Name           string    `json:"name"`
 	Description    string    `json:"description"`
 	OwnerGroup     string    `json:"owner_group"`
-	RepoType       string    `json:"repo_type"`
+	RepoType       string    `json:"repo_type"` // "gitlab", "github", "manual"
 	RepoURL        string    `json:"repo_url"`
 	DefaultVersion string    `json:"default_version"`
 	Visibility     string    `json:"visibility"`
@@ -61,10 +83,19 @@ type Module struct {
 	Maintainers    []string  `json:"maintainers"`
 	CategoryIDs    []string  `json:"category_ids"`
 	CategoryPath   string    `json:"category_path"`
-	AvailableVers  []Version `json:"available_versions,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	Reads7d        int       `json:"reads_7d"`
-	Reads30d       int       `json:"reads_30d"`
+
+	// GitLab / source integration (similar to Mintlify deploy integration)
+	SourceType       string `json:"source_type,omitempty"` // "gitlab", "manual"
+	GitLabBranch     string `json:"gitlab_branch,omitempty"`
+	GitLabPath       string `json:"gitlab_path,omitempty"` // subdir containing docs (e.g. "docs/standard")
+	DeployToken      string `json:"-"`                     // secret for CI deploys; set via admin
+	LastSyncedCommit string `json:"last_synced_commit,omitempty"`
+	LastSyncedAt     time.Time `json:"last_synced_at,omitempty"`
+
+	AvailableVers []Version `json:"available_versions,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Reads7d       int       `json:"reads_7d"`
+	Reads30d      int       `json:"reads_30d"`
 }
 
 type Version struct {

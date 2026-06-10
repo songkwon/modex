@@ -1,15 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -19,18 +22,23 @@ import (
 	"modex/backend/internal/embedding"
 	"modex/backend/internal/search"
 	"modex/backend/internal/store"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 type Server struct {
-	store  *store.Store
-	auth   *auth.Service
-	search search.Service
+	store       *store.Store
+	auth        *auth.Service
+	search      search.Service
+	minioClient *minio.Client
+	minioBucket string
 }
 
 func New(st *store.Store) *Server {
 	provider := embedding.FromEnv()
 	authSvc := auth.NewService(auth.FromEnv())
-	return &Server{
+	s := &Server{
 		store: st,
 		auth:  authSvc,
 		search: search.Service{
@@ -40,6 +48,31 @@ func New(st *store.Store) *Server {
 			SemanticWeight: envFloat("HYBRID_SEMANTIC_WEIGHT", 0.4),
 		},
 	}
+	// init MinIO for real site file storage (upload SiteFiles from deploys)
+	if endpoint := os.Getenv("MINIO_ENDPOINT"); endpoint != "" {
+		accessKey := os.Getenv("MINIO_ROOT_USER")
+		secretKey := os.Getenv("MINIO_ROOT_PASSWORD")
+		secure := strings.HasPrefix(strings.ToLower(endpoint), "https://")
+		client, err := minio.New(endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+			Secure: secure,
+		})
+		if err == nil {
+			s.minioClient = client
+			s.minioBucket = os.Getenv("MINIO_BUCKET")
+			if s.minioBucket == "" {
+				s.minioBucket = "modex"
+			}
+			ctx := context.Background()
+			exists, _ := client.BucketExists(ctx, s.minioBucket)
+			if !exists {
+				client.MakeBucket(ctx, s.minioBucket, minio.MakeBucketOptions{})
+			}
+		} else {
+			log.Printf("minio client init failed: %v", err)
+		}
+	}
+	return s
 }
 
 func (s *Server) Handler() http.Handler {
@@ -79,7 +112,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/users", s.handleAdminUsers)
 	mux.HandleFunc("/api/admin/users/", s.handleAdminUserByID)
 	mux.HandleFunc("/api/admin/groups", s.handleAdminGroups)
+	mux.HandleFunc("/api/admin/teams", s.handleAdminTeams)
+	mux.HandleFunc("/api/admin/teams/", s.handleAdminTeamRoutes)
 	mux.HandleFunc("/api/admin/", s.handleAdminAccepted)
+	mux.HandleFunc("/api/webhooks/gitlab", s.handleGitLabWebhook)
 	return s.cors(recoverer(mux))
 }
 
@@ -246,6 +282,29 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocSiteFile(w http.ResponseWriter, moduleKey, docsVersion, entryKey, name string) {
+	if name == "" {
+		name = "index.html"
+	}
+	if s.minioClient != nil {
+		zipName := fmt.Sprintf("site/%s/%s", entryKey, name)
+		key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, zipName)
+		obj, err := s.minioClient.GetObject(context.Background(), s.minioBucket, key, minio.GetObjectOptions{})
+		if err == nil {
+			stat, statErr := obj.Stat()
+			if statErr == nil && stat.Size > 0 {
+				ct := stat.ContentType
+				if ct == "" {
+					ct = contentTypeForName(name, nil)
+				}
+				w.Header().Set("Content-Type", ct)
+				w.Header().Set("Cache-Control", "private, max-age=60")
+				w.WriteHeader(http.StatusOK)
+				io.Copy(w, obj)
+				return
+			}
+		}
+	}
+	// fallback to in-memory
 	f, err := s.store.SiteFile(moduleKey, docsVersion, entryKey, name)
 	if err != nil {
 		writeResult(w, nil, err)
@@ -299,7 +358,9 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Query string `json:"query"`
+		Query       string   `json:"query"`
+		ModuleKey   string   `json:"module_key"`
+		CategoryIDs []string `json:"category_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -309,7 +370,16 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "query is required")
 		return
 	}
-	resp, err := s.search.Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Page: 1, PageSize: 5})
+	// Optional scope: constrain retrieval to a module (doc-level chat) or a
+	// platform/category (domain-level ask).
+	filters := search.Filters{}
+	if req.ModuleKey != "" {
+		filters.Modules = []string{req.ModuleKey}
+	}
+	if len(req.CategoryIDs) > 0 {
+		filters.CategoryIDs = req.CategoryIDs
+	}
+	resp, err := s.search.Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 5})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "ask_failed", err.Error())
 		return
@@ -461,6 +531,41 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_artifact", err.Error())
 		return
 	}
+
+	// Deploy auth (GitLab CI / docsctl integration)
+	// - Global token via DOCS_DEPLOY_TOKEN env (for simple setups)
+	// - Per-module DeployToken (recommended for GitLab对接)
+	// Token can be sent as X-Modex-Deploy-Token header or Authorization: Bearer <token>
+	moduleKey := artifact.Metadata.ModuleKey
+	globalToken := os.Getenv("DOCS_DEPLOY_TOKEN")
+	provided := r.Header.Get("X-Modex-Deploy-Token")
+	if provided == "" {
+		provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+
+	allowed := false
+	if globalToken != "" && provided == globalToken {
+		allowed = true
+	}
+	if m, merr := s.store.Module(moduleKey); merr == nil && m.DeployToken != "" {
+		if provided == m.DeployToken {
+			allowed = true
+		}
+	}
+	// If no tokens are configured at all (dev), allow. Otherwise require match.
+	hasAnyToken := globalToken != "" 
+	if m, merr := s.store.Module(moduleKey); merr == nil && m.DeployToken != "" {
+		hasAnyToken = true
+	}
+	if hasAnyToken && !allowed {
+		writeError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid for this module")
+		return
+	}
+
+	if s.minioClient != nil {
+		s.uploadSiteFilesToMinIO(artifact, moduleKey, artifact.Metadata.DocsVersion)
+	}
+
 	result, err := s.store.IngestArtifact(toStoreArtifact(artifact))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "deploy_failed", err.Error())
@@ -599,6 +704,79 @@ func canManageCategories(u store.User, categoryIDs []string) bool {
 	return false
 }
 
+// isTeamLeader checks if the user is the designated leader of the team.
+func (s *Server) isTeamLeader(u store.User, teamKey string) bool {
+	if teamKey == "" {
+		return false
+	}
+	t, err := s.store.Team(teamKey)
+	if err != nil {
+		return false
+	}
+	return t.Leader != "" && (strings.EqualFold(t.Leader, u.Username) || strings.EqualFold(t.Leader, u.ID))
+}
+
+// teamMembers returns usernames/ids in the team (for ownership checks).
+func (s *Server) teamMembers(teamKey string) []string {
+	return s.store.TeamMembers(teamKey)
+}
+
+// canManageViaResponsibleTeam allows members (incl. leader) of a category's responsible team
+// to manage that category's resources (generic domain ownership).
+func (s *Server) canManageViaResponsibleTeam(u store.User, categoryIDs []string) bool {
+	for _, cid := range categoryIDs {
+		// Check direct; for hierarchy the responsible on parent covers subs conceptually,
+		// but we also check the specific id's assignment.
+		resp := s.categoryResponsible(cid)
+		if resp == "" {
+			continue
+		}
+		for _, m := range s.teamMembers(resp) {
+			if strings.EqualFold(m, u.Username) || strings.EqualFold(m, u.ID) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Server) categoryResponsible(id string) string {
+	// Walk the tree (small data) to find assignment for id or nearest ancestor with one.
+	tree := s.store.CategoryTree()
+	var find func([]store.Category) string
+	find = func(cats []store.Category) string {
+		for _, c := range cats {
+			if c.ID == id {
+				if c.ResponsibleTeam != "" {
+					return c.ResponsibleTeam
+				}
+				// inherit from parent? caller walks up if needed; here return what we have at leaf.
+				return ""
+			}
+			if hit := find(c.Children); hit != "" {
+				return hit
+			}
+		}
+		return ""
+	}
+	// Also try ancestor match for sub-ids (e.g. "standards.foo" covered by "standards" team)
+	for _, c := range tree {
+		if c.ID == id || strings.HasPrefix(id, c.ID+".") {
+			if c.ResponsibleTeam != "" {
+				return c.ResponsibleTeam
+			}
+		}
+		for _, ch := range c.Children {
+			if ch.ID == id || strings.HasPrefix(id, ch.ID+".") {
+				if ch.ResponsibleTeam != "" {
+					return ch.ResponsibleTeam
+				}
+			}
+		}
+	}
+	return find(tree)
+}
+
 // requireUser writes 401 and returns false when no valid session is present.
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (store.User, bool) {
 	user, ok := s.currentUser(r)
@@ -624,6 +802,8 @@ func (s *Server) requireSuperAdmin(w http.ResponseWriter, r *http.Request) (stor
 
 // requirePlatform gates platform-scoped writes: super admins pass; otherwise the
 // user must have management rights on at least one of the target categories.
+// Team responsible for the domain (via Category.ResponsibleTeam) also grants access
+// to its members/leaders (generic for OSS doc maintenance teams owning 领域).
 func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categoryIDs []string) (store.User, bool) {
 	user, ok := s.requireUser(w, r)
 	if !ok {
@@ -633,6 +813,9 @@ func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categor
 		return user, true
 	}
 	if isAdmin(user) && canManageCategories(user, categoryIDs) {
+		return user, true
+	}
+	if s.canManageViaResponsibleTeam(user, categoryIDs) {
 		return user, true
 	}
 	writeError(w, http.StatusForbidden, "forbidden", "no management permission for this platform")
@@ -856,7 +1039,12 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.store.Users(r.URL.Query().Get("keyword")))
+		users := s.store.Users(r.URL.Query().Get("keyword"))
+		// Enrich with the effective super admin status (persisted flag OR env SUPER_ADMIN_USERS).
+		for i := range users {
+			users[i].SuperAdmin = s.auth.IsSuperAdmin(users[i])
+		}
+		writeJSON(w, http.StatusOK, users)
 	case http.MethodPost:
 		var u store.User
 		if err := decodeBody(r, &u); err != nil {
@@ -864,6 +1052,9 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		created, err := s.store.CreateUser(u)
+		if err == nil {
+			created.SuperAdmin = s.auth.IsSuperAdmin(created)
+		}
 		writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
@@ -878,6 +1069,9 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		u, err := s.store.UserByID(id)
+		if err == nil {
+			u.SuperAdmin = s.auth.IsSuperAdmin(u)
+		}
 		writeResult(w, u, err)
 	case http.MethodPut:
 		var u store.User
@@ -886,6 +1080,9 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updated, err := s.store.UpdateUser(id, u)
+		if err == nil {
+			updated.SuperAdmin = s.auth.IsSuperAdmin(updated)
+		}
 		writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
 		if err := s.store.DeleteUser(id); err != nil {
@@ -915,6 +1112,124 @@ func (s *Server) handleAdminGroups(w http.ResponseWriter, r *http.Request) {
 		writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+	}
+}
+
+func (s *Server) handleAdminTeams(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.store.Teams())
+	case http.MethodPost:
+		var t store.Team
+		if err := decodeBody(r, &t); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		created, err := s.store.CreateTeam(t)
+		writeMutation(w, created, http.StatusCreated, err)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+	}
+}
+
+func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
+	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/admin/teams/"))
+	if len(parts) == 0 {
+		writeError(w, http.StatusNotFound, "not_found", "team route not found")
+		return
+	}
+	key := parts[0]
+	switch {
+	case len(parts) == 1:
+		// View: super or any member of the team. Mutations: leader or super.
+		user, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		tm, err := s.store.Team(key)
+		if err != nil {
+			writeResult(w, tm, err)
+			return
+		}
+		isMember := false
+		for _, m := range tm.Members {
+			if strings.EqualFold(m, user.Username) || strings.EqualFold(m, user.ID) {
+				isMember = true
+				break
+			}
+		}
+		if !s.auth.IsSuperAdmin(user) && !isMember {
+			writeError(w, http.StatusForbidden, "forbidden", "team membership or super required")
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, tm)
+		case http.MethodPut:
+			if !s.auth.IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
+				writeError(w, http.StatusForbidden, "forbidden", "only leader or super can update team")
+				return
+			}
+			var t store.Team
+			if err := decodeBody(r, &t); err != nil {
+				writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+				return
+			}
+			updated, err := s.store.UpdateTeam(key, t)
+			writeMutation(w, updated, http.StatusOK, err)
+		case http.MethodDelete:
+			if _, ok := s.requireSuperAdmin(w, r); !ok {
+				return
+			}
+			if err := s.store.DeleteTeam(key); err != nil {
+				writeResult(w, nil, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "key": key})
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET/PUT/DELETE")
+		}
+	case len(parts) == 2 && parts[1] == "members" && r.Method == http.MethodPost:
+		// Leader or super can pull (add) members.
+		user, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		if !s.auth.IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
+			writeError(w, http.StatusForbidden, "forbidden", "only team leader or super can add members")
+			return
+		}
+		var req struct {
+			Username string `json:"username"`
+		}
+		if err := decodeBody(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Username) == "" {
+			writeError(w, http.StatusBadRequest, "invalid_input", "username required")
+			return
+		}
+		updated, err := s.store.AddTeamMember(key, req.Username)
+		writeMutation(w, updated, http.StatusOK, err)
+	case len(parts) == 3 && parts[1] == "members" && r.Method == http.MethodDelete:
+		// Leader or super can remove member.
+		user, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		if !s.auth.IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
+			writeError(w, http.StatusForbidden, "forbidden", "only team leader or super can remove members")
+			return
+		}
+		member := parts[2]
+		updated, err := s.store.RemoveTeamMember(key, member)
+		writeMutation(w, updated, http.StatusOK, err)
+	default:
+		writeError(w, http.StatusNotFound, "not_found", "team route not found")
 	}
 }
 
@@ -994,6 +1309,40 @@ func (s *Server) cors(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) handleGitLabWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	secret := r.Header.Get("X-Gitlab-Token")
+	globalSecret := os.Getenv("GITLAB_WEBHOOK_SECRET")
+	if globalSecret != "" && secret != globalSecret {
+		writeError(w, http.StatusForbidden, "forbidden", "invalid webhook secret")
+		return
+	}
+	var payload struct {
+		ObjectKind string `json:"object_kind"`
+		Project    struct {
+			PathWithNamespace string `json:"path_with_namespace"`
+		} `json:"project"`
+		Commits []struct {
+			ID        string `json:"id"`
+			Message   string `json:"message"`
+			Timestamp string `json:"timestamp"`
+		} `json:"commits"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if payload.ObjectKind == "push" && len(payload.Commits) > 0 {
+		latest := payload.Commits[0]
+		log.Printf("GitLab webhook push for %s, latest commit %s: %s", payload.Project.PathWithNamespace, latest.ID, latest.Message)
+		// optionally update module last push info here if repo matches a module
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "received", "kind": payload.ObjectKind})
+}
+
 func (s *Server) originAllowed(origin string) bool {
 	if origin == "" {
 		return false
@@ -1060,6 +1409,33 @@ func toStoreNav(n deploy.NavItem) store.NavItem {
 		out.Children = append(out.Children, toStoreNav(child))
 	}
 	return out
+}
+
+func (s *Server) uploadSiteFilesToMinIO(artifact deploy.Artifact, moduleKey, docsVersion string) {
+	if s.minioClient == nil {
+		return
+	}
+	ctx := context.Background()
+	for name, content := range artifact.SiteFiles {
+		key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, name)
+		ct := contentTypeForName(name, content)
+		_, err := s.minioClient.PutObject(ctx, s.minioBucket, key, bytes.NewReader(content), int64(len(content)), minio.PutObjectOptions{
+			ContentType: ct,
+		})
+		if err != nil {
+			log.Printf("minio upload failed for %s: %v", key, err)
+		}
+	}
+}
+
+func contentTypeForName(name string, content []byte) string {
+	if ct := mime.TypeByExtension(filepath.Ext(name)); ct != "" {
+		return ct
+	}
+	if len(content) > 0 {
+		return http.DetectContentType(content)
+	}
+	return "application/octet-stream"
 }
 
 func envFloat(key string, fallback float64) float64 {

@@ -6,5 +6,13 @@ include:
 variables:
   DOCS_MODULE: "DemoModule"
   DOCS_VERSION: "latest"
-  DOCS_BUILDER: "markdown"
+  DOCS_BUILDER: "markdown"   # vuepress | vitepress | fumadocs | markdown
   DOCS_SOURCE_DIR: "docs"
+
+# GitLab 对接说明（参考 Mintlify）
+# 1. 在 modex 后台为 Module 配置 RepoURL + GitLab Branch/Path + 生成 Deploy Token
+# 2. 把 DOCS_DEPLOY_TOKEN 作为 GitLab CI 变量（Masked + Protected）
+# 3. 推送代码到 main（或 docs 分支）后，CI 会自动 build + package + deploy 到 modex
+# 4. 文档会归属到该 Module 关联的“领域”（Category 树中的指定位置）
+# 5. 一个仓库可部署多个 Module（不同 job 设置不同 DOCS_MODULE / DOCS_SOURCE_DIR），
+#    分别同步到 modex 不同领域（如 rd-doc 的 standard/ → 标准规范领域，tools/version-control → 工具规范子领域）

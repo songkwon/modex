@@ -1,7 +1,7 @@
 import { GitBranch } from "lucide-react";
 import { getEntries, getModule, getPage } from "@/lib/api";
 import { PageViewTracker } from "@/components/page-view-tracker";
-import { ModuleSearch } from "@/components/module-search";
+import { DocScope } from "@/components/doc-scope";
 
 export default async function DocPage({ params }: { params: { moduleKey: string; docsVersion: string; entryKey: string } }) {
   const [module, entries, pagePayload] = await Promise.all([
@@ -14,13 +14,13 @@ export default async function DocPage({ params }: { params: { moduleKey: string;
   return (
     <main className="main docs-shell">
       <PageViewTracker docId={page.doc_id} />
+      <DocScope moduleKey={module.module_key} moduleName={module.name} />
       <div className="panel mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="muted text-sm">{module.category_path} / {params.docsVersion}</p>
           <h1 className="text-xl font-semibold">{module.name}</h1>
         </div>
         <div className="flex gap-2">
-          <ModuleSearch moduleKey={module.module_key} moduleName={module.name} />
           <a className="button button-primary" href={module.repo_url}><GitBranch size={16} />查看源码</a>
         </div>
       </div>

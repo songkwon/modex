@@ -15,6 +15,7 @@ type snapshot struct {
 	User       User                 `json:"user"`
 	Users      []User               `json:"users"`
 	Groups     []Group              `json:"groups"`
+	Teams      []Team               `json:"teams"`
 	Categories []Category           `json:"categories"`
 	Modules    []Module             `json:"modules"`
 	Versions   []Version            `json:"versions"`
@@ -39,6 +40,7 @@ func (s *Store) toSnapshot() snapshot {
 		User:       s.user,
 		Users:      s.users,
 		Groups:     s.groups,
+		Teams:      s.teams,
 		Categories: s.categories,
 		Modules:    s.modules,
 		Versions:   s.versions,
@@ -61,6 +63,7 @@ func storeFromSnapshot(snap snapshot) *Store {
 		user:       snap.User,
 		users:      snap.Users,
 		groups:     snap.Groups,
+		teams:      snap.Teams,
 		categories: snap.Categories,
 		modules:    snap.Modules,
 		versions:   snap.Versions,
@@ -76,6 +79,43 @@ func storeFromSnapshot(snap snapshot) *Store {
 		embeddings: snap.Embeddings,
 		seq:        snap.Seq,
 	}
+	// Ensure slices are never nil (important for empty start and JSON nulls from old snapshots)
+	if s.users == nil {
+		s.users = []User{}
+	}
+	if s.groups == nil {
+		s.groups = []Group{}
+	}
+	if s.teams == nil {
+		s.teams = []Team{}
+	}
+	if s.categories == nil {
+		s.categories = []Category{}
+	}
+	if s.modules == nil {
+		s.modules = []Module{}
+	}
+	if s.versions == nil {
+		s.versions = []Version{}
+	}
+	if s.entries == nil {
+		s.entries = []Entry{}
+	}
+	if s.releases == nil {
+		s.releases = []Release{}
+	}
+	if s.pages == nil {
+		s.pages = []Page{}
+	}
+	if s.searchLogs == nil {
+		s.searchLogs = []SearchLog{}
+	}
+	if s.mcpLogs == nil {
+		s.mcpLogs = []MCPLog{}
+	}
+	if s.pageViews == nil {
+		s.pageViews = []PageView{}
+	}
 	if s.navs == nil {
 		s.navs = map[string][]NavItem{}
 	}
@@ -87,6 +127,9 @@ func storeFromSnapshot(snap snapshot) *Store {
 	}
 	if s.embeddings == nil {
 		s.embeddings = map[string][]float32{}
+	}
+	if s.teams == nil {
+		s.teams = []Team{}
 	}
 	return s
 }

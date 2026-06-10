@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { BarChart3, Boxes, FolderTree, History, MessageSquareText, Search, Users } from "lucide-react";
+import { BarChart3, Boxes, FolderTree, History, MessageSquareText, Search, Users, UsersRound } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { ReindexControls } from "@/components/reindex-controls";
 
 const links = [
-  ["/admin/categories", "分类管理", "维护层级分类、排序和状态", FolderTree],
+  ["/admin/categories", "分类管理", "维护层级领域(分类)、排序、状态与团队负责人", FolderTree],
+  ["/admin/teams", "团队管理", "文档维护团队、负责人、成员；团队负责领域文档结构", UsersRound],
   ["/admin/modules", "模块管理", "查看模块 Owner、版本、仓库来源", Boxes],
   ["/admin/users", "用户管理", "管理用户、用户组、角色和状态", Users],
   ["/admin/releases", "发布记录", "追踪 Pipeline、构建与发布结果", History],
@@ -15,7 +16,7 @@ const links = [
 
 export default function AdminPage() {
   return (
-    <AdminShell title="治理控制台" kicker="Modex Admin" description="管理分类、模块、发布记录、搜索与 MCP 调用记录。页面结构按后续数据库接入预留。">
+    <AdminShell title="治理控制台" kicker="Modex Admin" description="从 0 开始管理领域（分类）、团队、用户、模块与发布。首次使用请通过 SUPER_ADMIN_USERS 环境变量 + 登录获得超级管理员权限。无预置演示数据。">
       <section className="card-grid">
         {links.map(([href, label, desc, Icon]) => (
           <Link className="card module-card" href={href} key={href}>
