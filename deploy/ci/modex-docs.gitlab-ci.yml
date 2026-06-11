@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# modex 文档同步 · GitLab CI 模板（B 模式：仓库 CI 编译再推送）
+#
+# 用法：在你的文档仓库 .gitlab-ci.yml 顶部 include 本文件，并设置变量即可，
+# 无需在仓库里维护 docs.yaml（docsctl 会从下列变量合成配置）。
+#
+#   include:
+#     - remote: 'https://raw.githubusercontent.com/<org>/modex/main/deploy/ci/modex-docs.gitlab-ci.yml'
+#
+#   variables:
+#     MODEX_MODULE_KEY:  "rd-doc"                       # 必填：modex 后台登记的文档源 key
+#     DOCS_BUILDER:      "vitepress"                    # vitepress | vuepress | fumadocs | markdown
+#     DOCS_BUILD:        "npm ci && npm run docs:build" # markdown 型可留空
+#     DOCS_OUTPUT:       "docs/.vitepress/dist"         # 框架 build 产物目录；markdown 型可留空
+#     MODEX_DEPLOY_URL:  "https://modex.example.com/api/deploy"
+#     # MODEX_DEPLOY_TOKEN: 在 GitLab → Settings → CI/CD → Variables 设置（Masked + Protected），勿写进仓库
+#
+# docsctl 不需要预装：CI 会按 MODEX_DOCSCTL_URL 下载预编译二进制（见 before_script）。
+# 默认镜像 node:20-bookworm 自带 node / npm / curl / git，足以构建前端文档框架。
+#
+# 说明：
+#   · 文档归属哪个能力域（锚点）在 modex 后台配置，CI 不关心，只带 MODULE_KEY 推产物。
+#   · 编译型（vitepress/vuepress/fumadocs）固定 single 挂载；split 仅对 markdown 型有意义。
+# ─────────────────────────────────────────────────────────────────────────────
+
+variables:
+  DOCS_VERSION: "latest"
+  DOCS_SOURCE_DIR: "."
+  # 预编译 docsctl 二进制下载地址（可覆盖为你自托管的路径 / 内网 GitLab Release / 制品库）。
+  MODEX_DOCSCTL_URL: "https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64"
+
+.modex-docs-base:
+  image: node:20-bookworm
+  variables:
+    DOCS_MODULE: "$MODEX_MODULE_KEY"
+    DOCS_DEPLOY_URL: "$MODEX_DEPLOY_URL"
+    DOCS_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN"
+    # Source metadata shown read-only in modex (filled from GitLab CI predefined vars).
+    DOCS_REPO_URL: "$CI_PROJECT_URL"
+    DOCS_REPO_TYPE: "git"
+    DOCS_BRANCH: "$CI_COMMIT_REF_NAME"
+    DOCS_COMMIT_SHA: "$CI_COMMIT_SHA"
+  before_script:
+    - 'test -n "$MODEX_MODULE_KEY" || { echo "MODEX_MODULE_KEY 未设置"; exit 1; }'
+    - 'test -n "$MODEX_DEPLOY_URL" || { echo "MODEX_DEPLOY_URL 未设置"; exit 1; }'
+    - 'echo "下载 docsctl: $MODEX_DOCSCTL_URL"'
+    - 'curl -fsSL "$MODEX_DOCSCTL_URL" -o /usr/local/bin/docsctl'
+    - 'chmod +x /usr/local/bin/docsctl'
+    - 'docsctl version || true'
+  script:
+    - docsctl validate
+    - docsctl build
+    - docsctl package
+    - docsctl deploy
+
+# 默认：推到默认分支时自动同步。需要别的触发条件可在仓库侧覆盖 rules。
+modex-docs-deploy:
+  extends: .modex-docs-base
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

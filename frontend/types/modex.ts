@@ -29,6 +29,8 @@ export type ModuleInfo = {
 
   // GitLab integration fields (for CI-driven sync like Mintlify)
   source_type?: string;      // "gitlab" | "manual"
+  doc_type?: string;         // vitepress | vuepress | fumadocs | markdown
+  mount?: string;            // "single" | "split"
   gitlab_branch?: string;
   gitlab_path?: string;      // subdir in repo, e.g. "docs/standard"
   last_synced_commit?: string;

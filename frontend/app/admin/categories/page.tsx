@@ -1,89 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
-import { getCategories, getTeams, createCategory, updateCategory, deleteCategory } from "@/lib/api";
+import { Modal } from "@/components/ui/modal";
+import { Combobox, type ComboOption } from "@/components/ui/combobox";
+import { CategoryIcon, IconPicker } from "@/components/ui/icon-picker";
+import { getCategories, getTeams, createCategory, updateCategory, deleteCategory, moveCategory } from "@/lib/api";
 import type { Category, Team } from "@/types/modex";
 
 type FlatRow = { category: Category; depth: number };
+type DropPos = "before" | "after" | "into";
+type DropTarget = { id: string; pos: DropPos };
 
 function flatten(categories: Category[] | null | undefined, depth = 0): FlatRow[] {
   if (!categories) return [];
-  return categories.flatMap((category) => [
-    { category, depth },
-    ...flatten(category.children || [], depth + 1),
-  ]);
+  return categories.flatMap((c) => [{ category: c, depth }, ...flatten(c.children || [], depth + 1)]);
 }
 
-function AdminCategoryNode({
+// Is `maybeAncestor` an ancestor of (or equal to) `node`? Prevents dropping a
+// node into its own subtree.
+function isAncestor(maybeAncestor: Category, node: Category): boolean {
+  if (maybeAncestor.id === node.id) return true;
+  return (maybeAncestor.children || []).some((c) => isAncestor(c, node));
+}
+
+function TreeNode({
   category,
-  teamOptions,
-  onEdit,
+  expanded,
+  toggle,
   onAddSub,
+  onEdit,
   onDelete,
-  depth = 0,
+  drag,
 }: {
   category: Category;
-  teamOptions: string[];
-  onEdit: (cat: Category) => void;
-  onAddSub: (parentId: string) => void;
+  expanded: Set<string>;
+  toggle: (id: string) => void;
+  onAddSub: (id: string) => void;
+  onEdit: (c: Category) => void;
   onDelete: (id: string, name: string) => void;
-  depth?: number;
+  drag: {
+    draggingId: string | null;
+    dropTarget: DropTarget | null;
+    onDragStart: (id: string) => void;
+    onDragEnd: () => void;
+    onDragOver: (e: React.DragEvent, id: string) => void;
+    onDrop: (e: React.DragEvent, id: string) => void;
+  };
 }) {
+  const hasChildren = !!category.children?.length;
+  const open = expanded.has(category.id);
+  const dt = drag.dropTarget;
+  const dropCls =
+    dt && dt.id === category.id ? ` drop-${dt.pos}` : "";
+  const dragCls = drag.draggingId === category.id ? " dragging" : "";
+
   return (
     <div>
       <div
-        className="flex items-center gap-3 p-2 rounded border border-border bg-panel hover:bg-muted-panel"
-        style={{ marginLeft: depth * 16 }}
+        className={`tree-row${dropCls}${dragCls}`}
+        draggable
+        onDragStart={() => drag.onDragStart(category.id)}
+        onDragEnd={drag.onDragEnd}
+        onDragOver={(e) => drag.onDragOver(e, category.id)}
+        onDrop={(e) => drag.onDrop(e, category.id)}
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{category.name}</span>
-            <span className="code-chip text-xs">{category.key}</span>
-            {category.icon && <span className="text-xs muted">[{category.icon}]</span>}
-            {category.responsible_team && (
-              <span className="tag text-xs bg-emerald-100 text-emerald-700">
-                负责: {category.responsible_team}
-              </span>
-            )}
-          </div>
-          {category.description && (
-            <div className="text-xs muted truncate mt-0.5">{category.description}</div>
-          )}
-        </div>
-        <div className="flex items-center gap-1 text-xs">
-          <button
-            className="button"
-            onClick={() => onAddSub(category.id)}
-          >
-            + 子领域
-          </button>
-          <button className="button" onClick={() => onEdit(category)}>
-            编辑
-          </button>
-          <button
-            className="button"
-            onClick={() => onDelete(category.id, category.name)}
-          >
-            删除
-          </button>
+        <span className="tree-grip" title="拖动排序 / 调整层级"><GripVertical size={14} /></span>
+        {hasChildren ? (
+          <span className={`tree-twist${open ? " open" : ""}`} onClick={() => toggle(category.id)}>
+            <ChevronRight size={15} />
+          </span>
+        ) : (
+          <span className="tree-twist" style={{ visibility: "hidden" }}><ChevronRight size={15} /></span>
+        )}
+        <span className="tree-icon"><CategoryIcon name={category.icon} /></span>
+        <span className="tree-label">{category.name}</span>
+        <span className="tree-keytag">{category.key}</span>
+        {category.responsible_team ? <span className="badge badge-success">负责: {category.responsible_team}</span> : null}
+        {category.description ? <span className="muted" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 240 }}>{category.description}</span> : null}
+        <span className="tree-spacer" />
+        <div className="row-actions">
+          <button className="icon-btn" onClick={() => onAddSub(category.id)} title="新增子领域"><Plus size={14} /></button>
+          <button className="icon-btn" onClick={() => onEdit(category)} title="编辑"><Pencil size={14} /></button>
+          <button className="icon-btn danger" onClick={() => onDelete(category.id, category.name)} title="删除"><Trash2 size={14} /></button>
         </div>
       </div>
-      {category.children && category.children.length > 0 && (
-        <div>
-          {category.children.map((child) => (
-            <AdminCategoryNode
-              key={child.id}
-              category={child}
-              teamOptions={teamOptions}
-              onEdit={onEdit}
-              onAddSub={onAddSub}
-              onDelete={onDelete}
-              depth={depth + 1}
-            />
+      {hasChildren && open ? (
+        <div className="tree-children">
+          {category.children!.map((child) => (
+            <TreeNode key={child.id} category={child} expanded={expanded} toggle={toggle} onAddSub={onAddSub} onEdit={onEdit} onDelete={onDelete} drag={drag} />
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -92,90 +101,111 @@ export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [error, setError] = useState("");
-  const [rows, setRows] = useState<FlatRow[]>([]);
-
-  // Modal for create/edit
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalData, setModalData] = useState<Partial<Category> & { id?: string }>({});
+  const [data, setData] = useState<Partial<Category> & { id?: string }>({});
 
-  // For parent selector in modal
-  const [parentOptions, setParentOptions] = useState<FlatRow[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const byId = useRef<Map<string, Category>>(new Map());
 
   async function refresh() {
     try {
       const [tree, ts] = await Promise.all([getCategories(), getTeams()]);
-      const safeTree = tree || [];
-      setCategories(safeTree);
+      const safe = tree || [];
+      setCategories(safe);
       setTeams(ts || []);
-      setRows(flatten(safeTree));
-      setParentOptions(flatten(safeTree)); // for parent select in modal
+      byId.current = new Map(flatten(safe).map((r) => [r.category.id, r.category]));
+      setExpanded((prev) => (prev.size ? prev : new Set(flatten(safe).map((r) => r.category.id))));
+      setError("");
     } catch (e) {
       setError(String(e));
     }
   }
 
-  useEffect(() => {
-    refresh();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
-  const teamOptions = (teams || []).map((t) => t.key);
+  const parentOptions: ComboOption[] = useMemo(
+    () => flatten(categories).map((r) => ({ value: r.category.id, label: `${"   ".repeat(r.depth)}${r.category.name}`, hint: r.category.key })),
+    [categories],
+  );
+  const teamOptions: ComboOption[] = (teams || []).map((t) => ({ value: t.key, label: t.name || t.key, hint: t.key }));
 
-  function openCreate() {
-    setModalData({});
-    setModalOpen(true);
-    setError("");
-  }
-
-  function openAddSub(parentId: string) {
-    setModalData({ parent_id: parentId });
-    setModalOpen(true);
-    setError("");
-  }
-
-  function openEdit(cat: Category) {
-    setModalData({
-      id: cat.id,
-      key: cat.key,
-      name: cat.name,
-      description: cat.description,
-      parent_id: cat.parent_id,
-      icon: cat.icon,
-      sort_order: cat.sort_order,
-      responsible_team: cat.responsible_team,
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
     });
+  }
+  function openCreate() { setData({}); setModalOpen(true); setError(""); }
+  function openAddSub(parentId: string) { setData({ parent_id: parentId }); setModalOpen(true); setError(""); }
+  function openEdit(c: Category) {
+    setData({ id: c.id, key: c.key, name: c.name, description: c.description, parent_id: c.parent_id, icon: c.icon, sort_order: c.sort_order, responsible_team: c.responsible_team });
     setModalOpen(true);
     setError("");
   }
 
-  function closeModal() {
-    setModalOpen(false);
-    setModalData({});
+  // --- drag & drop: reorder among siblings + reparent (drop "into") ---
+  function onDragOver(e: React.DragEvent, id: string) {
+    if (!draggingId || draggingId === id) return;
+    const dragged = byId.current.get(draggingId);
+    const target = byId.current.get(id);
+    if (!dragged || !target || isAncestor(dragged, target)) return; // no drop into own subtree
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const pos: DropPos = y < rect.height * 0.28 ? "before" : y > rect.height * 0.72 ? "after" : "into";
+    setDropTarget((prev) => (prev?.id === id && prev.pos === pos ? prev : { id, pos }));
   }
 
-  function updateModalField(field: string, value: any) {
-    setModalData((prev) => ({ ...prev, [field]: value }));
+  async function onDrop(e: React.DragEvent, id: string) {
+    e.preventDefault();
+    const dt = dropTarget;
+    const draggedId = draggingId;
+    setDraggingId(null);
+    setDropTarget(null);
+    if (!draggedId || !dt || draggedId === id) return;
+    const target = byId.current.get(id);
+    const dragged = byId.current.get(draggedId);
+    if (!target || !dragged || isAncestor(dragged, target)) return;
+
+    let parentId: string;
+    let index: number;
+    if (dt.pos === "into") {
+      parentId = target.id;
+      index = (target.children || []).length; // append as last child
+      setExpanded((prev) => new Set(prev).add(target.id));
+    } else {
+      parentId = target.parent_id || "";
+      const siblings = (parentId ? byId.current.get(parentId)?.children : categories) || [];
+      const filtered = siblings.filter((c) => c.id !== draggedId);
+      const targetIdx = filtered.findIndex((c) => c.id === target.id);
+      index = dt.pos === "before" ? targetIdx : targetIdx + 1;
+    }
+    try {
+      await moveCategory(draggedId, { parent_id: parentId, index });
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    }
   }
 
-  async function submitModal() {
+  async function submit() {
     setError("");
     try {
       const payload: Partial<Category> = {
-        key: modalData.key,
-        name: modalData.name || modalData.key,
-        description: modalData.description || undefined,
-        parent_id: modalData.parent_id || undefined,
-        icon: modalData.icon || undefined,
-        sort_order: modalData.sort_order ? Number(modalData.sort_order) : 0,
-        responsible_team: modalData.responsible_team || undefined,
+        key: data.key,
+        name: data.name || data.key,
+        description: data.description || undefined,
+        parent_id: data.parent_id || undefined,
+        icon: data.icon || undefined,
+        sort_order: data.sort_order ? Number(data.sort_order) : 0,
+        responsible_team: data.responsible_team || undefined,
       };
-
-      if (modalData.id) {
-        // edit
-        await updateCategory(modalData.id, payload);
-      } else {
-        await createCategory(payload);
-      }
-      closeModal();
+      if (data.id) await updateCategory(data.id, payload);
+      else await createCategory(payload);
+      setModalOpen(false);
       await refresh();
     } catch (e) {
       setError(String(e));
@@ -184,7 +214,6 @@ export default function AdminCategoriesPage() {
 
   async function remove(id: string, name: string) {
     if (!confirm(`删除分类「${name}」？子分类必须先删除。`)) return;
-    setError("");
     try {
       await deleteCategory(id);
       await refresh();
@@ -193,179 +222,81 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  const adminShellProps = {
-    title: "分类 / 领域管理",
-    kicker: "Domains & Hierarchy",
-    description: "层级领域（Category）支持任意嵌套（实践 3-5 级，参考 Mintlify/GitBook 侧边栏）。可为领域指定「负责团队」（responsible_team），团队成员自动获得该领域下的管理权限。顶层领域创建需超管权限。",
+  const drag = {
+    draggingId,
+    dropTarget,
+    onDragStart: (id: string) => setDraggingId(id),
+    onDragEnd: () => { setDraggingId(null); setDropTarget(null); },
+    onDragOver,
+    onDrop,
   };
 
   return (
-    <AdminShell {...adminShellProps}>
-      {error ? (
-        <div className="panel" style={{ borderColor: "#ef4444", color: "#b91c1c" }}>
-          {error}
-        </div>
-      ) : null}
+    <AdminShell
+      title="分类 / 领域管理"
+      kicker="Domains & Hierarchy"
+      description="层级领域支持任意嵌套。直接在树上拖动即可调整顺序与层级；可为领域指定负责团队，成员自动获得该领域下的管理权限。"
+    >
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
-      {/* Header with create button */}
-      <div className="flex items-center justify-between mb-3">
-        <button className="button button-primary" onClick={openCreate}>
-          新增顶级领域
-        </button>
-        <button className="button" onClick={refresh}>
-          刷新
-        </button>
+      <div className="admin-toolbar">
+        <div className="muted" style={{ fontSize: 13 }}>{flatten(categories).length} 个领域节点 · 拖动卡片排序或改层级</div>
+        <div className="admin-toolbar-actions">
+          <button className="button button-primary" onClick={openCreate}><Plus size={16} /> 新增顶级领域</button>
+        </div>
       </div>
 
-      {/* Tree view for domains */}
       <section className="panel">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold">领域层级</h2>
-        </div>
-
-        {categories.length === 0 && !error && (
-          <div className="empty-state mt-3">
+        {categories.length === 0 && !error ? (
+          <div className="empty-state">
             <div>
-              <div className="font-semibold text-foreground">暂无领域</div>
-              <p className="mt-1 text-sm">点击上方“新增顶级领域”开始创建层级结构。支持任意嵌套，可绑定负责团队。</p>
+              <div style={{ fontWeight: 640, color: "hsl(var(--foreground))" }}>暂无领域</div>
+              <p style={{ marginTop: 4, fontSize: 13 }}>点击「新增顶级领域」开始创建层级结构。支持任意嵌套，可绑定负责团队。</p>
             </div>
           </div>
-        )}
-
-        {categories.length > 0 && (
-          <div className="space-y-1">
+        ) : (
+          <div className="tree">
             {categories.map((cat) => (
-              <AdminCategoryNode
-                key={cat.id}
-                category={cat}
-                teamOptions={teamOptions}
-                onEdit={openEdit}
-                onAddSub={openAddSub}
-                onDelete={remove}
-              />
+              <TreeNode key={cat.id} category={cat} expanded={expanded} toggle={toggle} onAddSub={openAddSub} onEdit={openEdit} onDelete={remove} drag={drag} />
             ))}
           </div>
         )}
-
-        <div className="muted text-xs mt-3">
-          说明：只有超级管理员可以创建顶层领域或管理团队绑定。设置 <code>SUPER_ADMIN_USERS</code> 环境变量获得首个超管后，即可从 0 开始创建领域层级，并将团队设置为负责人。
-        </div>
       </section>
 
-      {/* Modal for Create / Edit */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="panel w-full max-w-lg mx-4">
-            <h2 className="font-semibold text-lg mb-4">
-              {modalData.id ? "编辑领域" : "新增领域"}
-            </h2>
-
-            <div className="grid gap-3">
-              <div>
-                <label className="text-sm block mb-1">Key * (唯一)</label>
-                <input
-                  className="input w-full"
-                  placeholder="如 standards"
-                  value={modalData.key || ""}
-                  onChange={(e) => updateModalField("key", e.target.value)}
-                  disabled={!!modalData.id}
-                />
-              </div>
-              <div>
-                <label className="text-sm block mb-1">名称</label>
-                <input
-                  className="input w-full"
-                  value={modalData.name || ""}
-                  onChange={(e) => updateModalField("name", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm block mb-1">描述</label>
-                <input
-                  className="input w-full"
-                  value={modalData.description || ""}
-                  onChange={(e) => updateModalField("description", e.target.value)}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm block mb-1">父领域</label>
-                  <select
-                    className="input w-full"
-                    value={modalData.parent_id || ""}
-                    onChange={(e) => updateModalField("parent_id", e.target.value)}
-                  >
-                    <option value="">顶级领域</option>
-                    {parentOptions.map((r) => (
-                      <option key={r.category.id} value={r.category.id}>
-                        {"— ".repeat(r.depth)}
-                        {`${r.category.name} (${r.category.key})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm block mb-1">图标</label>
-                  <select
-                    className="input w-full"
-                    value={modalData.icon || ""}
-                    onChange={(e) => updateModalField("icon", e.target.value)}
-                  >
-                    <option value="">（默认图标）</option>
-                    <option value="wrench">wrench - 工具/工程</option>
-                    <option value="package">package - 模块/包</option>
-                    <option value="box">box - 容器/内核</option>
-                    <option value="layers">layers - 应用/多层</option>
-                    <option value="layout">layout - 前端/布局</option>
-                    <option value="book-open">book-open - 文档/框架</option>
-                    <option value="book">book - 规范/教程</option>
-                    <option value="cpu">cpu - 核心/计算</option>
-                    <option value="git-branch">git-branch - 版本控制</option>
-                    <option value="tool">tool - 工具链</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm block mb-1">排序</label>
-                  <input
-                    className="input w-full"
-                    type="number"
-                    value={modalData.sort_order ?? 0}
-                    onChange={(e) => updateModalField("sort_order", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm block mb-1">负责团队</label>
-                  <select
-                    className="input w-full"
-                    value={modalData.responsible_team || ""}
-                    onChange={(e) => updateModalField("responsible_team", e.target.value)}
-                  >
-                    <option value="">无</option>
-                    {teamOptions.map((k) => (
-                      <option key={k} value={k}>{k}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <button className="button button-primary flex-1" onClick={submitModal}>
-                {modalData.id ? "保存修改" : "创建"}
-              </button>
-              <button className="button flex-1" onClick={closeModal}>
-                取消
-              </button>
-            </div>
-
-            <p className="text-xs muted mt-3">
-              顶层领域需超管权限，子领域可由父领域管理员或负责团队创建。
-            </p>
-          </div>
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={data.id ? "编辑领域" : data.parent_id ? "新增子领域" : "新增顶级领域"}
+        subtitle="顶层领域需超管权限，子领域可由父领域管理员或负责团队创建"
+        footer={
+          <>
+            <button className="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="button button-primary" onClick={submit} disabled={!data.name?.trim()}>{data.id ? "保存修改" : "创建"}</button>
+          </>
+        }
+      >
+        <div className="field">
+          <label>名称 *</label>
+          <input value={data.name || ""} placeholder="如 工具规范" autoFocus onChange={(e) => setData({ ...data, name: e.target.value })} />
+          {data.id ? <span className="field-hint">标识 <span className="tree-keytag">{data.key}</span>（系统生成，不可修改）</span> : <span className="field-hint">标识由系统自动生成。</span>}
         </div>
-      )}
+        <div className="field">
+          <label>描述</label>
+          <input value={data.description || ""} placeholder="一句话说明该领域" onChange={(e) => setData({ ...data, description: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>父领域</label>
+          <Combobox options={[{ value: "", label: "（顶级领域）" }, ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder="选择父领域…" />
+        </div>
+        <div className="field">
+          <label>图标</label>
+          <IconPicker value={data.icon} onChange={(icon) => setData({ ...data, icon })} />
+        </div>
+        <div className="field">
+          <label>负责团队</label>
+          <Combobox options={[{ value: "", label: "（无）" }, ...teamOptions]} value={[data.responsible_team || ""]} onChange={(v) => setData({ ...data, responsible_team: v[0] || "" })} multiple={false} placeholder="选择负责团队…" />
+        </div>
+      </Modal>
     </AdminShell>
   );
 }

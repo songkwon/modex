@@ -37,23 +37,23 @@ export default function MCPLogsPage() {
   return (
     <AdminShell title="MCP 日志" kicker="AI Access" description="记录 AI 工具通过 MCP 读取模块、版本、搜索结果和文档页面的行为。">
       {error ? (
-        <div className="panel" style={{ borderColor: "#ef4444", color: "#b91c1c" }}>
+        <div className="panel badge-danger" style={{ borderRadius: 12 }}>
           加载失败：{error}（可能需要超级管理员权限）
         </div>
       ) : null}
 
-      <section className="panel">
+      <div className="table-card">
         {loading ? (
-          <div className="muted text-sm">加载中...</div>
+          <div className="muted text-sm" style={{ padding: 18 }}>加载中...</div>
         ) : data.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" style={{ border: 0, background: "transparent" }}>
             <div>
               <div className="font-semibold text-foreground">暂无 MCP 调用</div>
               <p className="mt-2 text-sm">启动 docs-mcp-server 并调用工具后，这里会出现记录。</p>
             </div>
           </div>
         ) : (
-          <table className="data-table">
+          <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
                 <th>工具</th>
@@ -76,9 +76,9 @@ export default function MCPLogsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
-      </section>
+      </div>
     </AdminShell>
   );
 }

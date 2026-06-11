@@ -1,31 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
-import { createUser, deleteUser, getCategories, getGroups, getUsers, updateUser } from "@/lib/api";
-import type { Group, User } from "@/types/modex";
+import { Modal } from "@/components/ui/modal";
+import { Combobox, type ComboOption } from "@/components/ui/combobox";
+import { Pagination } from "@/components/ui/pagination";
+import { createUser, deleteUser, getCategories, getGroups, getTeams, getUsers, updateUser } from "@/lib/api";
+import type { Category, Group, Team, User } from "@/types/modex";
 
 const ROLES = ["admin", "maintainer", "viewer"];
+const PAGE_SIZE = 8;
 
-function parseList(value: string): string[] {
-  return value
-    .split(/[,\s]+/)
-    .map((v) => v.trim())
-    .filter(Boolean);
+type Draft = {
+  id?: string;
+  username: string;
+  display_name: string;
+  email: string;
+  department: string;
+  groups: string[];
+  roles: string[];
+  managed_categories: string[];
+  is_super_admin: boolean;
+  status: string;
+};
+
+const emptyDraft: Draft = {
+  username: "",
+  display_name: "",
+  email: "",
+  department: "",
+  groups: [],
+  roles: ["viewer"],
+  managed_categories: [],
+  is_super_admin: false,
+  status: "active",
+};
+
+function flattenCategories(tree: Category[]): ComboOption[] {
+  const out: ComboOption[] = [];
+  const walk = (nodes: Category[], depth: number) =>
+    nodes.forEach((n) => {
+      out.push({ value: n.id, label: n.name, hint: n.key, depth });
+      if (n.children) walk(n.children, depth + 1);
+    });
+  walk(tree, 0);
+  return out;
 }
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
-  const [editing, setEditing] = useState<User | null>(null);
-  const [form, setForm] = useState({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "", super_admin: false });
-  const [platforms, setPlatforms] = useState<string[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const isEdit = !!draft.id;
 
   async function refresh(kw = keyword) {
     try {
       setUsers(await getUsers(kw));
+      setError("");
     } catch (e) {
       setError(String(e));
     }
@@ -34,51 +72,74 @@ export default function AdminUsersPage() {
   useEffect(() => {
     refresh("");
     getGroups().then(setGroups).catch(() => {});
-    getCategories()
-      .then((tree) => {
-        const ids: string[] = [];
-        const walk = (nodes: typeof tree) => nodes.forEach((n) => { ids.push(n.id); if (n.children) walk(n.children); });
-        walk(tree);
-        setPlatforms(ids);
-      })
-      .catch(() => {});
+    getTeams().then(setTeams).catch(() => {});
+    getCategories().then(setCategories).catch(() => {});
   }, []);
 
-  async function submitCreate() {
-    setError("");
-    try {
-      await createUser({
-        username: form.username,
-        display_name: form.display_name,
-        email: form.email,
-        department: form.department,
-        groups: parseList(form.groups),
-        roles: parseList(form.roles),
-        managed_categories: parseList(form.managed),
-        is_super_admin: form.super_admin,
-      });
-      setForm({ username: "", display_name: "", email: "", department: "", groups: "", roles: "viewer", managed: "", super_admin: false });
-      await refresh();
-      getGroups().then(setGroups).catch(() => {});
-    } catch (e) {
-      setError(String(e));
-    }
+  // Identity is a single derived tier: super admin > team leader > regular user.
+  const leaderUsernames = useMemo(() => new Set((teams || []).map((t) => t.leader).filter(Boolean)), [teams]);
+  function identityOf(u: User): { label: string; cls: string } {
+    if (u.is_super_admin) return { label: "超级管理员", cls: "badge-danger" };
+    if (leaderUsernames.has(u.username)) return { label: "团队负责人", cls: "badge-success" };
+    return { label: "普通用户", cls: "" };
   }
 
-  async function saveEdit() {
-    if (!editing) return;
+  const groupOptions: ComboOption[] = useMemo(
+    () => groups.map((g) => ({ value: g.group_key, label: g.name || g.group_key, hint: g.group_key })),
+    [groups],
+  );
+  const roleOptions: ComboOption[] = ROLES.map((r) => ({ value: r, label: r }));
+  const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
+
+  const pageUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function openCreate() {
+    setDraft(emptyDraft);
+    setModalOpen(true);
+  }
+  function openEdit(u: User) {
+    setDraft({
+      id: u.id,
+      username: u.username,
+      display_name: u.display_name || "",
+      email: u.email || "",
+      department: u.department || "",
+      groups: u.groups || [],
+      roles: u.roles || [],
+      managed_categories: u.managed_categories || [],
+      is_super_admin: !!u.is_super_admin,
+      status: u.status || "active",
+    });
+    setModalOpen(true);
+  }
+
+  async function submit() {
     setError("");
     try {
-      await updateUser(editing.id, {
-        display_name: editing.display_name,
-        email: editing.email,
-        department: editing.department,
-        groups: editing.groups,
-        roles: editing.roles,
-        managed_categories: editing.managed_categories,
-        status: editing.status
-      });
-      setEditing(null);
+      if (isEdit) {
+        await updateUser(draft.id!, {
+          display_name: draft.display_name,
+          email: draft.email,
+          department: draft.department,
+          groups: draft.groups,
+          roles: draft.roles,
+          managed_categories: draft.managed_categories,
+          is_super_admin: draft.is_super_admin,
+          status: draft.status,
+        });
+      } else {
+        await createUser({
+          username: draft.username,
+          display_name: draft.display_name,
+          email: draft.email,
+          department: draft.department,
+          groups: draft.groups,
+          roles: draft.roles,
+          managed_categories: draft.managed_categories,
+          is_super_admin: draft.is_super_admin,
+        });
+      }
+      setModalOpen(false);
       await refresh();
       getGroups().then(setGroups).catch(() => {});
     } catch (e) {
@@ -88,7 +149,6 @@ export default function AdminUsersPage() {
 
   async function remove(user: User) {
     if (!confirm(`确认删除用户 ${user.username}?`)) return;
-    setError("");
     try {
       await deleteUser(user.id);
       await refresh();
@@ -99,138 +159,130 @@ export default function AdminUsersPage() {
 
   return (
     <AdminShell title="用户管理" kicker="Users & Groups" description="管理用户身份、用户组和角色。OIDC 登录时用户与用户组会自动同步到此目录。">
-      {error ? <div className="panel" style={{ borderColor: "#ef4444", color: "#b91c1c" }}>{error}</div> : null}
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
-      <section className="panel">
-        <h2 className="font-semibold">新增用户</h2>
-        <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-          <input className="input" placeholder="用户名*" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-          <input className="input" placeholder="显示名" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
-          <input className="input" placeholder="邮箱" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <input className="input" placeholder="部门" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-          <input className="input" placeholder="用户组(逗号分隔)" value={form.groups} onChange={(e) => setForm({ ...form, groups: e.target.value })} />
-          <input className="input" placeholder="角色(逗号分隔)" value={form.roles} onChange={(e) => setForm({ ...form, roles: e.target.value })} />
-          <input className="input" placeholder="可管理平台 ID(逗号分隔)" value={form.managed} onChange={(e) => setForm({ ...form, managed: e.target.value })} />
-        </div>
-        <label className="mt-2 flex items-center gap-2 text-sm">
+      <div className="admin-toolbar">
+        <div className="search-inline">
+          <Search size={15} />
           <input
-            type="checkbox"
-            checked={form.super_admin}
-            onChange={(e) => setForm({ ...form, super_admin: e.target.checked })}
+            placeholder="搜索显示名 / 邮箱 / 部门"
+            value={keyword}
+            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+            onKeyDown={(e) => e.key === "Enter" && refresh()}
           />
-          超级管理员（拥有全部权限，可管理所有用户与领域）
-        </label>
-        <div className="mt-2 flex gap-2">
-          <button className="button button-primary" onClick={submitCreate} disabled={!form.username}>创建</button>
-          <span className="muted text-xs" style={{ alignSelf: "center" }}>可选平台: {platforms.join(" / ") || "无"}</span>
         </div>
-      </section>
+        <div className="admin-toolbar-actions">
+          <button className="button button-primary" onClick={openCreate}>
+            <Plus size={16} /> 新增用户
+          </button>
+        </div>
+      </div>
 
-      <section className="panel">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">用户列表（{users.length}）</h2>
-          <div className="flex gap-2">
-            <input className="input" placeholder="搜索用户名/邮箱/部门" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
-            <button className="button" onClick={() => refresh()}>搜索</button>
-          </div>
-        </div>
-        <table className="data-table mt-3">
-          <thead>
-            <tr>
-              <th>用户</th>
-              <th>部门</th>
-              <th>用户组</th>
-              <th>角色</th>
-              <th>可管理平台</th>
-              <th>来源</th>
-              <th>状态</th>
-              <th>最近登录</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <div className="font-semibold">{u.display_name}</div>
-                  <div className="muted text-xs">{u.username} · {u.email || "—"}</div>
-                </td>
-                <td>{u.department || "—"}</td>
-                <td>{(u.groups || []).map((g) => <span className="tag mr-1" key={g}>{g}</span>)}</td>
-                <td>{(u.roles || []).map((r) => <span className="tag mr-1" key={r}>{r}</span>)}</td>
-                <td>{u.is_super_admin ? <span className="tag">全部（超管）</span> : (u.managed_categories || []).map((c) => <span className="tag mr-1" key={c}>{c}</span>)}</td>
-                <td>{u.source || "—"}</td>
-                <td><span className="status-dot mr-2" />{u.status || "active"}</td>
-                <td className="muted text-xs">{u.last_login_at && !u.last_login_at.startsWith("0001") ? u.last_login_at.slice(0, 19).replace("T", " ") : "—"}</td>
-                <td>
-                  <button className="button" onClick={() => setEditing({ ...u, groups: u.groups || [], roles: u.roles || [], managed_categories: u.managed_categories || [] })}>编辑</button>
-                  <button className="button ml-1" onClick={() => remove(u)}>删除</button>
-                </td>
+      <div className="table-card">
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>用户</th>
+                <th>邮箱</th>
+                <th>部门</th>
+                <th>身份</th>
+                <th>用户组</th>
+                <th>状态</th>
+                <th style={{ textAlign: "right" }}>操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              {pageUsers.map((u) => {
+                const ident = identityOf(u);
+                return (
+                <tr key={u.id}>
+                  <td><div style={{ fontWeight: 640 }}>{u.display_name || u.username}</div></td>
+                  <td className="muted" style={{ fontSize: 13 }}>{u.email || "—"}</td>
+                  <td>{u.department || "—"}</td>
+                  <td><span className={`badge ${ident.cls}`}>{ident.label}</span></td>
+                  <td>{(u.groups || []).length ? (u.groups || []).map((g) => <span className="tag" key={g} style={{ marginRight: 4 }}>{g}</span>) : <span className="muted" style={{ fontSize: 12 }}>—</span>}</td>
+                  <td>
+                    <span className={`badge ${u.status === "disabled" ? "badge-danger" : "badge-success"}`}>
+                      <span className="badge-dot" />{u.status || "active"}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="row-actions" style={{ justifyContent: "flex-end" }}>
+                      <button className="icon-btn" onClick={() => openEdit(u)} aria-label="编辑"><Pencil size={14} /></button>
+                      <button className="icon-btn danger" onClick={() => remove(u)} aria-label="删除"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+                );
+              })}
+              {!pageUsers.length ? (
+                <tr><td colSpan={7}><div className="empty-state" style={{ minHeight: 160, border: 0, background: "transparent" }}>暂无用户</div></td></tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={page} pageSize={PAGE_SIZE} total={users.length} onPage={setPage} />
+      </div>
 
-      {editing ? (
-        <section className="panel">
-          <h2 className="font-semibold">编辑用户 · {editing.username}</h2>
-          <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-            <label className="grid gap-1 text-sm">显示名
-              <input className="input" value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} />
-            </label>
-            <label className="grid gap-1 text-sm">邮箱
-              <input className="input" value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
-            </label>
-            <label className="grid gap-1 text-sm">部门
-              <input className="input" value={editing.department} onChange={(e) => setEditing({ ...editing, department: e.target.value })} />
-            </label>
-            <label className="grid gap-1 text-sm">用户组(逗号分隔)
-              <input className="input" value={(editing.groups || []).join(", ")} onChange={(e) => setEditing({ ...editing, groups: parseList(e.target.value) })} />
-            </label>
-            <label className="grid gap-1 text-sm">可管理平台 ID(逗号分隔)
-              <input className="input" value={(editing.managed_categories || []).join(", ")} onChange={(e) => setEditing({ ...editing, managed_categories: parseList(e.target.value) })} />
-            </label>
-            <label className="grid gap-1 text-sm">状态
-              <select className="input" value={editing.status || "active"} onChange={(e) => setEditing({ ...editing, status: e.target.value })}>
-                <option value="active">active</option>
-                <option value="disabled">disabled</option>
-              </select>
-            </label>
-            <div className="grid gap-1 text-sm">角色
-              <div className="flex gap-3">
-                {ROLES.map((role) => (
-                  <label key={role} className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      style={{ width: "auto", height: "auto" }}
-                      checked={(editing.roles || []).includes(role)}
-                      onChange={(e) => {
-                        const set = new Set(editing.roles || []);
-                        if (e.target.checked) set.add(role); else set.delete(role);
-                        setEditing({ ...editing, roles: [...set] });
-                      }}
-                    />
-                    {role}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!editing.is_super_admin}
-                onChange={(e) => setEditing({ ...editing, is_super_admin: e.target.checked })}
-              />
-              超级管理员（拥有全部权限，可管理所有用户与领域）
-            </label>
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={isEdit ? `编辑用户 · ${draft.username}` : "新增用户"}
+        subtitle={isEdit ? "更新用户资料、用户组与权限" : "创建一个新的平台用户"}
+        footer={
+          <>
+            <button className="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="button button-primary" onClick={submit} disabled={!isEdit && !draft.username.trim()}>
+              {isEdit ? "保存" : "创建"}
+            </button>
+          </>
+        }
+      >
+        <div className="field-row">
+          <div className="field">
+            <label>用户名{isEdit ? "" : " *"}</label>
+            <input value={draft.username} disabled={isEdit} placeholder="如 alice" onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
           </div>
-          <div className="mt-3 flex gap-2">
-            <button className="button button-primary" onClick={saveEdit}>保存</button>
-            <button className="button" onClick={() => setEditing(null)}>取消</button>
+          <div className="field">
+            <label>显示名</label>
+            <input value={draft.display_name} placeholder="如 Alice" onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} />
           </div>
-        </section>
-      ) : null}
+        </div>
+        <div className="field-row">
+          <div className="field">
+            <label>邮箱</label>
+            <input value={draft.email} placeholder="name@example.com" onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+          </div>
+          <div className="field">
+            <label>部门</label>
+            <input value={draft.department} placeholder="如 工程化" onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
+          </div>
+        </div>
+        <div className="field">
+          <label>用户组</label>
+          <Combobox options={groupOptions} value={draft.groups} onChange={(groups) => setDraft({ ...draft, groups })} allowCreate placeholder="搜索或新增用户组…" />
+        </div>
+        <div className="field">
+          <label>角色</label>
+          <Combobox options={roleOptions} value={draft.roles} onChange={(roles) => setDraft({ ...draft, roles })} placeholder="选择角色…" />
+        </div>
+        <div className="field">
+          <label>可管理平台 / 领域</label>
+          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder="搜索能力域…" />
+          <span className="field-hint">超级管理员可管理全部领域，无需在此指定。</span>
+        </div>
+        {isEdit ? (
+          <div className="field">
+            <label>状态</label>
+            <Combobox options={[{ value: "active", label: "active" }, { value: "disabled", label: "disabled" }]} value={[draft.status]} onChange={(v) => setDraft({ ...draft, status: v[0] || "active" })} multiple={false} />
+          </div>
+        ) : null}
+        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <input type="checkbox" style={{ width: "auto", height: "auto" }} checked={draft.is_super_admin} onChange={(e) => setDraft({ ...draft, is_super_admin: e.target.checked })} />
+          <span style={{ fontSize: 13 }}>超级管理员（拥有全部权限，可管理所有用户与领域）</span>
+        </label>
+      </Modal>
     </AdminShell>
   );
 }

@@ -18,6 +18,18 @@ func Init(root string, force bool) error {
 }
 
 func DetectProjectKind(root string) string {
+	if existsAny(
+		filepath.Join(root, "docs", ".vitepress", "config.mjs"),
+		filepath.Join(root, "docs", ".vitepress", "config.mts"),
+		filepath.Join(root, "docs", ".vitepress", "config.ts"),
+		filepath.Join(root, "docs", ".vitepress", "config.js"),
+		filepath.Join(root, ".vitepress", "config.mjs"),
+		filepath.Join(root, ".vitepress", "config.mts"),
+		filepath.Join(root, ".vitepress", "config.ts"),
+		filepath.Join(root, ".vitepress", "config.js"),
+	) {
+		return "vitepress"
+	}
 	if exists(filepath.Join(root, "docs", ".vuepress", "config.js")) ||
 		exists(filepath.Join(root, "docs", ".vuepress", "config.ts")) ||
 		exists(filepath.Join(root, ".vuepress", "config.js")) ||
@@ -37,6 +49,8 @@ func DetectProjectKind(root string) string {
 
 func DefaultEntry(root, kind string) Entry {
 	switch kind {
+	case "vitepress":
+		return Entry{Key: "guide", Title: "VitePress 文档", Type: "vitepress", Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vitepress/dist", ".vitepress/dist", "dist")}
 	case "vuepress":
 		return Entry{Key: "guide", Title: "VuePress 文档", Type: "vuepress", Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vuepress/dist", ".vuepress/dist", "dist")}
 	case "fumadocs":
@@ -100,4 +114,13 @@ func firstOutput(candidates ...string) string {
 func exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func existsAny(paths ...string) bool {
+	for _, p := range paths {
+		if exists(p) {
+			return true
+		}
+	}
+	return false
 }

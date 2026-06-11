@@ -29,6 +29,7 @@ type snapshot struct {
 	HTML       map[string]string    `json:"html"`
 	SiteFiles  map[string]SiteFile  `json:"site_files"`
 	Embeddings map[string][]float32 `json:"embeddings"`
+	Settings   Settings             `json:"settings"`
 	Seq        int64                `json:"seq"`
 }
 
@@ -54,6 +55,7 @@ func (s *Store) toSnapshot() snapshot {
 		HTML:       s.html,
 		SiteFiles:  s.siteFiles,
 		Embeddings: s.embeddings,
+		Settings:   s.settings,
 		Seq:        s.seq,
 	}
 }
@@ -77,6 +79,7 @@ func storeFromSnapshot(snap snapshot) *Store {
 		html:       snap.HTML,
 		siteFiles:  snap.SiteFiles,
 		embeddings: snap.Embeddings,
+		settings:   snap.Settings,
 		seq:        snap.Seq,
 	}
 	// Ensure slices are never nil (important for empty start and JSON nulls from old snapshots)

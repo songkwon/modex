@@ -36,6 +36,10 @@ services:
   backend:
     build:
       context: ../backend
+      args:
+        # Container builds do NOT inherit the host proxy, so proxy.golang.org
+        # often EOFs. Override with a directly reachable mirror via .env (GOPROXY=...).
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     environment:
       PORT: ${BACKEND_PORT:-8671}
       DATA_DIR: ${DATA_DIR:-/data}
@@ -123,6 +127,30 @@ services:
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # MCP server (stdio JSON-RPC) — proxies tool calls to the backend API.
+  # MCP is a stdio protocol, so it is launched per-session by an AI client
+  # rather than served as an always-on port. It builds alongside the stack and
+  # is run on demand:
+  #
+  #   docker compose --profile mcp run --rm mcp
+  #
+  # Most developers instead use the npx package (mcp/npx, `npx modex-docs-mcp`)
+  # pointed at this deployment's backend URL + MCP_TOKEN.
+  mcp:
+    build:
+      context: ../mcp
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    profiles: ["mcp"]
+    environment:
+      DOCS_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:8671}
+      MCP_TOKEN: ${MCP_TOKEN:-dev-token}
+    stdin_open: true
+    tty: true
     depends_on:
       backend:
         condition: service_healthy

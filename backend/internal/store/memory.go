@@ -37,7 +37,28 @@ type Store struct {
 	html       map[string]string
 	siteFiles  map[string]SiteFile
 	embeddings map[string][]float32
+	settings   Settings
 	seq        int64
+}
+
+// Settings returns a copy of the persisted platform settings.
+func (s *Store) Settings() Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.settings
+}
+
+// SaveAISettings updates the AI connection. An empty AskAPIKey keeps the
+// previously stored key (so a masked round-trip from the UI does not wipe it).
+func (s *Store) SaveAISettings(ai AISettings) Settings {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(ai.AskAPIKey) == "" {
+		ai.AskAPIKey = s.settings.AI.AskAPIKey
+	}
+	ai.UpdatedAt = time.Now().UTC()
+	s.settings.AI = ai
+	return s.settings
 }
 
 // New returns a completely empty store. This is the default for a fresh start
@@ -67,7 +88,7 @@ func New() *Store {
 func NewSeeded() *Store {
 	now := time.Now().UTC()
 	s := &Store{
-		user:      User{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Groups: []string{"cad-team", "engineering"}, Roles: []string{"admin"}},
+		user: User{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Groups: []string{"cad-team", "engineering"}, Roles: []string{"admin"}},
 		users: []User{
 			{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Groups: []string{"cad-team", "engineering"}, Roles: []string{"admin"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
 			{ID: "u-alice", Username: "alice", DisplayName: "Alice", Email: "alice@example.com", Department: "CAD", Groups: []string{"cad-team"}, Roles: []string{"maintainer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
@@ -400,7 +421,10 @@ func (s *Store) CreateTeam(t Team) (Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(t.Key) == "" {
-		return Team{}, ErrInvalid
+		if strings.TrimSpace(t.Name) == "" {
+			return Team{}, ErrInvalid
+		}
+		t.Key = s.generateTeamKeyLocked(t.Name)
 	}
 	for _, existing := range s.teams {
 		if strings.EqualFold(existing.Key, t.Key) {
@@ -758,22 +782,27 @@ func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 	moduleIdx, err := s.moduleIndexLocked(a.ModuleKey)
 	if err != nil {
 		s.modules = append(s.modules, Module{
-			ID:             s.nextIDLocked("m"),
-			ModuleKey:      a.ModuleKey,
-			Name:           moduleName,
-			Description:    a.Description,
-			OwnerGroup:     firstNonEmpty(firstString(a.Authors), "docs"),
-			RepoType:       "git",
-			DefaultVersion: a.DocsVersion,
-			Visibility:     "internal",
-			Status:         "active",
-			PackageName:    a.ModuleKey,
-			PackageVersion: a.PackageVersion,
-			Channel:        "docs",
-			Edition:        a.Edition,
-			Keywords:       cloneStrings(a.Keywords),
-			Maintainers:    cloneStrings(a.Authors),
-			UpdatedAt:      now,
+			ID:               s.nextIDLocked("m"),
+			ModuleKey:        a.ModuleKey,
+			Name:             moduleName,
+			Description:      a.Description,
+			OwnerGroup:       firstNonEmpty(firstString(a.Authors), "docs"),
+			RepoType:         firstNonEmpty(a.RepoType, "git"),
+			RepoURL:          a.RepoURL,
+			SourceType:       "gitlab",
+			GitLabBranch:     a.Branch,
+			DefaultVersion:   a.DocsVersion,
+			Visibility:       "internal",
+			Status:           "active",
+			PackageName:      a.ModuleKey,
+			PackageVersion:   a.PackageVersion,
+			Channel:          "docs",
+			Edition:          a.Edition,
+			Keywords:         cloneStrings(a.Keywords),
+			Maintainers:      cloneStrings(a.Authors),
+			LastSyncedCommit: a.CommitSHA,
+			LastSyncedAt:     now,
+			UpdatedAt:        now,
 		})
 		moduleIdx = len(s.modules) - 1
 	} else {
@@ -804,6 +833,20 @@ func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 		if m.Visibility == "" {
 			m.Visibility = "internal"
 		}
+		// Refresh source metadata from each CI push (repo/branch/commit).
+		if a.RepoURL != "" {
+			m.RepoURL = a.RepoURL
+		}
+		if a.RepoType != "" {
+			m.RepoType = a.RepoType
+		}
+		if a.Branch != "" {
+			m.GitLabBranch = a.Branch
+		}
+		if a.CommitSHA != "" {
+			m.LastSyncedCommit = a.CommitSHA
+		}
+		m.LastSyncedAt = now
 		m.UpdatedAt = now
 	}
 	module := s.modules[moduleIdx]
@@ -1109,8 +1152,13 @@ func (s *Store) seedReadsLocked(moduleKey string, week bool) int {
 func (s *Store) CreateCategory(c Category) (Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Key is system-generated from the name (dotted under the parent's key) so
+	// users never have to invent one. A user-supplied key is still honored.
 	if strings.TrimSpace(c.Key) == "" {
-		return Category{}, ErrInvalid
+		if strings.TrimSpace(c.Name) == "" {
+			return Category{}, ErrInvalid
+		}
+		c.Key = s.generateCategoryKeyLocked(c.Name, c.ParentID)
 	}
 	if c.ID == "" {
 		c.ID = c.Key
@@ -1126,6 +1174,149 @@ func (s *Store) CreateCategory(c Category) (Category, error) {
 	c.Children = nil
 	s.categories = append(s.categories, c)
 	return c, nil
+}
+
+// slugifyKey lowercases and keeps [a-z0-9-]; non-ASCII (e.g. Chinese) collapses
+// to empty, in which case callers fall back to a short unique token.
+func slugifyKey(name string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			prevDash = false
+		case r == ' ' || r == '-' || r == '_' || r == '.' || r == '/':
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func (s *Store) generateCategoryKeyLocked(name, parentID string) string {
+	base := slugifyKey(name)
+	if base == "" {
+		base = "d" + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36)
+	}
+	prefix := ""
+	for _, c := range s.categories {
+		if c.ID == parentID {
+			prefix = c.Key + "."
+			break
+		}
+	}
+	taken := func(k string) bool {
+		for _, c := range s.categories {
+			if c.Key == k || c.ID == k {
+				return true
+			}
+		}
+		return false
+	}
+	key := prefix + base
+	for i := 2; taken(key); i++ {
+		key = prefix + base + "-" + strconv.Itoa(i)
+	}
+	return key
+}
+
+func (s *Store) generateTeamKeyLocked(name string) string {
+	base := slugifyKey(name)
+	if base == "" {
+		base = "team-" + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36)
+	}
+	taken := func(k string) bool {
+		for _, t := range s.teams {
+			if strings.EqualFold(t.Key, k) {
+				return true
+			}
+		}
+		return false
+	}
+	key := base
+	for i := 2; taken(key); i++ {
+		key = base + "-" + strconv.Itoa(i)
+	}
+	return key
+}
+
+// MoveCategory reparents a category and positions it at `index` among its new
+// siblings, renumbering sibling SortOrder so the tree order is stable. Rejects
+// moves that would create a cycle (into the node's own subtree).
+func (s *Store) MoveCategory(id, parentID string, index int) (Category, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i := range s.categories {
+		if s.categories[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return Category{}, ErrNotFound
+	}
+	if parentID == id {
+		return Category{}, ErrInvalid
+	}
+	// Walk parent chain to reject cycles.
+	for p := parentID; p != ""; {
+		if p == id {
+			return Category{}, ErrInvalid
+		}
+		next := ""
+		for i := range s.categories {
+			if s.categories[i].ID == p {
+				next = s.categories[i].ParentID
+				break
+			}
+		}
+		p = next
+	}
+	if parentID != "" {
+		found := false
+		for i := range s.categories {
+			if s.categories[i].ID == parentID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return Category{}, ErrInvalid
+		}
+	}
+
+	s.categories[idx].ParentID = parentID
+
+	// Collect new siblings (same parent) in current order, excluding the moved
+	// node, then insert it at the requested index and renumber.
+	var sibs []int
+	for i := range s.categories {
+		if s.categories[i].ParentID == parentID && s.categories[i].ID != id {
+			sibs = append(sibs, i)
+		}
+	}
+	sort.SliceStable(sibs, func(a, b int) bool { return s.categories[sibs[a]].SortOrder < s.categories[sibs[b]].SortOrder })
+	order := make([]int, 0, len(sibs)+1)
+	if index < 0 {
+		index = 0
+	}
+	if index > len(sibs) {
+		index = len(sibs)
+	}
+	order = append(order, sibs[:index]...)
+	order = append(order, idx)
+	order = append(order, sibs[index:]...)
+	for pos, ci := range order {
+		s.categories[ci].SortOrder = (pos + 1) * 10
+	}
+	out := s.categories[idx]
+	out.Children = nil
+	return out, nil
 }
 
 func (s *Store) UpdateCategory(id string, c Category) (Category, error) {
@@ -1178,11 +1369,32 @@ func (s *Store) DeleteCategory(id string) error {
 	return ErrNotFound
 }
 
+func (s *Store) moduleKeyTakenLocked(key string) bool {
+	for _, m := range s.modules {
+		if strings.EqualFold(m.ModuleKey, key) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Store) CreateModule(m Module) (Module, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Auto-generate module_key from the name (slug, unique) so admins never type one.
 	if strings.TrimSpace(m.ModuleKey) == "" {
-		return Module{}, ErrInvalid
+		if strings.TrimSpace(m.Name) == "" {
+			return Module{}, ErrInvalid
+		}
+		base := slugifyKey(m.Name)
+		if base == "" {
+			base = "doc-" + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36)
+		}
+		key := base
+		for i := 2; s.moduleKeyTakenLocked(key); i++ {
+			key = base + "-" + strconv.Itoa(i)
+		}
+		m.ModuleKey = key
 	}
 	for _, existing := range s.modules {
 		if strings.EqualFold(existing.ModuleKey, m.ModuleKey) {
@@ -1191,6 +1403,10 @@ func (s *Store) CreateModule(m Module) (Module, error) {
 	}
 	if m.ID == "" {
 		m.ID = s.nextIDLocked("m")
+	}
+	// Every doc source gets a deploy token for CI push auth.
+	if strings.TrimSpace(m.DeployToken) == "" {
+		m.DeployToken = "mdx_" + strconv.FormatInt(time.Now().UnixNano(), 36) + strconv.FormatInt(int64(len(s.modules)+1), 36)
 	}
 	if m.Name == "" {
 		m.Name = m.ModuleKey
@@ -1260,6 +1476,12 @@ func (s *Store) UpdateModule(moduleKey string, patch Module) (Module, error) {
 			}
 			if patch.SourceType != "" {
 				m.SourceType = patch.SourceType
+			}
+			if patch.DocType != "" {
+				m.DocType = patch.DocType
+			}
+			if patch.Mount != "" {
+				m.Mount = patch.Mount
 			}
 			if patch.GitLabBranch != "" {
 				m.GitLabBranch = patch.GitLabBranch

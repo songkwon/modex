@@ -15,7 +15,7 @@ import (
 )
 
 func Build(root, outDir string) error {
-	cfg, err := LoadDocsYAML(filepath.Join(root, "docs.yaml"))
+	cfg, err := LoadConfig(root)
 	if err != nil {
 		return err
 	}
@@ -47,13 +47,16 @@ func Build(root, outDir string) error {
 			records = append(records, rec)
 			nav = append(nav, navItem)
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
-		case "vuepress", "fumadocs":
+		case "vitepress", "vuepress", "fumadocs":
 			if err := buildCommandEntry(root, outDir, entry); err != nil {
 				return err
 			}
 			label := "VuePress"
-			if entry.Type == "fumadocs" {
+			switch entry.Type {
+			case "fumadocs":
 				label = "Fumadocs"
+			case "vitepress":
+				label = "VitePress"
 			}
 			rec := recordFor(md, entry, label+" 文档已构建，详情见静态站点。")
 			records = append(records, rec)

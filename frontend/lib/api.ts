@@ -31,6 +31,9 @@ export const getAuthConfig = () => api<AuthConfig>("/api/config");
 export const getCategories = () => api<Category[]>("/api/categories/tree");
 export const getModules = (query = "") => api<ModuleInfo[]>(`/api/modules${query}`);
 export const updateModule = (moduleKey: string, body: Partial<ModuleInfo> & { deploy_token?: string }) => api<ModuleInfo>(`/api/admin/modules/${moduleKey}`, { method: "PUT", body: JSON.stringify(body) });
+export const createModule = (body: Partial<ModuleInfo>) => api<ModuleInfo>("/api/admin/modules", { method: "POST", body: JSON.stringify(body) });
+export const getDeployToken = (moduleKey: string) => api<{ deploy_token: string; deploy_url: string; module_key: string }>(`/api/admin/modules/${moduleKey}/deploy-token`);
+export const rotateDeployToken = (moduleKey: string) => api<{ deploy_token: string; deploy_url: string; module_key: string }>(`/api/admin/modules/${moduleKey}/deploy-token`, { method: "POST", body: "{}" });
 export const getModule = (moduleKey: string) => api<ModuleInfo>(`/api/modules/${moduleKey}/info`);
 export const getEntries = (moduleKey: string, version: string) => api<any[]>(`/api/modules/${moduleKey}/versions/${version}/entries`);
 export const getPage = (moduleKey: string, version: string, entry: string) => api<any>(`/api/docs/${moduleKey}/${version}/${entry}`);
@@ -65,6 +68,23 @@ export const removeTeamMember = (key: string, username: string) =>
 export const createCategory = (body: Partial<Category>) => api<Category>("/api/admin/categories", { method: "POST", body: JSON.stringify(body) });
 export const updateCategory = (id: string, body: Partial<Category>) => api<Category>(`/api/admin/categories/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const deleteCategory = (id: string) => api<{ status: string; id: string }>(`/api/admin/categories/${id}`, { method: "DELETE" });
+// Drag-and-drop move: reparent + position among siblings. index is 0-based.
+export const moveCategory = (id: string, body: { parent_id: string; index: number }) =>
+  api<Category>(`/api/admin/categories/${id}/move`, { method: "POST", body: JSON.stringify(body) });
 
 export const reindexSearch = () => api<Record<string, unknown>>("/api/search/reindex", { method: "POST", body: "{}" });
 export const reindexEmbeddings = () => api<Record<string, unknown>>("/api/embeddings/reindex", { method: "POST", body: "{}" });
+
+// Admin platform settings (AI model connection). Key is write-only; reads return ask_api_key_set.
+export type AISettings = {
+  ask_base_url?: string;
+  ask_model?: string;
+  ask_api_key?: string;
+  ask_system_prompt?: string;
+  updated_at?: string;
+};
+export type PlatformSettings = { ai: AISettings; ask_api_key_set: boolean };
+export const getSettings = () => api<PlatformSettings>("/api/admin/settings");
+export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify(ai) });
+export const fetchModels = (base_url: string, api_key?: string) =>
+  api<{ models: string[] }>("/api/admin/settings/models", { method: "POST", body: JSON.stringify({ base_url, api_key: api_key || "" }) });

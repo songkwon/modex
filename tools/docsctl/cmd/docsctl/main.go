@@ -11,14 +11,19 @@ import (
 	"modex/tools/docsctl/internal/docs"
 )
 
+// docsctlVersion is overridable at build time via -ldflags "-X main.docsctlVersion=...".
+var docsctlVersion = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
-		fatal("usage: docsctl init|discover|validate|build|package|deploy")
+		fatal("usage: docsctl version|init|discover|validate|build|package|deploy")
 	}
 	root := env("DOCS_SOURCE_DIR", ".")
 	buildDir := env("DOCS_BUILD_DIR", filepath.Join(root, ".modex", "build"))
 	artifact := env("DOCS_ARTIFACT", filepath.Join(root, ".modex", "docs-artifact.zip"))
 	switch os.Args[1] {
+	case "version", "--version", "-v":
+		fmt.Println("docsctl", docsctlVersion)
 	case "init":
 		force := env("DOCS_INIT_FORCE", "false") == "true"
 		must(docs.Init(root, force))
@@ -71,6 +76,10 @@ func deploy(artifact string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/zip")
+	// Per-module / global deploy token (matches backend /api/deploy auth).
+	if tok := env("DOCS_DEPLOY_TOKEN", ""); tok != "" {
+		req.Header.Set("X-Modex-Deploy-Token", tok)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

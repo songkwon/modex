@@ -3,14 +3,14 @@ package store
 import "time"
 
 type User struct {
-	ID          string    `json:"id"`
-	Username    string    `json:"username"`
-	DisplayName string    `json:"display_name"`
-	Email       string    `json:"email"`
-	Department  string    `json:"department"`
-	Avatar      string    `json:"avatar,omitempty"`
-	Groups      []string  `json:"groups"`
-	Roles       []string  `json:"roles"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	DisplayName string   `json:"display_name"`
+	Email       string   `json:"email"`
+	Department  string   `json:"department"`
+	Avatar      string   `json:"avatar,omitempty"`
+	Groups      []string `json:"groups"`
+	Roles       []string `json:"roles"`
 	// ManagedCategories lists the platform/category IDs this user may manage.
 	// Super admins manage everything regardless of this list.
 	ManagedCategories []string `json:"managed_categories,omitempty"`
@@ -65,31 +65,33 @@ type Category struct {
 }
 
 type Module struct {
-	ID             string    `json:"id"`
-	ModuleKey      string    `json:"module_key"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	OwnerGroup     string    `json:"owner_group"`
-	RepoType       string    `json:"repo_type"` // "gitlab", "github", "manual"
-	RepoURL        string    `json:"repo_url"`
-	DefaultVersion string    `json:"default_version"`
-	Visibility     string    `json:"visibility"`
-	Status         string    `json:"status"`
-	PackageName    string    `json:"package_name"`
-	PackageVersion string    `json:"package_version"`
-	Channel        string    `json:"channel"`
-	Edition        string    `json:"edition"`
-	Keywords       []string  `json:"keywords"`
-	Maintainers    []string  `json:"maintainers"`
-	CategoryIDs    []string  `json:"category_ids"`
-	CategoryPath   string    `json:"category_path"`
+	ID             string   `json:"id"`
+	ModuleKey      string   `json:"module_key"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	OwnerGroup     string   `json:"owner_group"`
+	RepoType       string   `json:"repo_type"` // "gitlab", "github", "manual"
+	RepoURL        string   `json:"repo_url"`
+	DefaultVersion string   `json:"default_version"`
+	Visibility     string   `json:"visibility"`
+	Status         string   `json:"status"`
+	PackageName    string   `json:"package_name"`
+	PackageVersion string   `json:"package_version"`
+	Channel        string   `json:"channel"`
+	Edition        string   `json:"edition"`
+	Keywords       []string `json:"keywords"`
+	Maintainers    []string `json:"maintainers"`
+	CategoryIDs    []string `json:"category_ids"`
+	CategoryPath   string   `json:"category_path"`
 
 	// GitLab / source integration (similar to Mintlify deploy integration)
-	SourceType       string `json:"source_type,omitempty"` // "gitlab", "manual"
-	GitLabBranch     string `json:"gitlab_branch,omitempty"`
-	GitLabPath       string `json:"gitlab_path,omitempty"` // subdir containing docs (e.g. "docs/standard")
-	DeployToken      string `json:"-"`                     // secret for CI deploys; set via admin
-	LastSyncedCommit string `json:"last_synced_commit,omitempty"`
+	SourceType       string    `json:"source_type,omitempty"` // "gitlab", "manual"
+	DocType          string    `json:"doc_type,omitempty"`    // framework: vitepress|vuepress|fumadocs|markdown
+	Mount            string    `json:"mount,omitempty"`       // "single" | "split" (split only for markdown)
+	GitLabBranch     string    `json:"gitlab_branch,omitempty"`
+	GitLabPath       string    `json:"gitlab_path,omitempty"` // subdir containing docs (e.g. "docs/standard")
+	DeployToken      string    `json:"-"`                     // secret for CI deploys; never serialized (reveal via admin endpoint)
+	LastSyncedCommit string    `json:"last_synced_commit,omitempty"`
 	LastSyncedAt     time.Time `json:"last_synced_at,omitempty"`
 
 	AvailableVers []Version `json:"available_versions,omitempty"`
@@ -174,6 +176,22 @@ type Page struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+// AISettings holds the admin-configured large-model connection used to power
+// AI answers (RAG). It targets any OpenAI-compatible /chat/completions endpoint
+// (OpenAI, DeepSeek, Qwen/DashScope-compat, local vLLM/Ollama, …).
+type AISettings struct {
+	AskBaseURL      string    `json:"ask_base_url"`      // e.g. https://api.openai.com/v1
+	AskModel        string    `json:"ask_model"`         // e.g. gpt-4o-mini, deepseek-chat
+	AskAPIKey       string    `json:"ask_api_key"`       // secret; masked when read back
+	AskSystemPrompt string    `json:"ask_system_prompt"` // optional override
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// Settings is the persisted, admin-editable platform configuration.
+type Settings struct {
+	AI AISettings `json:"ai"`
+}
+
 type NavItem struct {
 	Title    string    `json:"title"`
 	Path     string    `json:"path"`
@@ -214,6 +232,10 @@ type DeployArtifact struct {
 	Authors        []string
 	Edition        string
 	Keywords       []string
+	RepoURL        string
+	RepoType       string
+	Branch         string
+	CommitSHA      string
 	Entries        []DeployEntry
 	Documents      []DeployDocument
 	Nav            []NavItem

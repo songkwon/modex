@@ -15,16 +15,16 @@ export default async function SearchLogsPage() {
   const data = await api<SearchLog[]>("/api/admin/analytics/search");
   return (
     <AdminShell title="搜索日志" kicker="Search Analytics" description="用于观察高频搜索、无结果搜索词和搜索点击行为。">
-      <section className="panel">
+      <div className="table-card">
         {data.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" style={{ border: 0, background: "transparent" }}>
             <div>
               <div className="font-semibold text-foreground">暂无搜索日志</div>
               <p className="mt-2 text-sm">在搜索页执行一次查询后，这里会显示记录。</p>
             </div>
           </div>
         ) : (
-          <table className="data-table">
+          <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
                 <th>查询词</th>
@@ -47,9 +47,9 @@ export default async function SearchLogsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
-      </section>
+      </div>
     </AdminShell>
   );
 }

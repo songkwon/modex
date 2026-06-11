@@ -58,14 +58,59 @@ func LoadDocsYAML(path string) (Config, error) {
 	return cfg, scanner.Err()
 }
 
-func Validate(root string) error {
+// LoadConfig resolves the docs config for a repo. It prefers a committed
+// docs.yaml; when absent it synthesizes a single-entry config from environment
+// variables (DOCS_BUILDER/DOCS_BUILD/DOCS_OUTPUT/...), so CI pipelines can drive
+// docsctl purely via variables without committing a config file into the repo.
+func LoadConfig(root string) (Config, error) {
 	cfgPath := filepath.Join(root, "docs.yaml")
-	cfg, err := LoadDocsYAML(cfgPath)
+	if _, err := os.Stat(cfgPath); err == nil {
+		return LoadDocsYAML(cfgPath)
+	}
+	return SynthesizeConfig(root), nil
+}
+
+// SynthesizeConfig builds a single-entry config from env vars, falling back to
+// auto-detected defaults. Env overrides: DOCS_BUILDER (type), DOCS_ENTRY_KEY,
+// DOCS_ENTRY_TITLE, DOCS_ENTRY_SOURCE, DOCS_BUILD, DOCS_OUTPUT.
+func SynthesizeConfig(root string) Config {
+	kind := firstEnv("DOCS_BUILDER", DetectProjectKind(root))
+	e := DefaultEntry(root, kind)
+	e.Type = kind
+	if v := os.Getenv("DOCS_ENTRY_KEY"); v != "" {
+		e.Key = v
+	}
+	if v := os.Getenv("DOCS_ENTRY_TITLE"); v != "" {
+		e.Title = v
+	}
+	if v := os.Getenv("DOCS_ENTRY_SOURCE"); v != "" {
+		e.Source = v
+	}
+	if v := os.Getenv("DOCS_BUILD"); v != "" {
+		e.Build = v
+	}
+	if v := os.Getenv("DOCS_OUTPUT"); v != "" {
+		e.Output = v
+	}
+	return Config{Entries: []Entry{e}}
+}
+
+func requiresBuild(t string) bool {
+	switch t {
+	case "vitepress", "vuepress", "fumadocs":
+		return true
+	default:
+		return false
+	}
+}
+
+func Validate(root string) error {
+	cfg, err := LoadConfig(root)
 	if err != nil {
 		return err
 	}
 	if len(cfg.Entries) == 0 {
-		return errors.New("docs.yaml must contain entries")
+		return errors.New("config must contain entries")
 	}
 	for _, e := range cfg.Entries {
 		if e.Key == "" || e.Title == "" || e.Type == "" || e.Source == "" {
@@ -74,7 +119,7 @@ func Validate(root string) error {
 		if _, err := os.Stat(filepath.Join(root, e.Source)); err != nil {
 			return err
 		}
-		if (e.Type == "vuepress" || e.Type == "fumadocs") && (e.Build == "" || e.Output == "") {
+		if requiresBuild(e.Type) && (e.Build == "" || e.Output == "") {
 			return errors.New(e.Type + " entry requires build and output")
 		}
 	}
@@ -97,6 +142,10 @@ func LoadMetadata(root string, cfg Config) Metadata {
 		Authors:        cbb.Authors,
 		Edition:        firstEnv("DOCS_EDITION", cbb.Edition, ""),
 		Keywords:       cbb.Keywords,
+		RepoURL:        firstEnv("DOCS_REPO_URL", ""),
+		RepoType:       firstEnv("DOCS_REPO_TYPE", "git"),
+		Branch:         firstEnv("DOCS_BRANCH", ""),
+		CommitSHA:      firstEnv("DOCS_COMMIT_SHA", ""),
 	}
 	if cbbOK == nil {
 		md.Source.MetadataFile = "cbb.toml"

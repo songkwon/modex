@@ -25,7 +25,7 @@ export default async function AnalyticsPage() {
           </div>
         </div>
 
-        <div className="mt-6 overflow-auto">
+        <div className="table-card" style={{ marginTop: 18 }}><div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
@@ -57,7 +57,7 @@ export default async function AnalyticsPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </div></div>
 
         <p className="muted mt-4 text-xs">埋点事件：{data.events.join(" / ")}</p>
       </section>

@@ -29,6 +29,10 @@ type Metadata struct {
 	Authors        []string `json:"authors"`
 	Edition        string   `json:"edition"`
 	Keywords       []string `json:"keywords"`
+	RepoURL        string   `json:"repo_url"`
+	RepoType       string   `json:"repo_type"`
+	Branch         string   `json:"branch"`
+	CommitSHA      string   `json:"commit_sha"`
 	Source         struct {
 		MetadataFile string `json:"metadata_file"`
 	} `json:"source"`

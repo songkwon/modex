@@ -104,6 +104,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/analytics/search", s.handleSearchLogs)
 	mux.HandleFunc("/api/admin/analytics/mcp", s.handleMCPLogs)
 	mux.HandleFunc("/api/mcp/log", s.handleMCPLog)
+	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
+	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/admin/categories", s.handleAdminCategories)
 	mux.HandleFunc("/api/admin/categories/", s.handleAdminCategoryByID)
 	mux.HandleFunc("/api/admin/modules", s.handleAdminModules)
@@ -396,6 +398,15 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []search.Result) (string, string) {
+	// 1) Admin-configured OpenAI-compatible chat model (preferred).
+	if ai := s.store.Settings().AI; strings.TrimSpace(ai.AskBaseURL) != "" && strings.TrimSpace(ai.AskModel) != "" {
+		if answer, err := s.askOpenAICompatible(ctx, ai, query, results); err == nil && strings.TrimSpace(answer) != "" {
+			return answer, "llm"
+		} else if err != nil {
+			log.Printf("ask llm failed: %v", err)
+		}
+	}
+	// 2) Legacy custom {query,context}->{answer} proxy via env.
 	if url := os.Getenv("ASK_HTTP_URL"); url != "" {
 		if answer, err := s.askExternalLLM(ctx, url, query, results); err == nil && strings.TrimSpace(answer) != "" {
 			return answer, "http"
@@ -449,6 +460,170 @@ func (s *Server) askExternalLLM(ctx context.Context, url, query string, results 
 		return "", err
 	}
 	return out.Answer, nil
+}
+
+// askOpenAICompatible calls any OpenAI-compatible /chat/completions endpoint
+// with a retrieval-augmented prompt built from the top search results.
+func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, query string, results []search.Result) (string, error) {
+	var ctxBuilder strings.Builder
+	for i, r := range results {
+		if i >= 6 {
+			break
+		}
+		ctxBuilder.WriteString(fmt.Sprintf("[%d] %s (%s)\n%s\n\n", i+1, r.Title, r.Breadcrumb, firstNonEmptyStr(r.Snippet, r.Title)))
+	}
+	system := strings.TrimSpace(ai.AskSystemPrompt)
+	if system == "" {
+		system = "你是企业研发文档助手。只依据提供的【文档片段】回答用户问题，使用简洁中文；若片段中没有答案，明确说明未在文档中找到，不要编造。回答末尾不要重复罗列来源。"
+	}
+	userMsg := fmt.Sprintf("文档片段：\n%s\n问题：%s", ctxBuilder.String(), query)
+	payload, _ := json.Marshal(map[string]any{
+		"model": ai.AskModel,
+		"messages": []map[string]string{
+			{"role": "system", "content": system},
+			{"role": "user", "content": userMsg},
+		},
+		"temperature": 0.2,
+		"stream":      false,
+	})
+	endpoint := strings.TrimRight(ai.AskBaseURL, "/") + "/chat/completions"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if ai.AskAPIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+ai.AskAPIKey)
+	}
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("chat endpoint %d: %s", resp.StatusCode, string(body))
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", err
+	}
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("chat endpoint returned no choices")
+	}
+	return out.Choices[0].Message.Content, nil
+}
+
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// handleAdminSettings exposes the admin-editable platform settings (AI model).
+func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, maskedSettings(s.store.Settings()))
+	case http.MethodPut, http.MethodPost:
+		var body store.AISettings
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		saved := s.store.SaveAISettings(body)
+		writeJSON(w, http.StatusOK, maskedSettings(saved))
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
+	}
+}
+
+// handleAdminModels proxies GET {base}/models so the admin UI can populate a
+// model picker. Uses the request's api_key, falling back to the stored key.
+func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	var body struct {
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+	}
+	if err := decodeBody(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	base := strings.TrimSpace(body.BaseURL)
+	if base == "" {
+		base = s.store.Settings().AI.AskBaseURL
+	}
+	if base == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "base_url required")
+		return
+	}
+	key := strings.TrimSpace(body.APIKey)
+	if key == "" {
+		key = s.store.Settings().AI.AskAPIKey
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(base, "/")+"/models", nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "models_failed", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		writeError(w, http.StatusBadGateway, "models_failed", fmt.Sprintf("%d: %s", resp.StatusCode, string(raw)))
+		return
+	}
+	var parsed struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &parsed)
+	ids := make([]string, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": ids})
+}
+
+// maskedSettings hides the stored API key but reports whether one is set.
+func maskedSettings(set store.Settings) map[string]any {
+	ai := set.AI
+	keySet := strings.TrimSpace(ai.AskAPIKey) != ""
+	ai.AskAPIKey = ""
+	return map[string]any{
+		"ai":              ai,
+		"ask_api_key_set": keySet,
+	}
 }
 
 func (s *Server) handleFacets(w http.ResponseWriter, r *http.Request) {
@@ -553,7 +728,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// If no tokens are configured at all (dev), allow. Otherwise require match.
-	hasAnyToken := globalToken != "" 
+	hasAnyToken := globalToken != ""
 	if m, merr := s.store.Module(moduleKey); merr == nil && m.DeployToken != "" {
 		hasAnyToken = true
 	}
@@ -855,6 +1030,28 @@ func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/categories/")
+	// Drag-and-drop move: POST /api/admin/categories/{id}/move {parent_id, index}.
+	if strings.HasSuffix(id, "/move") {
+		id = strings.TrimSuffix(id, "/move")
+		if _, ok := s.requireSuperAdmin(w, r); !ok {
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+			return
+		}
+		var body struct {
+			ParentID string `json:"parent_id"`
+			Index    int    `json:"index"`
+		}
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		moved, err := s.store.MoveCategory(id, body.ParentID, body.Index)
+		writeMutation(w, moved, http.StatusOK, err)
+		return
+	}
 	if _, ok := s.requirePlatform(w, r, []string{id}); !ok {
 		return
 	}
@@ -909,6 +1106,31 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if _, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey)); !ok {
+		return
+	}
+	// Reveal / rotate the CI deploy token (kept out of normal serialization).
+	if len(parts) == 2 && parts[1] == "deploy-token" {
+		m, err := s.store.Module(moduleKey)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not_found", "module not found")
+			return
+		}
+		if r.Method == http.MethodPost { // rotate
+			token := "mdx_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+			if _, err := s.store.UpdateModule(moduleKey, store.Module{DeployToken: token}); err != nil {
+				writeResult(w, nil, err)
+				return
+			}
+			m.DeployToken = token
+		} else if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"deploy_token": m.DeployToken,
+			"deploy_url":   firstNonEmptyStr(os.Getenv("APP_BASE_URL"), "") + "/api/deploy",
+			"module_key":   moduleKey,
+		})
 		return
 	}
 	switch {
@@ -1376,6 +1598,10 @@ func toStoreArtifact(a deploy.Artifact) store.DeployArtifact {
 		Authors:        append([]string(nil), a.Metadata.Authors...),
 		Edition:        a.Metadata.Edition,
 		Keywords:       append([]string(nil), a.Metadata.Keywords...),
+		RepoURL:        a.Metadata.RepoURL,
+		RepoType:       a.Metadata.RepoType,
+		Branch:         a.Metadata.Branch,
+		CommitSHA:      a.Metadata.CommitSHA,
 		Bytes:          a.Bytes,
 		SiteHTML:       map[string]string{},
 		SiteFiles:      map[string][]byte{},

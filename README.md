@@ -275,9 +275,35 @@ VuePress, Fumadocs, static HTML, and Markdown projects, and can create
 `docs.yaml` in place when `DOCS_DISCOVER_WRITE=true` is set. Use
 `DOCS_DISCOVER_DEPTH` to control traversal depth.
 
-## MCP Example
+## MCP
 
-Start the backend first, then run:
+Modex ships an MCP server so AI clients (Claude Code, Cursor, …) can search and
+read your docs. Three ways to run it:
+
+### 1. npx (recommended for developers)
+
+The `mcp/npx` package (`modex-docs-mcp`) is a zero-dependency stdio server. Add it
+to your client pointed at a Modex deployment:
+
+```bash
+claude mcp add modex-docs \
+  --env MODEX_API_BASE_URL=https://modex.example.com \
+  --env MODEX_MCP_TOKEN=your-token \
+  -- npx -y modex-docs-mcp
+```
+
+See [mcp/npx/README.md](mcp/npx/README.md) for Cursor/Windsurf config.
+
+### 2. Docker (builds with the stack)
+
+The Go MCP server builds alongside the compose stack and runs on demand (stdio,
+not a served port):
+
+```bash
+cd deploy && docker compose --profile mcp run --rm mcp
+```
+
+### 3. From source
 
 ```bash
 cd mcp

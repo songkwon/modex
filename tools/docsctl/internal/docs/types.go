@@ -22,7 +22,13 @@ type Metadata struct {
 	Authors        []string `json:"authors"`
 	Edition        string   `json:"edition"`
 	Keywords       []string `json:"keywords"`
-	Source         struct {
+	// Source repo metadata (filled from CI env), shown read-only in the modex
+	// admin so operators can see where a doc source originates.
+	RepoURL   string `json:"repo_url,omitempty"`
+	RepoType  string `json:"repo_type,omitempty"` // "git" | "svn"
+	Branch    string `json:"branch,omitempty"`
+	CommitSHA string `json:"commit_sha,omitempty"`
+	Source    struct {
 		MetadataFile string `json:"metadata_file"`
 	} `json:"source"`
 }
