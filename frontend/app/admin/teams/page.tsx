@@ -35,11 +35,11 @@ type Draft = {
   key: string;
   name: string;
   description: string;
-  leader: string;
+  leaders: string[];
   members: string[];
 };
 
-const emptyDraft: Draft = { key: "", name: "", description: "", leader: "", members: [] };
+const emptyDraft: Draft = { key: "", name: "", description: "", leaders: [], members: [] };
 
 export default function AdminTeamsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -72,7 +72,7 @@ export default function AdminTeamsPage() {
     setModalOpen(true);
   }
   function openEdit(t: Team) {
-    setDraft({ key: t.key, name: t.name || "", description: t.description || "", leader: t.leader || "", members: t.members || [] });
+    setDraft({ key: t.key, name: t.name || "", description: t.description || "", leaders: t.leaders || [], members: t.members || [] });
     setIsEdit(true);
     setModalOpen(true);
   }
@@ -81,13 +81,13 @@ export default function AdminTeamsPage() {
     setError("");
     try {
       if (isEdit) {
-        await updateTeam(draft.key, { name: draft.name, description: draft.description, leader: draft.leader, members: draft.members });
+        await updateTeam(draft.key, { name: draft.name, description: draft.description, leaders: draft.leaders, members: draft.members });
       } else {
         await createTeam({
           key: draft.key,
           name: draft.name || undefined,
           description: draft.description || undefined,
-          leader: draft.leader || undefined,
+          leaders: draft.leaders.length ? draft.leaders : undefined,
           members: draft.members.length ? draft.members : undefined,
         });
       }
@@ -153,7 +153,15 @@ export default function AdminTeamsPage() {
                       <div style={{ fontWeight: 640 }}>{t.name || t.key}</div>
                       <div className="muted" style={{ fontSize: 12 }}>{t.key}{t.description ? " · " + t.description : ""}</div>
                     </td>
-                    <td>{t.leader ? <span className="badge badge-success">{t.leader}</span> : <span className="muted">—</span>}</td>
+                    <td>
+                      {(t.leaders || []).length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {(t.leaders || []).map((l) => <span key={l} className="badge badge-success">{l}</span>)}
+                        </div>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                     <td>
                       {(t.members || []).length > 0 ? (
                         <span className="tag">{(t.members || []).length} 人</span>
@@ -196,7 +204,7 @@ export default function AdminTeamsPage() {
         footer={
           <>
             <button className="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="button button-primary" onClick={submit} disabled={!draft.name.trim() || !draft.leader.trim()}>
+            <button className="button button-primary" onClick={submit} disabled={!draft.name.trim() || draft.leaders.length === 0}>
               {isEdit ? "保存" : "创建团队"}
             </button>
           </>
@@ -214,8 +222,8 @@ export default function AdminTeamsPage() {
         <div className="field">
           <label>负责人 *</label>
           <div className="picker-field">
-            {draft.leader ? (
-              <span className="tag">{draft.leader}</span>
+            {draft.leaders.length > 0 ? (
+              draft.leaders.map((l) => <span key={l} className="tag">{l}</span>)
             ) : (
               <span className="muted" style={{ fontSize: 13 }}>未指定</span>
             )}
@@ -223,7 +231,7 @@ export default function AdminTeamsPage() {
               <UserPlus size={14} /> 选择负责人
             </button>
           </div>
-          <span className="field-hint">负责人至少 1 人，可管理本团队负责分类下的内容；保存后会自动加入成员。</span>
+          <span className="field-hint">负责人至少 1 人（可多人），可管理本团队负责分类下的内容；保存后会自动加入成员。</span>
         </div>
         <div className="field">
           <label>成员</label>
@@ -244,15 +252,11 @@ export default function AdminTeamsPage() {
         open={picker !== null}
         onClose={() => setPicker(null)}
         title={picker === "leader" ? "选择负责人" : "添加成员"}
-        subtitle={picker === "leader" ? "单选一名负责人" : "搜索并按部门展开多选"}
+        subtitle={picker === "leader" ? "搜索并按部门展开多选（至少 1 人）" : "搜索并按部门展开多选"}
         footer={<button className="button button-primary" onClick={() => setPicker(null)}>完成</button>}
       >
         {picker === "leader" ? (
-          <UserSelect
-            single
-            value={draft.leader ? [draft.leader] : []}
-            onChange={(v) => setDraft({ ...draft, leader: v[0] || "" })}
-          />
+          <UserSelect value={draft.leaders} onChange={(leaders) => setDraft({ ...draft, leaders })} />
         ) : picker === "members" ? (
           <UserSelect value={draft.members} onChange={(members) => setDraft({ ...draft, members })} />
         ) : null}

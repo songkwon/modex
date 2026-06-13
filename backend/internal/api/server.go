@@ -808,8 +808,9 @@ func (s *Server) handlePageView(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDocAnalytics powers the doc-page "eye" popover: a daily read trend and
-// a per-reader breakdown for one document. PostHog is used when configured
-// (server-side), otherwise the built-in page_views store is the source.
+// a per-reader breakdown for one document. When PostHog is configured (server-
+// side), all reads go through PostHog and errors are returned to the caller.
+// Otherwise the built-in page_views store is used.
 func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
 	docID := strings.TrimSpace(r.URL.Query().Get("doc_id"))
 	if docID == "" {
@@ -822,11 +823,17 @@ func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
 			days = n
 		}
 	}
-	if stats, ok := posthogDocStats(docID, days); ok {
-		writeJSON(w, http.StatusOK, map[string]any{"source": "posthog", "stats": stats})
+	stats, err := posthogDocStats(docID, days)
+	if err != nil {
+		if errors.Is(err, errPosthogNotConfigured) {
+			stats = s.store.PageReadStats(docID, days)
+			writeJSON(w, http.StatusOK, map[string]any{"source": "internal", "stats": stats})
+			return
+		}
+		writeError(w, http.StatusBadGateway, "posthog_error", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"source": "internal", "stats": s.store.PageReadStats(docID, days)})
+	writeJSON(w, http.StatusOK, map[string]any{"source": "posthog", "stats": stats})
 }
 
 func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
@@ -1038,7 +1045,12 @@ func (s *Server) isTeamLeader(u store.User, teamKey string) bool {
 	if err != nil {
 		return false
 	}
-	return t.Leader != "" && (strings.EqualFold(t.Leader, u.Username) || strings.EqualFold(t.Leader, u.ID))
+	for _, l := range t.Leaders {
+		if strings.EqualFold(l, u.Username) || strings.EqualFold(l, u.ID) {
+			return true
+		}
+	}
+	return false
 }
 
 // teamMembers returns usernames/ids in the team (for ownership checks).
@@ -1672,7 +1684,7 @@ func (s *Server) handleAdminTeams(w http.ResponseWriter, r *http.Request) {
 		if kw := keywordOf(r); kw != "" {
 			filtered := teams[:0:0]
 			for _, t := range teams {
-				if containsFold(t.Name, kw) || containsFold(t.Key, kw) || containsFold(t.Leader, kw) || containsFold(t.Description, kw) || containsFold(strings.Join(t.Members, " "), kw) {
+				if containsFold(t.Name, kw) || containsFold(t.Key, kw) || containsFold(strings.Join(t.Leaders, " "), kw) || containsFold(t.Description, kw) || containsFold(strings.Join(t.Members, " "), kw) {
 					filtered = append(filtered, t)
 				}
 			}

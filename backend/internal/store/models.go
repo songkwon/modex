@@ -48,7 +48,9 @@ type Team struct {
 	Key         string    `json:"key"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
-	Leader      string    `json:"leader"`
+	// Leaders are the team's responsible people (at least one). Every leader is
+	// also kept in Members.
+	Leaders     []string  `json:"leaders"`
 	Members     []string  `json:"members"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

@@ -69,7 +69,7 @@ export default function AdminUsersPage() {
   }, []);
 
   // Identity is a single derived tier: super admin > team leader > member.
-  const leaderUsernames = useMemo(() => new Set((teams || []).map((t) => t.leader).filter(Boolean)), [teams]);
+  const leaderUsernames = useMemo(() => new Set((teams || []).flatMap((t) => t.leaders || [])), [teams]);
   function identityOf(u: User): { label: string; cls: string } {
     if (u.is_super_admin) return { label: "超级管理员", cls: "badge-danger" };
     if (leaderUsernames.has(u.username)) return { label: "团队负责人", cls: "badge-success" };
@@ -80,7 +80,7 @@ export default function AdminUsersPage() {
   // are derived here rather than stored on the user.
   function teamsOf(u: User): string[] {
     return (teams || [])
-      .filter((t) => t.leader === u.username || (t.members || []).includes(u.username))
+      .filter((t) => (t.leaders || []).includes(u.username) || (t.members || []).includes(u.username))
       .map((t) => t.name || t.key);
   }
 

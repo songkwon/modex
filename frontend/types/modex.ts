@@ -74,7 +74,7 @@ export type Team = {
   key: string;
   name: string;
   description?: string;
-  leader: string;
+  leaders: string[];
   members?: string[];
   created_at?: string;
   updated_at?: string;
