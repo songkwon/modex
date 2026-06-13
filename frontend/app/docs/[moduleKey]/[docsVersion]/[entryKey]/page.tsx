@@ -6,12 +6,13 @@ import { CodeBlockCopy } from "@/components/code-block-copy";
 import { DocReadStats } from "@/components/doc-read-stats";
 import { MdxContent } from "@/components/mdx/mdx-content";
 
-export default async function DocPage({ params }: { params: { moduleKey: string; docsVersion: string; entryKey: string } }) {
+export default async function DocPage({ params }: { params: Promise<{ moduleKey: string; docsVersion: string; entryKey: string }> }) {
+  const { moduleKey, docsVersion, entryKey } = await params;
   const [module, entries, nav, pagePayload] = await Promise.all([
-    getModule(params.moduleKey),
-    getEntries(params.moduleKey, params.docsVersion),
-    getNav(params.moduleKey, params.docsVersion, params.entryKey),
-    getPage(params.moduleKey, params.docsVersion, params.entryKey)
+    getModule(moduleKey),
+    getEntries(moduleKey, docsVersion),
+    getNav(moduleKey, docsVersion, entryKey),
+    getPage(moduleKey, docsVersion, entryKey)
   ]);
   const page = pagePayload.page ?? pagePayload;
   const contentHTML = extractDocumentBody(pagePayload.content_html || "");
@@ -26,7 +27,7 @@ export default async function DocPage({ params }: { params: { moduleKey: string;
   // from.
   if (!isMarkdown) {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
-    const siteSrc = `${apiBase}/api/docs/${params.moduleKey}/${params.docsVersion}/${params.entryKey}/site/`;
+    const siteSrc = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${entryKey}/site/`;
     return (
       <main className="main docs-shell docs-shell--embedded">
         <PageViewTracker docId={page.doc_id} />
@@ -48,16 +49,16 @@ export default async function DocPage({ params }: { params: { moduleKey: string;
         <aside className="doc-sidebar">
           <div className="doc-nav-head">
             <a className="doc-nav-back" href="/">{module.name}</a>
-            <span className="doc-nav-version">{params.docsVersion}</span>
+            <span className="doc-nav-version">{docsVersion}</span>
           </div>
           <nav className="doc-nav">
             {entries.map((entry) => {
-              const active = entry.entry_key === params.entryKey;
+              const active = entry.entry_key === entryKey;
               return (
                 <a
                   className={`doc-nav-link${active ? " active" : ""}`}
                   key={entry.entry_key}
-                  href={`/docs/${params.moduleKey}/${params.docsVersion}/${entry.entry_key}`}
+                  href={`/docs/${moduleKey}/${docsVersion}/${entry.entry_key}`}
                 >
                   {entry.title}
                 </a>
@@ -92,7 +93,7 @@ export default async function DocPage({ params }: { params: { moduleKey: string;
                 <p className="doc-toc-title">目录</p>
                 <nav className="doc-toc-tree">
                   {nav.map((item) => (
-                    <a key={item.path} href={`/docs/${params.moduleKey}/${params.docsVersion}/${params.entryKey}${item.path}`} className="doc-toc-link">
+                    <a key={item.path} href={`/docs/${moduleKey}/${docsVersion}/${entryKey}${item.path}`} className="doc-toc-link">
                       {item.title}
                     </a>
                   ))}

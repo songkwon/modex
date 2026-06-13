@@ -49,7 +49,7 @@ func FromEnv() Config {
 	cfg := Config{
 		Mode:             mode,
 		AppBaseURL:       appBase,
-		FrontendBaseURL:  strings.TrimRight(env("FRONTEND_BASE_URL", "http://localhost:3000"), "/"),
+		FrontendBaseURL:  strings.TrimRight(env("FRONTEND_BASE_URL", "http://localhost:3456"), "/"),
 		IssuerURL:        issuer,
 		AuthURL:          os.Getenv("OIDC_AUTH_URL"),
 		TokenURL:         os.Getenv("OIDC_TOKEN_URL"),
@@ -64,8 +64,8 @@ func FromEnv() Config {
 		CookieDomain:     os.Getenv("COOKIE_DOMAIN"),
 		CookieSameSite:   env("COOKIE_SAME_SITE", "lax"),
 		CookieSecure:     env("COOKIE_SECURE", "false") == "true",
-		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3000")),
-		SuperAdmins: splitList(os.Getenv("SUPER_ADMIN_USERS")),
+		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3456")),
+		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
 
 		// UserMapping comes from a combination of (optional) config file + env overrides.
 		// See internal/config for precedence rules and why some settings live in files
@@ -124,9 +124,9 @@ func splitList(v string) []string {
 }
 
 // resolveUserMapping loads the user attribute mapping with the following precedence:
-//   1. Values from config file (if CONFIG_FILE or conventional locations exist)
-//   2. OIDC_CLAIM_* environment variables (explicit overrides)
-//   3. Reasonable defaults (company prefers email as unique id)
+//  1. Values from config file (if CONFIG_FILE or conventional locations exist)
+//  2. OIDC_CLAIM_* environment variables (explicit overrides)
+//  3. Reasonable defaults (company prefers email as unique id)
 func resolveUserMapping() config.UserMapping {
 	m := config.LoadUserMapping()
 

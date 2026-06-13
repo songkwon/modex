@@ -21,7 +21,7 @@ docker-compose up --build
 
 Open:
 
-- Frontend: <http://localhost:3000>
+- Frontend: <http://localhost:3456>
 - Backend health: <http://localhost:8671/healthz>
 - MinIO console: <http://localhost:9001>
 - Meilisearch: <http://localhost:7700>

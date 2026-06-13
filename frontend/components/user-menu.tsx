@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Terminal, Shield, LogOut, LogIn, ChevronDown } from "lucide-react";
 import { getAuthConfig, getMe, logout, mockLogin } from "@/lib/api";
+import { identify } from "@/lib/analytics";
 import type { AuthConfig, User } from "@/types/modex";
 
 function initials(name: string) {
@@ -40,7 +41,18 @@ export function UserMenu() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    getMe().then(setUser).catch(() => setUser(null));
+    getMe()
+      .then((u) => {
+        setUser(u);
+        identify({
+          id: u.id || u.username || u.email,
+          displayName: u.display_name,
+          email: u.email,
+          department: u.department,
+          groups: u.groups,
+        });
+      })
+      .catch(() => setUser(null));
     getAuthConfig().then(setCfg).catch(() => {});
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);

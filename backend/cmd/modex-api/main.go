@@ -14,11 +14,20 @@ import (
 	"modex/backend/internal/store"
 )
 
+func analyticsSource() string {
+	if api.PosthogConfigured() {
+		return "PostHog (project_id=" + os.Getenv("POSTHOG_PROJECT_ID") + ", host=" + api.PosthogHost() + ")"
+	}
+	return "internal store (PostHog not configured)"
+}
+
 func main() {
 	addr := ":" + env("PORT", "8671")
 
 	st, snapshotPath := loadStore()
 	srv := api.New(st)
+
+	log.Printf("analytics source: %s", analyticsSource())
 
 	httpServer := &http.Server{Addr: addr, Handler: srv.Handler()}
 
