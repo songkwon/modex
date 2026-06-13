@@ -8,7 +8,8 @@ import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { Pagination } from "@/components/ui/pagination";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
-import { createUser, deleteUser, getCategories, getTeams, getUsers, updateUser } from "@/lib/api";
+import { createUser, deleteUser, getCategories, getTeams, updateUser } from "@/lib/api";
+import { usePaged } from "@/lib/use-paged";
 import type { Category, Team, User } from "@/types/modex";
 
 const PAGE_SIZE = 8;
@@ -46,27 +47,23 @@ function flattenCategories(tree: Category[]): ComboOption[] {
 }
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const isEdit = !!draft.id;
 
-  async function refresh(kw = keyword) {
-    try {
-      setUsers(await getUsers(kw));
-      setError("");
-    } catch (e) {
-      setError(String(e));
-    }
-  }
+  const { items: pageUsers, total, page, setPage, error: loadError, reload } = usePaged<User>(
+    "/api/admin/users",
+    PAGE_SIZE,
+    keyword.trim(),
+  );
 
+  // Teams power the derived identity/membership columns and must be the full
+  // list (not paginated), so they are fetched separately without ?page=.
   useEffect(() => {
-    refresh("");
     getTeams().then(setTeams).catch(() => {});
     getCategories().then(setCategories).catch(() => {});
   }, []);
@@ -88,8 +85,6 @@ export default function AdminUsersPage() {
   }
 
   const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
-
-  const pageUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function openCreate() {
     setDraft(emptyDraft);
@@ -132,7 +127,7 @@ export default function AdminUsersPage() {
         });
       }
       setModalOpen(false);
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -142,7 +137,7 @@ export default function AdminUsersPage() {
     if (!confirm(`确认删除用户 ${user.username}?`)) return;
     try {
       await deleteUser(user.id);
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -150,7 +145,7 @@ export default function AdminUsersPage() {
 
   return (
     <AdminShell title="用户管理" kicker="Users" description="管理用户资料与权限。团队归属在「团队管理」中维护；使用 OIDC 登录时用户会自动同步到此目录。">
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
+      {(error || loadError) ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error || loadError}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
@@ -158,8 +153,7 @@ export default function AdminUsersPage() {
           <input
             placeholder="搜索显示名 / 邮箱 / 部门"
             value={keyword}
-            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
-            onKeyDown={(e) => e.key === "Enter" && refresh()}
+            onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
         <div className="admin-toolbar-actions">
@@ -220,7 +214,7 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
-        <Pagination page={page} pageSize={PAGE_SIZE} total={users.length} onPage={setPage} />
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
       </div>
 
       <Modal

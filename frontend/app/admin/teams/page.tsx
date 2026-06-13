@@ -10,7 +10,6 @@ import { Pagination } from "@/components/ui/pagination";
 
 const PAGE_SIZE = 8;
 import {
-  getTeams,
   createTeam,
   updateTeam,
   deleteTeam,
@@ -19,6 +18,7 @@ import {
   getCategories,
 } from "@/lib/api";
 import type { Team, Category } from "@/types/modex";
+import { usePaged } from "@/lib/use-paged";
 
 function flattenCategories(cats: Category[] | null | undefined): Category[] {
   if (!cats) return [];
@@ -44,7 +44,6 @@ type Draft = {
 const emptyDraft: Draft = { key: "", name: "", description: "", leader: "", members: [] };
 
 export default function AdminTeamsPage() {
-  const [teams, setTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -52,39 +51,22 @@ export default function AdminTeamsPage() {
   const [isEdit, setIsEdit] = useState(false);
   const [addMemberFor, setAddMemberFor] = useState<Record<string, string>>({});
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
 
-  async function refresh() {
-    try {
-      const [ts, tree] = await Promise.all([getTeams(), getCategories()]);
-      setTeams(ts || []);
-      setCategories(tree || []);
-      setError("");
-    } catch (e) {
-      setError(String(e));
-    }
-  }
+  const { items: pageTeams, total, page, setPage, error: loadError, reload } = usePaged<Team>(
+    "/api/admin/teams",
+    PAGE_SIZE,
+    keyword.trim(),
+  );
 
+  // Categories are needed in full to derive each team's owned domains.
   useEffect(() => {
-    refresh();
+    getCategories().then((tree) => setCategories(tree || [])).catch(() => {});
   }, []);
 
   const flatCats = useMemo(() => flattenCategories(categories), [categories]);
   function ownedDomainsFor(teamKey: string): string[] {
     return flatCats.filter((c) => c.responsible_team === teamKey).map((c) => c.name);
   }
-
-  const filtered = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    if (!q) return teams || [];
-    return (teams || []).filter((t) =>
-      (t.name || "").toLowerCase().includes(q) ||
-      (t.key || "").toLowerCase().includes(q) ||
-      (t.leader || "").toLowerCase().includes(q) ||
-      (t.members || []).some((m) => m.toLowerCase().includes(q)),
-    );
-  }, [teams, keyword]);
-  const pageTeams = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function openCreate() {
     setDraft(emptyDraft);
@@ -112,7 +94,7 @@ export default function AdminTeamsPage() {
         });
       }
       setModalOpen(false);
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -122,7 +104,7 @@ export default function AdminTeamsPage() {
     if (!confirm(`确认删除团队 ${t.key}? 关联的分类负责方不会自动清除。`)) return;
     try {
       await deleteTeam(t.key);
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -134,7 +116,7 @@ export default function AdminTeamsPage() {
     try {
       await addTeamMember(teamKey, val);
       setAddMemberFor((m) => ({ ...m, [teamKey]: "" }));
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -144,7 +126,7 @@ export default function AdminTeamsPage() {
     if (!confirm(`从团队移除 ${member} ?`)) return;
     try {
       await removeTeamMember(teamKey, member);
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -156,7 +138,7 @@ export default function AdminTeamsPage() {
       kicker="Teams"
       description="文档维护团队（负责人 + 成员）。负责人可直接添加成员。团队可被指定为某个分类的负责方，负责维护该分类下的文档结构与归属。"
     >
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
+      {(error || loadError) ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error || loadError}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
@@ -164,7 +146,7 @@ export default function AdminTeamsPage() {
           <input
             placeholder="搜索团队名 / 标识 / 负责人 / 成员"
             value={keyword}
-            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+            onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
         <div className="admin-toolbar-actions">
@@ -232,7 +214,7 @@ export default function AdminTeamsPage() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 ? (
+              {total === 0 ? (
                 <tr><td colSpan={5}>
                   <EmptyState
                     icon={UsersRound}
@@ -244,7 +226,7 @@ export default function AdminTeamsPage() {
             </tbody>
           </table>
         </div>
-        <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPage={setPage} />
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
       </div>
 
       <Modal

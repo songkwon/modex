@@ -7,9 +7,9 @@ WORKDIR /src
 # This populates go.sum with checksums for all deps (including minio-go/v7 for real MinIO uploads of site files).
 # Commit the updated go.sum. Then Docker builds will be reliable.
 
-# Optional: pass a fast proxy at build time if default is slow
-# docker build --build-arg GOPROXY=https://goproxy.cn,direct ...
-ARG GOPROXY=https://proxy.golang.org,direct
+# Optional: override the proxy at build time, e.g. outside China:
+# docker build --build-arg GOPROXY=https://proxy.golang.org,direct ...
+ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
 
 # Copy go.mod + go.sum first for better layer caching of dependencies

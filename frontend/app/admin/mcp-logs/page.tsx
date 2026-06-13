@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { MessageSquareText, Search } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { api } from "@/lib/api";
+import { usePaged } from "@/lib/use-paged";
 
 const PAGE_SIZE = 12;
 
@@ -21,38 +21,8 @@ type MCPLog = {
 };
 
 export default function MCPLogsPage() {
-  const [data, setData] = useState<MCPLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const logs = await api<MCPLog[]>("/api/admin/analytics/mcp");
-        if (!cancelled) setData(logs || []);
-      } catch (e) {
-        if (!cancelled) setError(String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((l) =>
-      (l.tool_name || "").toLowerCase().includes(q) ||
-      (l.query || "").toLowerCase().includes(q) ||
-      (l.display_name || "").toLowerCase().includes(q) ||
-      (l.user_id || "").toLowerCase().includes(q),
-    );
-  }, [data, keyword]);
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { items: pageRows, total, page, setPage, error, loading } = usePaged<MCPLog>("/api/admin/analytics/mcp", PAGE_SIZE, keyword.trim());
 
   return (
     <AdminShell title="MCP 日志" kicker="AI Access" description="记录 AI 工具通过 MCP 读取模块、版本、搜索结果与文档页面的行为。">
@@ -68,7 +38,7 @@ export default function MCPLogsPage() {
           <input
             placeholder="搜索工具 / 查询 / 用户"
             value={keyword}
-            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+            onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
       </div>
@@ -76,7 +46,7 @@ export default function MCPLogsPage() {
       <div className="table-card">
         {loading ? (
           <div className="muted text-sm" style={{ padding: 18 }}>加载中...</div>
-        ) : filtered.length === 0 ? (
+        ) : total === 0 ? (
           <EmptyState
             icon={MessageSquareText}
             title={keyword ? "没有匹配的记录" : "暂无 MCP 调用"}
@@ -116,7 +86,7 @@ export default function MCPLogsPage() {
                 ))}
               </tbody>
             </table></div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPage={setPage} />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
           </>
         )}
       </div>
