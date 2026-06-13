@@ -605,6 +605,36 @@ func (s *Store) TeamMembers(key string) []string {
 	return nil
 }
 
+// TeamKeysForUser returns the keys of every team the user belongs to, counting
+// both the designated leader and listed members.
+func (s *Store) TeamKeysForUser(u User) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var keys []string
+	for _, t := range s.teams {
+		if strings.EqualFold(t.Leader, u.Username) || strings.EqualFold(t.Leader, u.ID) {
+			keys = append(keys, t.Key)
+			continue
+		}
+		for _, m := range t.Members {
+			if strings.EqualFold(m, u.Username) || strings.EqualFold(m, u.ID) {
+				keys = append(keys, t.Key)
+				break
+			}
+		}
+	}
+	return keys
+}
+
+// AllCategories returns a flat copy of every category (with ParentID links).
+func (s *Store) AllCategories() []Category {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Category, len(s.categories))
+	copy(out, s.categories)
+	return out
+}
+
 // CategoryName returns the display name for a category id (or the id if unknown).
 func (s *Store) CategoryName(id string) string {
 	s.mu.RLock()
