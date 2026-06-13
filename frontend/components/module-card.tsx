@@ -21,7 +21,7 @@ export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (mo
           <span>channel: {module.channel}</span>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {module.keywords.map((tag) => (
+          {(module.keywords || []).map((tag) => (
             <span className="tag" key={tag}>{tag}</span>
           ))}
         </div>
@@ -34,7 +34,7 @@ export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (mo
         </div>
         <div>
           <dt className="muted">文档类型</dt>
-          <dd className="flex items-center gap-1"><BookOpen size={14} /> {module.keywords.includes("fumadocs") ? "Fumadocs" : module.keywords.includes("vuepress") ? "VuePress" : "Markdown"}</dd>
+          <dd className="flex items-center gap-1"><BookOpen size={14} /> {(module.keywords || []).includes("fumadocs") ? "Fumadocs" : (module.keywords || []).includes("vuepress") ? "VuePress" : "Markdown"}</dd>
         </div>
         <div>
           <dt className="muted">阅读 30d</dt>

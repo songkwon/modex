@@ -146,9 +146,9 @@ func NewSeeded() *Store {
 		{ID: "e-fumadocs-guide", ModuleKey: "FumadocsKit", DocsVersion: "latest", EntryKey: "guide", Title: "Fumadocs 文档站接入", EntryType: "fumadocs", Builder: "fumadocs", Source: "content/docs", StorageURI: "minio://modex/FumadocsKit/latest/site/guide/index.html", NavURI: "minio://modex/FumadocsKit/latest/nav.json", IndexStatus: "indexed", IsPrimary: true, SortOrder: 1, Status: "active", CreatedAt: now},
 	}
 	s.pages = []Page{
-		{ID: "p-demo-guide", DocID: "DemoModule:latest:guide", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "guide", EntryType: "markdown", Title: "模块落地指导", Description: "面向业务开发人员的模块接入、部署、接口和异常处理说明。", Path: "/docs/DemoModule/latest/guide", SourceFile: "docs/integration-guide.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "cad"}, ContentText: "模块落地指导说明如何接入 DemoModule，包括接口设计、部署运行、异常处理、风险影响面和发布检查。", UpdatedAt: now},
-		{ID: "p-demo-maintenance", DocID: "DemoModule:latest:maintenance", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "maintenance", EntryType: "markdown", Title: "模块维护说明", Description: "面向维护开发人员的架构、设计、流程和维护说明。", Path: "/docs/DemoModule/latest/maintenance", SourceFile: "docs/maintenance-guide.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "cad", "architecture"}, ContentText: "模块维护说明包含总体架构、设计原则、模块结构、核心流程、时序逻辑、前后端设计和质量可维护性要求。", UpdatedAt: now},
-		{ID: "p-cbb-build", DocID: "CBB:latest:build-cache", ModuleKey: "CBB", ModuleName: "CBB 文档", DocsVersion: "latest", PackageVersion: "2.8.0", EntryKey: "build-cache", EntryType: "markdown", Title: "构建缓存清理", Description: "CBB 构建缓存清理和常见构建问题排查。", Path: "/docs/CBB/latest/build-cache", SourceFile: "docs/build-cache.md", DocType: "markdown", Status: "active", OwnerGroup: "engineering", CategoryIDs: []string{"engineering", "engineering.cbb"}, Tags: []string{"cbb", "ci", "build"}, ContentText: "构建缓存清理用于解决依赖缓存、编译缓存和 CI 工作区残留导致的构建异常。可以重新拉取依赖并清理本地缓存。", UpdatedAt: now},
+		{ID: "p-demo-guide", DocID: "DemoModule:latest:guide", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "guide", EntryType: "markdown", Title: "模块落地指导", Description: "面向业务开发人员的模块接入、部署、接口和异常处理说明。", Path: "/docs/DemoModule/latest/guide", SourceFile: "docs/integration-guide.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "cad"}, ContentText: "模块落地指导说明如何接入 DemoModule，包括接口设计、部署运行、异常处理、风险影响面和发布检查。", ContentMD: seedDemoGuideMD, UpdatedAt: now},
+		{ID: "p-demo-maintenance", DocID: "DemoModule:latest:maintenance", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "maintenance", EntryType: "markdown", Title: "模块维护说明", Description: "面向维护开发人员的架构、设计、流程和维护说明。", Path: "/docs/DemoModule/latest/maintenance", SourceFile: "docs/maintenance-guide.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "cad", "architecture"}, ContentText: "模块维护说明包含总体架构、设计原则、模块结构、核心流程、时序逻辑、前后端设计和质量可维护性要求。", ContentMD: seedDemoMaintenanceMD, UpdatedAt: now},
+		{ID: "p-cbb-build", DocID: "CBB:latest:build-cache", ModuleKey: "CBB", ModuleName: "CBB 文档", DocsVersion: "latest", PackageVersion: "2.8.0", EntryKey: "build-cache", EntryType: "markdown", Title: "构建缓存清理", Description: "CBB 构建缓存清理和常见构建问题排查。", Path: "/docs/CBB/latest/build-cache", SourceFile: "docs/build-cache.md", DocType: "markdown", Status: "active", OwnerGroup: "engineering", CategoryIDs: []string{"engineering", "engineering.cbb"}, Tags: []string{"cbb", "ci", "build"}, ContentText: "构建缓存清理用于解决依赖缓存、编译缓存和 CI 工作区残留导致的构建异常。可以重新拉取依赖并清理本地缓存。", ContentMD: seedCBBBuildCacheMD, UpdatedAt: now},
 		{ID: "p-vuepress-guide", DocID: "VuePressGuide:latest:guide", ModuleKey: "VuePressGuide", ModuleName: "VuePressGuide", DocsVersion: "latest", PackageVersion: "0.4.0", EntryKey: "guide", EntryType: "vuepress", Title: "VuePress 文档站接入", Description: "VuePress 文档通过 docsctl 执行构建命令并复制 dist 输出目录。", Path: "/docs/VuePressGuide/latest/guide", SourceFile: "docs/README.md", DocType: "vuepress", Status: "active", OwnerGroup: "frontend-platform", CategoryIDs: []string{"frontend", "frontend.docs"}, Tags: []string{"vuepress", "frontend", "markdown"}, ContentText: "VuePress 文档站接入说明如何声明 docs.yaml、执行 npm run docs:build、复制 docs/.vuepress/dist 并生成标准文档包。", UpdatedAt: now.Add(-2 * time.Hour)},
 		{ID: "p-fumadocs-guide", DocID: "FumadocsKit:latest:guide", ModuleKey: "FumadocsKit", ModuleName: "FumadocsKit", DocsVersion: "latest", PackageVersion: "0.2.0", EntryKey: "guide", EntryType: "fumadocs", Title: "Fumadocs 文档站接入", Description: "Fumadocs 文档通过 Next.js 与 MDX 构建，适合现代前端文档站。", Path: "/docs/FumadocsKit/latest/guide", SourceFile: "content/docs/index.mdx", DocType: "fumadocs", Status: "active", OwnerGroup: "frontend-platform", CategoryIDs: []string{"frontend", "frontend.docs"}, Tags: []string{"fumadocs", "nextjs", "mdx", "frontend"}, ContentText: "Fumadocs 文档站接入说明如何维护 MDX 内容、运行 Next.js 构建、输出静态站点并交给 Modex 进行搜索和 MCP 读取。", UpdatedAt: now.Add(-90 * time.Minute)},
 	}
@@ -182,9 +182,39 @@ func (s *Store) Users(keyword string) []User {
 func (s *Store) UserByID(id string) (User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.userByIDLocked(id)
+}
+
+// userByIDLocked looks up a user without acquiring the lock; callers must hold
+// s.mu (read or write).
+func (s *Store) userByIDLocked(id string) (User, error) {
 	for _, u := range s.users {
 		if u.ID == id {
 			return u, nil
+		}
+	}
+	return User{}, ErrNotFound
+}
+
+func (s *Store) UserByMCPToken(token string) (User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, u := range s.users {
+		if u.MCPToken == token {
+			return u, nil
+		}
+	}
+	return User{}, ErrNotFound
+}
+
+func (s *Store) SetUserMCPToken(id string, token string) (User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.users {
+		if s.users[i].ID == id {
+			s.users[i].MCPToken = token
+			s.users[i].UpdatedAt = time.Now().UTC()
+			return s.users[i], nil
 		}
 	}
 	return User{}, ErrNotFound
@@ -587,6 +617,24 @@ func (s *Store) CategoryName(id string) string {
 	return id
 }
 
+func (s *Store) categoryPathLocked(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, id := range ids {
+		name := id
+		for _, c := range s.categories {
+			if c.ID == id {
+				name = c.Name
+				break
+			}
+		}
+		parts = append(parts, name)
+	}
+	return strings.Join(parts, " / ")
+}
+
 // EntryModuleKey returns the module key that owns an entry, for permission checks.
 func (s *Store) EntryModuleKey(entryID string) (string, bool) {
 	s.mu.RLock()
@@ -849,7 +897,10 @@ func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 		m.LastSyncedAt = now
 		m.UpdatedAt = now
 	}
-	module := s.modules[moduleIdx]
+	// Preserve existing category assignment and rebuild the display path from
+	// current categories so the admin UI and module cards show the right labels.
+	module := &s.modules[moduleIdx]
+	module.CategoryPath = s.categoryPathLocked(module.CategoryIDs)
 	versionFound := false
 	for i := range s.versions {
 		if strings.EqualFold(s.versions[i].ModuleKey, a.ModuleKey) && s.versions[i].DocsVersion == a.DocsVersion {
@@ -939,6 +990,7 @@ func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 			CategoryIDs:    cloneStrings(module.CategoryIDs),
 			Tags:           cloneStrings(coalesceStrings(d.Keywords, a.Keywords)),
 			ContentText:    d.Content,
+			ContentMD:      d.ContentMD,
 			UpdatedAt:      now,
 		})
 	}
@@ -1146,6 +1198,86 @@ func (s *Store) seedReadsLocked(moduleKey string, week bool) int {
 		}
 	}
 	return 0
+}
+
+// PageReadStats aggregates recorded views for one document into a daily read
+// trend (last `days` days, inclusive of today) plus a per-reader breakdown.
+// Readers are keyed by user id, falling back to session id for anonymous views.
+func (s *Store) PageReadStats(docID string, days int) PageReadStats {
+	if days <= 0 {
+		days = 30
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	now := time.Now().UTC()
+	today := now.Truncate(24 * time.Hour)
+	// Pre-seed every day in the window so the line chart has no gaps.
+	idxByDate := map[string]int{}
+	daily := make([]DailyReadPoint, days)
+	for i := 0; i < days; i++ {
+		d := today.AddDate(0, 0, -(days - 1 - i))
+		key := d.Format("2006-01-02")
+		daily[i] = DailyReadPoint{Date: key, Count: 0}
+		idxByDate[key] = i
+	}
+	windowStart := today.AddDate(0, 0, -(days - 1))
+
+	type ragg struct {
+		userID string
+		count  int
+		last   time.Time
+	}
+	readers := map[string]*ragg{}
+	total := 0
+	for _, pv := range s.pageViews {
+		if pv.DocID != docID {
+			continue
+		}
+		total++
+		if !pv.ViewedAt.Before(windowStart) {
+			if i, ok := idxByDate[pv.ViewedAt.UTC().Format("2006-01-02")]; ok {
+				daily[i].Count++
+			}
+		}
+		key := pv.UserID
+		if key == "" {
+			key = "session:" + pv.SessionID
+		}
+		r := readers[key]
+		if r == nil {
+			r = &ragg{userID: pv.UserID}
+			readers[key] = r
+		}
+		r.count++
+		if pv.ViewedAt.After(r.last) {
+			r.last = pv.ViewedAt
+		}
+	}
+
+	out := PageReadStats{DocID: docID, Total: total, Daily: daily, Readers: []ReaderStat{}}
+	for _, r := range readers {
+		name := "匿名"
+		if r.userID != "" {
+			if u, err := s.userByIDLocked(r.userID); err == nil {
+				if u.DisplayName != "" {
+					name = u.DisplayName
+				} else if u.Username != "" {
+					name = u.Username
+				}
+			} else {
+				name = r.userID
+			}
+		}
+		out.Readers = append(out.Readers, ReaderStat{Reader: name, UserID: r.userID, Count: r.count, LastReadAt: r.last})
+	}
+	sort.Slice(out.Readers, func(i, j int) bool {
+		if out.Readers[i].Count != out.Readers[j].Count {
+			return out.Readers[i].Count > out.Readers[j].Count
+		}
+		return out.Readers[i].LastReadAt.After(out.Readers[j].LastReadAt)
+	})
+	return out
 }
 
 // CreateCategory adds a new category. Key is required and must be unique.

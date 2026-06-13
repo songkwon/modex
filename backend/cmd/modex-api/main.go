@@ -23,10 +23,15 @@ func main() {
 	httpServer := &http.Server{Addr: addr, Handler: srv.Handler()}
 
 	// Periodic + graceful-shutdown persistence when DATA_DIR is configured.
+	// The autosave goroutine gets its own stop channel (closed by main after the
+	// OS signal). Sharing the signal channel would race: a signal delivered to a
+	// channel wakes only ONE receiver, so the autosave goroutine could consume it
+	// and leave main's `<-stop` blocked forever, skipping the final save.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	autosaveStop := make(chan struct{})
 	if snapshotPath != "" {
-		go autosave(st, snapshotPath, stop)
+		go autosave(st, snapshotPath, autosaveStop)
 	}
 
 	go func() {
@@ -37,6 +42,7 @@ func main() {
 	}()
 
 	<-stop
+	close(autosaveStop)
 	if snapshotPath != "" {
 		if err := st.Save(snapshotPath); err != nil {
 			log.Printf("final snapshot save failed: %v", err)
@@ -68,7 +74,7 @@ func loadStore() (*store.Store, string) {
 	}
 }
 
-func autosave(st *store.Store, path string, stop <-chan os.Signal) {
+func autosave(st *store.Store, path string, stop <-chan struct{}) {
 	interval := 60 * time.Second
 	if v := os.Getenv("DATA_SAVE_INTERVAL_SECONDS"); v != "" {
 		if d, err := time.ParseDuration(v + "s"); err == nil && d > 0 {

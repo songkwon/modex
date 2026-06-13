@@ -48,7 +48,7 @@ func Build(root, outDir string) error {
 			nav = append(nav, navItem)
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
 		case "vitepress", "vuepress", "fumadocs":
-			if err := buildCommandEntry(root, outDir, entry); err != nil {
+			if _, err := buildCommandEntry(root, outDir, md, entry); err != nil {
 				return err
 			}
 			label := "VuePress"
@@ -58,9 +58,18 @@ func Build(root, outDir string) error {
 			case "vitepress":
 				label = "VitePress"
 			}
-			rec := recordFor(md, entry, label+" 文档已构建，详情见静态站点。")
-			records = append(records, rec)
+			// Index from the source markdown (one record per page/route) rather
+			// than the stripped site HTML, which is a single nav-polluted blob.
+			// Each record's Path is the in-site route so search hits deep-link
+			// into the embedded site.
+			pageRecs, fullText := buildSiteMarkdownRecords(root, md, entry)
+			if len(pageRecs) == 0 {
+				pageRecs = []DocumentRecord{recordFor(md, entry, label+" 文档已构建，详情见静态站点。")}
+				fullText = entry.Title + " 文档已构建，详情见静态站点。"
+			}
+			records = append(records, pageRecs...)
 			nav = append(nav, NavItem{Title: entry.Title, Path: "/" + entry.Key})
+			full.WriteString("# " + entry.Title + "\n\n" + fullText + "\n\n")
 		default:
 			return fmt.Errorf("unsupported entry type %q", entry.Type)
 		}
@@ -88,17 +97,98 @@ func Build(root, outDir string) error {
 	return copyAssets(root, outDir)
 }
 
-func buildCommandEntry(root, outDir string, entry Entry) error {
+func buildCommandEntry(root, outDir string, md Metadata, entry Entry) (string, error) {
+	if err := ensureNodeModules(root); err != nil {
+		return "", err
+	}
 	if entry.Build != "" {
 		cmd := exec.Command("sh", "-c", entry.Build)
 		cmd.Dir = root
+		// DOCS_BASE must match the URL path Modex serves the static site from,
+		// so VitePress emits asset/router paths that resolve under Modex
+		// (GET /api/docs/{module}/{version}/{entry}/site/...). The doc's
+		// config reads process.env.DOCS_BASE (falling back to its own default
+		// for standalone deploys).
+		base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, entry.Key)
+		cmd.Env = append(os.Environ(), "DOCS_BASE="+base)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return copyDir(filepath.Join(root, entry.Output), filepath.Join(outDir, "site", entry.Key))
+	siteDir := filepath.Join(outDir, "site", entry.Key)
+	if err := copyDir(filepath.Join(root, entry.Output), siteDir); err != nil {
+		return "", err
+	}
+	return extractSiteText(siteDir), nil
+}
+
+// extractSiteText walks the generated static site and returns plain text from
+// HTML files, stripping scripts/styles so the content can be indexed by Modex.
+func extractSiteText(dir string) string {
+	var out strings.Builder
+	reTags := regexp.MustCompile(`<[^>]+>`)
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".html") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		text := stripHTMLForIndex(string(b), reTags)
+		if text != "" {
+			out.WriteString(text)
+			out.WriteString("\n\n")
+		}
+		return nil
+	})
+	return strings.TrimSpace(out.String())
+}
+
+func stripHTMLForIndex(html string, reTags *regexp.Regexp) string {
+	without := strings.ReplaceAll(html, "\\n", "\n")
+	without = regexp.MustCompile(`<script\b[^>]*>[\s\S]*?<\/script>`).ReplaceAllString(without, " ")
+	without = regexp.MustCompile(`<style\b[^>]*>[\s\S]*?<\/style>`).ReplaceAllString(without, " ")
+	without = reTags.ReplaceAllString(without, " ")
+	return strings.Join(strings.Fields(without), " ")
+}
+
+// ensureNodeModules installs dependencies for Node-based doc builders when a
+// package.json exists and node_modules is missing or stale. Set
+// DOCS_NPM_INSTALL=0 to skip.
+func ensureNodeModules(root string) error {
+	if os.Getenv("DOCS_NPM_INSTALL") == "0" || os.Getenv("DOCS_NPM_INSTALL") == "false" {
+		return nil
+	}
+	pkg := filepath.Join(root, "package.json")
+	if _, err := os.Stat(pkg); err != nil {
+		return nil
+	}
+	mods := filepath.Join(root, "node_modules")
+	info, err := os.Stat(mods)
+	if err == nil && info.IsDir() {
+		// Reinstall if package.json is newer than node_modules.
+		pkgInfo, err := os.Stat(pkg)
+		if err == nil && pkgInfo.ModTime().After(info.ModTime()) {
+			return runNPMInstall(root)
+		}
+		return nil
+	}
+	return runNPMInstall(root)
+}
+
+func runNPMInstall(root string) error {
+	fmt.Println("docsctl: installing npm dependencies in", root)
+	cmd := exec.Command("npm", "install")
+	cmd.Dir = root
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("npm install failed in %s (set DOCS_NPM_INSTALL=0 to skip): %w", root, err)
+	}
+	return nil
 }
 
 func Package(buildDir, artifact string) error {
@@ -161,6 +251,7 @@ func buildMarkdown(root, outDir string, md Metadata, entry Entry) (DocumentRecor
 		return DocumentRecord{}, NavItem{}, "", err
 	}
 	rec := recordFor(md, entry, stripMarkdown(text))
+	rec.ContentMD = strings.TrimSpace(stripFrontmatter(text))
 	return rec, NavItem{Title: entry.Title, Path: "/" + entry.Key, Children: headings(text)}, stripMarkdown(text), nil
 }
 
@@ -207,6 +298,122 @@ func recordFor(md Metadata, entry Entry, content string) DocumentRecord {
 		EntryType: entry.Type, Title: entry.Title, Description: desc, Content: content, Path: "/" + entry.Key,
 		SourceFile: entry.Source, Keywords: md.Keywords, Status: "active",
 	}
+}
+
+// buildSiteMarkdownRecords walks the entry's source markdown tree and returns
+// one DocumentRecord per page plus the concatenated clean text (for llms-full).
+// It is used for site-builder entries (VitePress/VuePress/Fumadocs) so search
+// has per-page granularity and clean content instead of stripped site HTML.
+func buildSiteMarkdownRecords(root string, md Metadata, entry Entry) ([]DocumentRecord, string) {
+	srcDir := entry.Source
+	if srcDir == "" {
+		srcDir = "."
+	}
+	base := filepath.Join(root, srcDir)
+	var recs []DocumentRecord
+	var full strings.Builder
+	_ = filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		name := info.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".md") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(base, path)
+		if relErr != nil {
+			return nil
+		}
+		// Skip VitePress/VuePress internals and dotfiles.
+		relSlash := filepath.ToSlash(rel)
+		if strings.HasPrefix(relSlash, ".vitepress/") || strings.HasPrefix(relSlash, ".vuepress/") || strings.HasPrefix(relSlash, "node_modules/") {
+			return nil
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		body := stripFrontmatter(string(raw))
+		clean := strings.TrimSpace(body)
+		if clean == "" {
+			return nil
+		}
+		route := routeForMarkdown(relSlash)
+		title := markdownTitle(body)
+		if title == "" {
+			title = entry.Title
+		}
+		text := stripMarkdown(body)
+		desc := text
+		if len(desc) > 140 {
+			desc = desc[:140]
+		}
+		recs = append(recs, DocumentRecord{
+			DocID:          md.ModuleKey + ":" + md.DocsVersion + ":" + entry.Key + route,
+			ModuleKey:      md.ModuleKey,
+			ModuleName:     md.ModuleName,
+			DocsVersion:    md.DocsVersion,
+			PackageVersion: md.PackageVersion,
+			EntryKey:       entry.Key,
+			EntryType:      entry.Type,
+			Title:          title,
+			Description:    desc,
+			Content:        clean,
+			ContentMD:      clean,
+			Path:           route,
+			SourceFile:     filepath.ToSlash(filepath.Join(srcDir, rel)),
+			Keywords:       md.Keywords,
+			Status:         "active",
+		})
+		full.WriteString("## " + title + "\n\n" + clean + "\n\n")
+		return nil
+	})
+	return recs, strings.TrimSpace(full.String())
+}
+
+// routeForMarkdown maps a source-relative markdown path to its VitePress route.
+//
+//	index.md            -> /
+//	maintenance/index.md -> /maintenance/
+//	tools/git.md        -> /tools/git
+func routeForMarkdown(rel string) string {
+	rel = strings.TrimSuffix(filepath.ToSlash(rel), ".md")
+	switch {
+	case rel == "index":
+		return "/"
+	case strings.HasSuffix(rel, "/index"):
+		return "/" + strings.TrimSuffix(rel, "index") // keep trailing slash
+	default:
+		return "/" + rel
+	}
+}
+
+// markdownTitle returns the YAML frontmatter `title:` or the first ATX H1.
+func markdownTitle(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "# ") {
+			return strings.TrimSpace(strings.TrimPrefix(trim, "# "))
+		}
+	}
+	return ""
+}
+
+// stripFrontmatter removes a leading YAML frontmatter block (--- ... ---).
+func stripFrontmatter(text string) string {
+	t := strings.TrimLeft(text, "\ufeff \t\r\n")
+	if !strings.HasPrefix(t, "---") {
+		return text
+	}
+	rest := strings.TrimPrefix(t, "---")
+	if idx := strings.Index(rest, "\n---"); idx >= 0 {
+		after := rest[idx+len("\n---"):]
+		if nl := strings.IndexByte(after, '\n'); nl >= 0 {
+			return after[nl+1:]
+		}
+		return ""
+	}
+	return text
 }
 
 func markdownToHTML(text string) string {

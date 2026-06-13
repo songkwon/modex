@@ -36,6 +36,7 @@ export const getDeployToken = (moduleKey: string) => api<{ deploy_token: string;
 export const rotateDeployToken = (moduleKey: string) => api<{ deploy_token: string; deploy_url: string; module_key: string }>(`/api/admin/modules/${moduleKey}/deploy-token`, { method: "POST", body: "{}" });
 export const getModule = (moduleKey: string) => api<ModuleInfo>(`/api/modules/${moduleKey}/info`);
 export const getEntries = (moduleKey: string, version: string) => api<any[]>(`/api/modules/${moduleKey}/versions/${version}/entries`);
+export const getNav = (moduleKey: string, version: string, entry: string) => api<{ title: string; path: string; children?: { title: string; path: string }[] }[]>(`/api/docs/${moduleKey}/${version}/${entry}/nav`);
 export const getPage = (moduleKey: string, version: string, entry: string) => api<any>(`/api/docs/${moduleKey}/${version}/${entry}`);
 export const searchDocs = (body: unknown) => api<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify(body) });
 export const askAI = (query: string, scope?: { module_key?: string; category_ids?: string[] }) =>
@@ -48,6 +49,17 @@ export const recordReadProgress = (body: { doc_id: string; session_id: string; d
   api<{ status: string }>("/api/analytics/read-progress", { method: "POST", body: JSON.stringify(body) });
 
 export const getPageAnalytics = () => api<AnalyticsPages>("/api/admin/analytics/pages");
+
+export type DocReadStats = {
+  doc_id: string;
+  total: number;
+  daily: { date: string; count: number }[];
+  readers: { reader: string; user_id: string; count: number; last_read_at: string }[];
+};
+export const getDocAnalytics = (docId: string, days = 30) =>
+  api<{ source: "internal" | "posthog"; stats: DocReadStats }>(
+    `/api/analytics/doc?doc_id=${encodeURIComponent(docId)}&days=${days}`
+  );
 
 export const getUsers = (keyword = "") => api<User[]>(`/api/admin/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`);
 export const createUser = (body: Partial<User>) => api<User>("/api/admin/users", { method: "POST", body: JSON.stringify(body) });
@@ -77,6 +89,7 @@ export const reindexEmbeddings = () => api<Record<string, unknown>>("/api/embedd
 
 // Admin platform settings (AI model connection). Key is write-only; reads return ask_api_key_set.
 export type AISettings = {
+  ask_protocol?: string;
   ask_base_url?: string;
   ask_model?: string;
   ask_api_key?: string;
@@ -86,5 +99,8 @@ export type AISettings = {
 export type PlatformSettings = { ai: AISettings; ask_api_key_set: boolean };
 export const getSettings = () => api<PlatformSettings>("/api/admin/settings");
 export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify(ai) });
-export const fetchModels = (base_url: string, api_key?: string) =>
-  api<{ models: string[] }>("/api/admin/settings/models", { method: "POST", body: JSON.stringify({ base_url, api_key: api_key || "" }) });
+export const fetchModels = (base_url: string, api_key?: string, protocol?: string) =>
+  api<{ models: string[] }>("/api/admin/settings/models", { method: "POST", body: JSON.stringify({ base_url, api_key: api_key || "", protocol: protocol || "" }) });
+
+export const getMCPToken = () => api<{ mcp_token: string }>("/api/me/mcp-token");
+export const rotateMCPToken = () => api<{ mcp_token: string }>("/api/me/mcp-token", { method: "POST", body: "{}" });

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, GitBranch, Pencil, Plus, Search } from "lucide-react";
+import { Boxes, GitBranch, Pencil, Plus, Search } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { createModule, getCategories, getDeployToken, getModules, rotateDeployToken, updateModule } from "@/lib/api";
 import type { Category, ModuleInfo } from "@/types/modex";
@@ -32,6 +34,12 @@ type Draft = {
 };
 
 const emptyDraft: Draft = { name: "", doc_type: "vitepress", mount: "single", category_ids: [], description: "" };
+
+function maskToken(t: string) {
+  if (!t) return "";
+  if (t.length <= 10) return "•".repeat(t.length);
+  return `${t.slice(0, 6)}${"•".repeat(Math.max(8, t.length - 10))}${t.slice(-4)}`;
+}
 
 function flatten(cats: Category[], depth = 0): ComboOption[] {
   return cats.flatMap((c) => [{ value: c.id, label: c.name, hint: c.key, depth }, ...flatten(c.children || [], depth + 1)]);
@@ -187,12 +195,13 @@ export default function AdminModulesPage() {
                 </tr>
               ))}
               {!pageItems.length ? (
-                <tr><td colSpan={6}><div className="empty-state" style={{ minHeight: 160, border: 0, background: "transparent" }}>
-                  <div>
-                    <div style={{ fontWeight: 640, color: "hsl(var(--foreground))" }}>暂无文档源</div>
-                    <p style={{ marginTop: 4, fontSize: 13 }}>点击「接入文档源」绑定一个文档仓库到分类。</p>
-                  </div>
-                </div></td></tr>
+                <tr><td colSpan={6}>
+                  <EmptyState
+                    icon={Boxes}
+                    title="暂无文档源"
+                    hint="点击右上角「接入文档源」绑定一个文档仓库到分类，CI 推送后即可归档。"
+                  />
+                </td></tr>
               ) : null}
             </tbody>
           </table>
@@ -258,11 +267,16 @@ export default function AdminModulesPage() {
           <div className="field">
             <label>Deploy Token</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input readOnly value={token.deploy_token} style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} onFocus={(e) => e.currentTarget.select()} />
-              <button className="icon-btn" title="复制" onClick={() => navigator.clipboard?.writeText(token.deploy_token)}><Copy size={14} /></button>
+              <input
+                readOnly
+                value={maskToken(token.deploy_token)}
+                style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, letterSpacing: 1, flex: 1 }}
+                tabIndex={-1}
+              />
+              <CopyButton value={token.deploy_token} title="复制完整 Token" />
               <button className="button" onClick={rotate}>重新生成</button>
             </div>
-            <span className="field-hint">在文档仓库 GitLab CI 变量里设为 <code className="code-chip">MODEX_DEPLOY_TOKEN</code>（Masked）。仓库地址/分支会在首次 CI 推送时自动带过来。</span>
+            <span className="field-hint">出于安全考虑 Token 仅以掩码展示，点击复制按钮可拷贝完整值。在文档仓库 GitLab CI 变量里设为 <code className="code-chip">MODEX_DEPLOY_TOKEN</code>（Masked）。仓库地址/分支会在首次 CI 推送时自动带过来。</span>
           </div>
         ) : null}
       </Modal>

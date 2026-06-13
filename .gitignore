@@ -26,6 +26,10 @@ deploy/.env
 
 # docsctl build output
 **/.modex/
+/tools/docsctl/docsctl
+
+# Serena tool metadata
+.serena/
 
 # Node / Next.js
 node_modules/

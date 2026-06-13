@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, Users as UsersIcon } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { Pagination } from "@/components/ui/pagination";
-import { createUser, deleteUser, getCategories, getGroups, getTeams, getUsers, updateUser } from "@/lib/api";
-import type { Category, Group, Team, User } from "@/types/modex";
+import { Switch } from "@/components/ui/switch";
+import { EmptyState } from "@/components/ui/empty-state";
+import { createUser, deleteUser, getCategories, getTeams, getUsers, updateUser } from "@/lib/api";
+import type { Category, Team, User } from "@/types/modex";
 
-const ROLES = ["admin", "maintainer", "viewer"];
 const PAGE_SIZE = 8;
 
 type Draft = {
@@ -18,8 +19,6 @@ type Draft = {
   display_name: string;
   email: string;
   department: string;
-  groups: string[];
-  roles: string[];
   managed_categories: string[];
   is_super_admin: boolean;
   status: string;
@@ -30,8 +29,6 @@ const emptyDraft: Draft = {
   display_name: "",
   email: "",
   department: "",
-  groups: [],
-  roles: ["viewer"],
   managed_categories: [],
   is_super_admin: false,
   status: "active",
@@ -50,7 +47,6 @@ function flattenCategories(tree: Category[]): ComboOption[] {
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -71,24 +67,26 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     refresh("");
-    getGroups().then(setGroups).catch(() => {});
     getTeams().then(setTeams).catch(() => {});
     getCategories().then(setCategories).catch(() => {});
   }, []);
 
-  // Identity is a single derived tier: super admin > team leader > regular user.
+  // Identity is a single derived tier: super admin > team leader > member.
   const leaderUsernames = useMemo(() => new Set((teams || []).map((t) => t.leader).filter(Boolean)), [teams]);
   function identityOf(u: User): { label: string; cls: string } {
     if (u.is_super_admin) return { label: "超级管理员", cls: "badge-danger" };
     if (leaderUsernames.has(u.username)) return { label: "团队负责人", cls: "badge-success" };
-    return { label: "普通用户", cls: "" };
+    return { label: "成员", cls: "" };
   }
 
-  const groupOptions: ComboOption[] = useMemo(
-    () => groups.map((g) => ({ value: g.group_key, label: g.name || g.group_key, hint: g.group_key })),
-    [groups],
-  );
-  const roleOptions: ComboOption[] = ROLES.map((r) => ({ value: r, label: r }));
+  // Team membership is owned by the Team (leader + members), so a user's teams
+  // are derived here rather than stored on the user.
+  function teamsOf(u: User): string[] {
+    return (teams || [])
+      .filter((t) => t.leader === u.username || (t.members || []).includes(u.username))
+      .map((t) => t.name || t.key);
+  }
+
   const categoryOptions = useMemo(() => flattenCategories(categories), [categories]);
 
   const pageUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -104,8 +102,6 @@ export default function AdminUsersPage() {
       display_name: u.display_name || "",
       email: u.email || "",
       department: u.department || "",
-      groups: u.groups || [],
-      roles: u.roles || [],
       managed_categories: u.managed_categories || [],
       is_super_admin: !!u.is_super_admin,
       status: u.status || "active",
@@ -121,8 +117,6 @@ export default function AdminUsersPage() {
           display_name: draft.display_name,
           email: draft.email,
           department: draft.department,
-          groups: draft.groups,
-          roles: draft.roles,
           managed_categories: draft.managed_categories,
           is_super_admin: draft.is_super_admin,
           status: draft.status,
@@ -133,15 +127,12 @@ export default function AdminUsersPage() {
           display_name: draft.display_name,
           email: draft.email,
           department: draft.department,
-          groups: draft.groups,
-          roles: draft.roles,
           managed_categories: draft.managed_categories,
           is_super_admin: draft.is_super_admin,
         });
       }
       setModalOpen(false);
       await refresh();
-      getGroups().then(setGroups).catch(() => {});
     } catch (e) {
       setError(String(e));
     }
@@ -158,7 +149,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <AdminShell title="用户管理" kicker="Users & Groups" description="管理用户身份、用户组和角色。OIDC 登录时用户与用户组会自动同步到此目录。">
+    <AdminShell title="用户管理" kicker="Users" description="管理用户资料与权限。团队归属在「团队管理」中维护；使用 OIDC 登录时用户会自动同步到此目录。">
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <div className="admin-toolbar">
@@ -187,7 +178,7 @@ export default function AdminUsersPage() {
                 <th>邮箱</th>
                 <th>部门</th>
                 <th>身份</th>
-                <th>用户组</th>
+                <th>团队</th>
                 <th>状态</th>
                 <th style={{ textAlign: "right" }}>操作</th>
               </tr>
@@ -195,16 +186,17 @@ export default function AdminUsersPage() {
             <tbody>
               {pageUsers.map((u) => {
                 const ident = identityOf(u);
+                const userTeams = teamsOf(u);
                 return (
                 <tr key={u.id}>
                   <td><div style={{ fontWeight: 640 }}>{u.display_name || u.username}</div></td>
                   <td className="muted" style={{ fontSize: 13 }}>{u.email || "—"}</td>
                   <td>{u.department || "—"}</td>
                   <td><span className={`badge ${ident.cls}`}>{ident.label}</span></td>
-                  <td>{(u.groups || []).length ? (u.groups || []).map((g) => <span className="tag" key={g} style={{ marginRight: 4 }}>{g}</span>) : <span className="muted" style={{ fontSize: 12 }}>—</span>}</td>
+                  <td>{userTeams.length ? userTeams.map((t) => <span className="tag" key={t} style={{ marginRight: 4 }}>{t}</span>) : <span className="muted" style={{ fontSize: 12 }}>—</span>}</td>
                   <td>
                     <span className={`badge ${u.status === "disabled" ? "badge-danger" : "badge-success"}`}>
-                      <span className="badge-dot" />{u.status || "active"}
+                      <span className="badge-dot" />{u.status === "disabled" ? "已停用" : "启用"}
                     </span>
                   </td>
                   <td>
@@ -217,7 +209,13 @@ export default function AdminUsersPage() {
                 );
               })}
               {!pageUsers.length ? (
-                <tr><td colSpan={7}><div className="empty-state" style={{ minHeight: 160, border: 0, background: "transparent" }}>暂无用户</div></td></tr>
+                <tr><td colSpan={7}>
+                  <EmptyState
+                    icon={UsersIcon}
+                    title="暂无用户"
+                    hint="点击右上角「新增用户」创建第一个用户；使用 OIDC 登录时用户会自动出现在这里。"
+                  />
+                </td></tr>
               ) : null}
             </tbody>
           </table>
@@ -229,7 +227,7 @@ export default function AdminUsersPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={isEdit ? `编辑用户 · ${draft.username}` : "新增用户"}
-        subtitle={isEdit ? "更新用户资料、用户组与权限" : "创建一个新的平台用户"}
+        subtitle={isEdit ? "更新用户资料与权限" : "创建一个新用户"}
         footer={
           <>
             <button className="button" onClick={() => setModalOpen(false)}>取消</button>
@@ -256,32 +254,33 @@ export default function AdminUsersPage() {
           </div>
           <div className="field">
             <label>部门</label>
-            <input value={draft.department} placeholder="如 工程化" onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
+            <input value={draft.department} placeholder="如 平台组" onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
           </div>
         </div>
         <div className="field">
-          <label>用户组</label>
-          <Combobox options={groupOptions} value={draft.groups} onChange={(groups) => setDraft({ ...draft, groups })} allowCreate placeholder="搜索或新增用户组…" />
-        </div>
-        <div className="field">
-          <label>角色</label>
-          <Combobox options={roleOptions} value={draft.roles} onChange={(roles) => setDraft({ ...draft, roles })} placeholder="选择角色…" />
-        </div>
-        <div className="field">
-          <label>可管理平台 / 领域</label>
-          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder="搜索能力域…" />
-          <span className="field-hint">超级管理员可管理全部领域，无需在此指定。</span>
+          <label>可管理分类</label>
+          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder="搜索分类…" />
+          <span className="field-hint">该用户可管理所选分类下的内容。超级管理员可管理全部分类，无需在此指定。</span>
         </div>
         {isEdit ? (
           <div className="field">
-            <label>状态</label>
-            <Combobox options={[{ value: "active", label: "active" }, { value: "disabled", label: "disabled" }]} value={[draft.status]} onChange={(v) => setDraft({ ...draft, status: v[0] || "active" })} multiple={false} />
+            <Switch
+              checked={draft.status !== "disabled"}
+              onChange={(on) => setDraft({ ...draft, status: on ? "active" : "disabled" })}
+              label="启用账号"
+              hint="停用后该用户将无法登录。"
+            />
           </div>
         ) : null}
-        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <input type="checkbox" style={{ width: "auto", height: "auto" }} checked={draft.is_super_admin} onChange={(e) => setDraft({ ...draft, is_super_admin: e.target.checked })} />
-          <span style={{ fontSize: 13 }}>超级管理员（拥有全部权限，可管理所有用户与领域）</span>
-        </label>
+        <div className="field">
+          <Switch
+            checked={draft.is_super_admin}
+            onChange={(on) => setDraft({ ...draft, is_super_admin: on })}
+            tone="danger"
+            label="超级管理员"
+            hint="拥有全部权限，可管理所有用户与分类。"
+          />
+        </div>
       </Modal>
     </AdminShell>
   );

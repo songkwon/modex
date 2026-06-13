@@ -412,3 +412,25 @@ migration, and the provider seams are already in place for that work.
 部署鉴权已在 `/api/deploy` 实现（支持全局 `DOCS_DEPLOY_TOKEN` 或 per-module token）。
 
 这使得 rd-doc 这样的外部仓库可以持续、结构化地同步到 modex 的指定领域，同时保持构建的完整性。
+
+## License
+
+Modex is licensed under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
+
+Copyright (C) 2026 songkwon
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+> AGPL note: if you run a modified version of Modex as a network service, you
+> must make the complete source code of your modified version available to its
+> users. See the full text in [LICENSE](LICENSE).
