@@ -2574,6 +2574,31 @@ tr:hover .row-actions { opacity: 1; }
 .mdx-mermaid { display: flex; justify-content: center; padding: 1rem; border: 1px solid hsl(var(--border)); border-radius: 12px; background: hsl(var(--panel)); overflow-x: auto; }
 .mdx-mermaid--error { color: hsl(0 64% 50%); font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; }
 
+/* Kroki diagrams (PlantUML / Graphviz / C4 / D2 / …) */
+.mdx-diagram { display: flex; justify-content: center; padding: 1rem; border: 1px solid hsl(var(--border)); border-radius: 12px; background: hsl(var(--panel)); overflow-x: auto; }
+.mdx-diagram svg { max-width: 100%; height: auto; }
+.mdx-diagram--error { flex-direction: column; gap: .5rem; align-items: flex-start; border-color: hsl(0 64% 50% / 0.4); }
+.mdx-diagram__tag { font-size: 12px; font-weight: 600; color: hsl(0 64% 50%); }
+.mdx-diagram--error pre { margin: 0; font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; }
+
+/* Auto table of contents ([[toc]]) */
+.mdx-toc { border: 1px solid hsl(var(--border)); border-radius: 10px; padding: .85rem 1.1rem; background: hsl(var(--panel-subtle)); margin: 1.2rem 0; }
+.mdx-toc ol { list-style: none; margin: 0; padding: 0; }
+.mdx-toc li { margin: .2rem 0; line-height: 1.4; }
+.mdx-toc a { color: hsl(var(--muted)); text-decoration: none; font-size: 13.5px; }
+.mdx-toc a:hover { color: hsl(var(--accent-strong)); }
+.mdx-toc__l3 { padding-left: 1.1rem; }
+.mdx-toc__l4 { padding-left: 2.2rem; }
+
+/* Footnotes (remark-gfm) */
+.mdx .footnotes { margin-top: 2.4rem; padding-top: 1rem; border-top: 1px solid hsl(var(--border)); font-size: 13.5px; color: hsl(var(--muted)); }
+.mdx .footnotes h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: hsl(var(--muted)); margin: 0 0 .6rem; }
+.mdx [data-footnote-ref] { font-size: .78em; font-weight: 600; padding: 0 .15em; text-decoration: none; color: hsl(var(--accent-strong)); }
+.mdx .data-footnote-backref { text-decoration: none; }
+
+/* KaTeX block formulas */
+.mdx .katex-display { overflow-x: auto; overflow-y: hidden; padding: .35rem 0; }
+
 .mdx--error { border: 1px solid hsl(38 90% 60% / 0.4); border-radius: 10px; padding: 1rem; }
 
 @media (max-width: 720px) {

@@ -3,6 +3,7 @@
 import { Children, ReactElement, ReactNode, isValidElement, useRef, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { Mermaid } from "./mermaid";
+import { Kroki, isKrokiLang } from "./kroki";
 
 function extractText(node: unknown): string {
   if (node == null) return "";
@@ -78,6 +79,9 @@ export function Pre({ children }: { children?: ReactNode }) {
   const parsed = parseCodeEl(codeEl);
   if (parsed.lang === "mermaid") {
     return <Mermaid chart={parsed.text} />;
+  }
+  if (isKrokiLang(parsed.lang)) {
+    return <Kroki lang={parsed.lang} code={parsed.text} />;
   }
   return (
     <CodeBlock lang={parsed.lang} filename={parsed.filename} text={parsed.text}>
