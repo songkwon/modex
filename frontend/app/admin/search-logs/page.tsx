@@ -48,44 +48,42 @@ export default function SearchLogsPage() {
             hint={keyword ? "换个关键词试试。" : "用户执行一次搜索（按回车或点击结果）后，记录会显示在这里。"}
           />
         ) : (
-          <>
-            <div className="table-scroll"><table className="data-table">
-              <thead>
-                <tr>
-                  <th>查询词</th>
-                  <th>模式</th>
-                  <th>结果数</th>
-                  <th>用户</th>
-                  <th>点击</th>
-                  <th>时间</th>
+          <div className="table-scroll"><table className="data-table">
+            <thead>
+              <tr>
+                <th>查询词</th>
+                <th>模式</th>
+                <th>结果数</th>
+                <th>用户</th>
+                <th>点击</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((log) => (
+                <tr key={log.id}>
+                  <td className="font-medium">{log.query || "-"}</td>
+                  <td><span className="tag">{log.mode}</span></td>
+                  <td>{log.result_count}</td>
+                  <td>
+                    {log.display_name ? (
+                      <span>{log.display_name}</span>
+                    ) : log.user_id ? (
+                      <span className="muted">{log.user_id}</span>
+                    ) : log.ip_address ? (
+                      <span className="muted">{log.ip_address}</span>
+                    ) : (
+                      <span className="muted">-</span>
+                    )}
+                  </td>
+                  <td>{log.clicked_doc_id || "-"}</td>
+                  <td>{log.searched_at?.slice(0, 19).replace("T", " ")}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((log) => (
-                  <tr key={log.id}>
-                    <td className="font-medium">{log.query || "-"}</td>
-                    <td><span className="tag">{log.mode}</span></td>
-                    <td>{log.result_count}</td>
-                    <td>
-                      {log.display_name ? (
-                        <span>{log.display_name}</span>
-                      ) : log.user_id ? (
-                        <span className="muted">{log.user_id}</span>
-                      ) : log.ip_address ? (
-                        <span className="muted">{log.ip_address}</span>
-                      ) : (
-                        <span className="muted">-</span>
-                      )}
-                    </td>
-                    <td>{log.clicked_doc_id || "-"}</td>
-                    <td>{log.searched_at?.slice(0, 19).replace("T", " ")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
-          </>
+              ))}
+            </tbody>
+          </table></div>
         )}
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
       </div>
     </AdminShell>
   );

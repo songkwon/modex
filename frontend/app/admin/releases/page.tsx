@@ -50,39 +50,37 @@ export default function ReleasesPage() {
             hint={keyword ? "换个关键词试试。" : "通过 CI 推送文档（docsctl deploy）后，每次发布都会记录在这里。"}
           />
         ) : (
-          <>
-            <div className="table-scroll"><table className="data-table">
-              <thead>
-                <tr>
-                  <th>Release</th>
-                  <th>模块</th>
-                  <th>文档版本</th>
-                  <th>发布人</th>
-                  <th>构建</th>
-                  <th>状态</th>
-                  <th>发布时间</th>
+          <div className="table-scroll"><table className="data-table">
+            <thead>
+              <tr>
+                <th>Release</th>
+                <th>模块</th>
+                <th>文档版本</th>
+                <th>发布人</th>
+                <th>构建</th>
+                <th>状态</th>
+                <th>发布时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r) => (
+                <tr key={r.release_id}>
+                  <td>
+                    <span className="code-chip">{r.release_id}</span>
+                    <div className="muted mt-1 text-xs">{r.artifact_version}</div>
+                  </td>
+                  <td>{r.module_key}</td>
+                  <td><span className="tag">{r.docs_version}</span></td>
+                  <td>{r.publisher}</td>
+                  <td>{r.build_system} #{r.build_id}</td>
+                  <td><span className="badge badge-success"><span className="badge-dot" />{r.status}</span></td>
+                  <td>{r.published_at?.slice(0, 10)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((r) => (
-                  <tr key={r.release_id}>
-                    <td>
-                      <span className="code-chip">{r.release_id}</span>
-                      <div className="muted mt-1 text-xs">{r.artifact_version}</div>
-                    </td>
-                    <td>{r.module_key}</td>
-                    <td><span className="tag">{r.docs_version}</span></td>
-                    <td>{r.publisher}</td>
-                    <td>{r.build_system} #{r.build_id}</td>
-                    <td><span className="badge badge-success"><span className="badge-dot" />{r.status}</span></td>
-                    <td>{r.published_at?.slice(0, 10)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
-          </>
+              ))}
+            </tbody>
+          </table></div>
         )}
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
       </div>
     </AdminShell>
   );

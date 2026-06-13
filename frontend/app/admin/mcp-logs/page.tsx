@@ -53,42 +53,40 @@ export default function MCPLogsPage() {
             hint={keyword ? "换个关键词试试。" : "配置并连接 MCP 服务后，AI 工具读取文档的记录会出现在这里。"}
           />
         ) : (
-          <>
-            <div className="table-scroll"><table className="data-table">
-              <thead>
-                <tr>
-                  <th>工具</th>
-                  <th>查询</th>
-                  <th>结果数</th>
-                  <th>用户</th>
-                  <th>输入</th>
-                  <th>时间</th>
+          <div className="table-scroll"><table className="data-table">
+            <thead>
+              <tr>
+                <th>工具</th>
+                <th>查询</th>
+                <th>结果数</th>
+                <th>用户</th>
+                <th>输入</th>
+                <th>时间</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((log) => (
+                <tr key={log.id}>
+                  <td><span className="tag">{log.tool_name}</span></td>
+                  <td className="font-medium">{log.query || "-"}</td>
+                  <td>{log.result_count}</td>
+                  <td>
+                    {log.display_name ? (
+                      <span>{log.display_name}</span>
+                    ) : log.user_id ? (
+                      <span className="muted">{log.user_id}</span>
+                    ) : (
+                      <span className="muted">-</span>
+                    )}
+                  </td>
+                  <td><span className="code-chip">{log.input_json || "{}"}</span></td>
+                  <td>{log.created_at?.slice(0, 19).replace("T", " ")}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {pageRows.map((log) => (
-                  <tr key={log.id}>
-                    <td><span className="tag">{log.tool_name}</span></td>
-                    <td className="font-medium">{log.query || "-"}</td>
-                    <td>{log.result_count}</td>
-                    <td>
-                      {log.display_name ? (
-                        <span>{log.display_name}</span>
-                      ) : log.user_id ? (
-                        <span className="muted">{log.user_id}</span>
-                      ) : (
-                        <span className="muted">-</span>
-                      )}
-                    </td>
-                    <td><span className="code-chip">{log.input_json || "{}"}</span></td>
-                    <td>{log.created_at?.slice(0, 19).replace("T", " ")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
-          </>
+              ))}
+            </tbody>
+          </table></div>
         )}
+        {!loading ? <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} /> : null}
       </div>
     </AdminShell>
   );
