@@ -23,24 +23,29 @@ export function initAnalytics(): void {
   initialized = true;
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (!key) return;
-  // import posthog from "posthog-js";
-  // posthog.init(key, { api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com" });
+  import("posthog-js").then((posthog) => {
+    posthog.default.init(key, { api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com" });
+  });
 }
 
 export function identify(user: { id: string; displayName?: string; email?: string; department?: string; groups?: string[] }): void {
   if (typeof window === "undefined" || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
-  // posthog.identify(user.id, {
-  //   name: user.displayName,
-  //   email: user.email,
-  //   department: user.department,
-  //   groups: user.groups,
-  // });
+  import("posthog-js").then((posthog) => {
+    posthog.default.identify(user.id, {
+      name: user.displayName,
+      email: user.email,
+      department: user.department,
+      groups: user.groups,
+    });
+  });
 }
 
 export function capture(event: AnalyticsEvent, props: Record<string, unknown> = {}): void {
   if (typeof window === "undefined") return;
   if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
-    // posthog.capture(event, props);
+    import("posthog-js").then((posthog) => {
+      posthog.default.capture(event, props);
+    });
   }
   if (process.env.NODE_ENV !== "production") {
     // Helpful during MVP development before PostHog is enabled.

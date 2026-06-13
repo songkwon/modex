@@ -77,7 +77,6 @@ function TreeNode({
         )}
         <span className="tree-icon"><CategoryIcon name={category.icon} /></span>
         <span className="tree-label">{category.name}</span>
-        {category.responsible_team ? <span className="badge badge-success">负责: {category.responsible_team}</span> : null}
         <span className="tree-spacer" />
         <div className="row-actions">
           <button className="icon-btn" onClick={() => onAddSub(category.id)} title="新增子分类"><Plus size={14} /></button>

@@ -5,20 +5,29 @@ import { AdminShell } from "@/components/admin-shell";
 import { getModule, updateModule } from "@/lib/api";
 import type { ModuleInfo } from "@/types/modex";
 
-export default function AdminModuleDetail({ params }: { params: { moduleKey: string } }) {
+export default function AdminModuleDetail({ params }: { params: Promise<{ moduleKey: string }> }) {
+  const [moduleKey, setModuleKey] = useState("");
   const [module, setModule] = useState<ModuleInfo | null>(null);
   const [shownToken, setShownToken] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    const m = await getModule(params.moduleKey);
+  async function load(key: string) {
+    const m = await getModule(key);
     setModule(m);
     setLoading(false);
   }
 
   useEffect(() => {
-    load();
-  }, [params.moduleKey]);
+    let cancelled = false;
+    params.then(({ moduleKey }) => {
+      if (cancelled) return;
+      setModuleKey(moduleKey);
+      load(moduleKey);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [params]);
 
   if (loading || !module) {
     return <AdminShell title="加载中..." kicker="Module Detail"><div className="panel">加载模块信息...</div></AdminShell>;
@@ -55,7 +64,7 @@ export default function AdminModuleDetail({ params }: { params: { moduleKey: str
       await updateModule(module.module_key, { deploy_token: newToken } as any);
       setShownToken(newToken);
       alert("新 Deploy Token 已生成并保存！请立即复制到 GitLab CI Secret (DOCS_DEPLOY_TOKEN)，此页面不会永久显示完整 token。");
-      await load();
+      await load(moduleKey);
     } catch (e) {
       alert("生成失败: " + e);
     }

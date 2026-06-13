@@ -7,6 +7,7 @@ import { UserMenu } from "@/components/user-menu";
 import { SearchProvider } from "@/components/search-provider";
 import { TopbarSearchButton } from "@/components/topbar-search";
 import { TopbarChatButton } from "@/components/topbar-chat";
+import { AnalyticsInit } from "@/components/analytics-init";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
+        <AnalyticsInit />
         <SearchProvider>
           <div className="shell">
             <header className="topbar">

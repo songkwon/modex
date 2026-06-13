@@ -5,20 +5,21 @@ import { CategoryTree } from "@/components/category-tree";
 import { getCategories, getEntries, getModules } from "@/lib/api";
 import type { Category, ModuleInfo } from "@/types/modex";
 
-export default async function CategoryPage({ params }: { params: { id: string } }) {
+export default async function CategoryPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const categories = await getCategories();
-  const category = findCategory(categories, params.id);
+  const category = findCategory(categories, id);
   if (!category) notFound();
 
-  const modules = await getModules(`?category_id=${encodeURIComponent(params.id)}`);
+  const modules = await getModules(`?category_id=${encodeURIComponent(id)}`);
 
   return (
     <main className="main">
       <section className="grid category-grid">
-        <CategoryTree
-          categories={categories}
-          activeID={params.id}
-          rootId={params.id}
+          <CategoryTree
+            categories={categories}
+            activeID={id}
+            rootId={id}
           backHref="/"
           backLabel="全部分类"
           hrefFor={(c) => `/categories/${c.id}`}

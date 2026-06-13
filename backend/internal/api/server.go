@@ -616,6 +616,16 @@ func (s *Server) handleFacets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEmbedText(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	if user, ok := s.requireUser(w, r); !ok {
+		return
+	} else if !isAdmin(user) && !s.auth.IsSuperAdmin(user) {
+		writeError(w, http.StatusForbidden, "forbidden", "admin required")
+		return
+	}
 	var req struct {
 		Text string `json:"text"`
 	}
@@ -766,7 +776,20 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePageAnalytics(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireConsole(w, r)
+	if !ok {
+		return
+	}
 	stats := s.store.PageAnalytics()
+	if set, all := s.accessibleCategoryIDs(user); !all {
+		scoped := stats[:0:0]
+		for _, st := range stats {
+			if categoriesIntersect(s.moduleCategories(st.ModuleKey), set) {
+				scoped = append(scoped, st)
+			}
+		}
+		stats = scoped
+	}
 	var totalPV, totalReads7d int
 	for _, st := range stats {
 		totalPV += st.PV
@@ -1572,19 +1595,35 @@ func (s *Server) handleAdminEntryByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReleaseRoutes(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireConsole(w, r)
+	if !ok {
+		return
+	}
 	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/admin/releases/"))
 	if len(parts) == 0 {
 		writeError(w, http.StatusNotFound, "not_found", "release route not found")
 		return
 	}
 	releaseID := parts[0]
-	if len(parts) == 2 && parts[1] == "rollback" && r.Method == http.MethodPost {
-		rel, err := s.store.RollbackRelease(releaseID)
+	rel, err := s.store.Release(releaseID)
+	if err != nil {
 		writeResult(w, rel, err)
 		return
 	}
-	rel, err := s.store.Release(releaseID)
-	writeResult(w, rel, err)
+	if set, all := s.accessibleCategoryIDs(user); !all && !categoriesIntersect(s.moduleCategories(rel.ModuleKey), set) {
+		writeError(w, http.StatusForbidden, "forbidden", "no access to this release")
+		return
+	}
+	if len(parts) == 2 && parts[1] == "rollback" && r.Method == http.MethodPost {
+		rel, err = s.store.RollbackRelease(releaseID)
+		writeResult(w, rel, err)
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, rel)
+		return
+	}
+	writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST /rollback")
 }
 
 func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
