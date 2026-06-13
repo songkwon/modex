@@ -14,10 +14,10 @@ import type { Category, ModuleInfo } from "@/types/modex";
 
 const PAGE_SIZE = 8;
 const DOC_TYPES = [
-  { value: "vitepress", label: "VitePress（编译）" },
-  { value: "vuepress", label: "VuePress（编译）" },
-  { value: "fumadocs", label: "Fumadocs（编译）" },
-  { value: "markdown", label: "Markdown（modex 渲染）" },
+  { value: "vitepress", label: "VitePress", hint: "编译型 · 静态站" },
+  { value: "vuepress", label: "VuePress", hint: "编译型" },
+  { value: "fumadocs", label: "Fumadocs", hint: "编译型 · Next/MDX" },
+  { value: "markdown", label: "Markdown", hint: "modex 渲染" },
 ];
 const COMPILED = new Set(["vitepress", "vuepress", "fumadocs"]);
 
@@ -222,11 +222,12 @@ export default function AdminModulesPage() {
           <div className="field">
             <label>文档框架</label>
             <Combobox options={DOC_TYPES} value={[draft.doc_type]} onChange={(v) => setDraft({ ...draft, doc_type: v[0] || "vitepress" })} multiple={false} placeholder="选择框架…" />
+            <span className="field-hint">{compiled ? "编译型：CI 构建为静态站后上传。" : "Markdown：modex 直接渲染。"}</span>
           </div>
           <div className="field">
             <label>挂载方式</label>
             <Combobox
-              options={[{ value: "single", label: "single（整站一篇）" }, { value: "split", label: "split（顶层目录拆子级）" }]}
+              options={[{ value: "single", label: "single", hint: "整站一篇" }, { value: "split", label: "split", hint: "顶层目录拆子级" }]}
               value={[compiled ? "single" : draft.mount]}
               onChange={(v) => setDraft({ ...draft, mount: v[0] || "single" })}
               multiple={false}

@@ -15,10 +15,12 @@ export function UserSelect({
   value,
   onChange,
   placeholder = "搜索姓名 / 用户名 / 邮箱 / 部门",
+  single = false,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  single?: boolean;
 }) {
   const [users, setUsers] = useState<User[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -57,8 +59,13 @@ export function UserSelect({
   }, [filtered]);
 
   const selected = new Set(value);
-  const toggle = (username: string) =>
+  const toggle = (username: string) => {
+    if (single) {
+      onChange(selected.has(username) ? [] : [username]);
+      return;
+    }
     onChange(selected.has(username) ? value.filter((v) => v !== username) : [...value, username]);
+  };
 
   return (
     <div className="user-select">
