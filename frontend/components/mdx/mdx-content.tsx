@@ -1,22 +1,12 @@
+import "katex/dist/katex.min.css";
 import { compileMDX } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeSlug from "rehype-slug";
+import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import { mdxComponents } from "./index";
-
-// remark plugin: carry a fenced code block's "meta" (e.g. ```ts config.ts) onto
-// the <code> element so the renderer can show a filename header.
-function remarkCodeMeta() {
-  const walk = (node: any) => {
-    if (!node || typeof node !== "object") return;
-    if (node.type === "code" && node.meta) {
-      node.data = node.data || {};
-      node.data.hProperties = { ...(node.data.hProperties || {}), "data-meta": node.meta };
-    }
-    if (Array.isArray(node.children)) node.children.forEach(walk);
-  };
-  return (tree: any) => walk(tree);
-}
+import { remarkCodeMeta, remarkGithubAlerts, rehypeToc } from "./remark-plugins";
 
 export async function MdxContent({ source }: { source: string }) {
   try {
@@ -32,8 +22,10 @@ export async function MdxContent({ source }: { source: string }) {
         blockJS: false,
         blockDangerousJS: true,
         mdxOptions: {
-          remarkPlugins: [remarkGfm, remarkCodeMeta],
-          rehypePlugins: [rehypeSlug, [rehypeHighlight, { ignoreMissing: true, detect: true }]]
+          remarkPlugins: [remarkGfm, remarkMath, remarkGithubAlerts, remarkCodeMeta],
+          // rehypeToc runs after rehypeSlug so heading ids exist; rehypeKatex
+          // turns remark-math nodes into rendered formulas.
+          rehypePlugins: [rehypeSlug, rehypeToc, rehypeKatex, [rehypeHighlight, { ignoreMissing: true, detect: true }]]
         }
       }
     });

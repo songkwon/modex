@@ -44,8 +44,8 @@ services:
       PORT: ${BACKEND_PORT:-8671}
       DATA_DIR: ${DATA_DIR:-/data}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8671}
-      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
-      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3456}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3456}
       DATABASE_URL: ${DATABASE_URL:-postgres://modex:modex@postgres:5432/modex?sslmode=disable}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
@@ -79,6 +79,9 @@ services:
       HYBRID_SEMANTIC_WEIGHT: ${HYBRID_SEMANTIC_WEIGHT:-0.4}
       MCP_ENABLED: ${MCP_ENABLED:-true}
       MCP_TOKEN: ${MCP_TOKEN:-dev-token}
+      POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
+      POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
+      POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
       # CONFIG_FILE: set this (e.g. to /app/config.yaml) when you mount a config file below.
       # Leave empty or unset to use only environment variables (the old behavior).
       CONFIG_FILE: ${CONFIG_FILE:-}
@@ -120,13 +123,19 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
         NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
         NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
+        # Diagram-as-code (PlantUML/Graphviz/C4/…) render server. Defaults to the
+        # public kroki.io; set to http://localhost:8000 (the `kroki` profile below)
+        # to keep diagram source on-prem.
+        NEXT_PUBLIC_KROKI_URL: ${NEXT_PUBLIC_KROKI_URL:-https://kroki.io}
     environment:
+      PORT: 3456
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8671}
       NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
       NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
+      NEXT_PUBLIC_KROKI_URL: ${NEXT_PUBLIC_KROKI_URL:-https://kroki.io}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT:-3456}:3456"
     depends_on:
       backend:
         condition: service_healthy
@@ -154,6 +163,21 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  # Self-hosted Kroki diagram renderer (PlantUML / Graphviz / C4 / DITAA / …).
+  # Optional — only needed if you don't want diagram source sent to public
+  # kroki.io. Enable with the `kroki` profile and point the frontend at it:
+  #
+  #   NEXT_PUBLIC_KROKI_URL=http://localhost:8000 docker compose --profile kroki up -d
+  #
+  # The base yuzutech/kroki image covers PlantUML, Graphviz, C4, DITAA, BPMN,
+  # Vega, D2 and more; Mermaid/Excalidraw need companion containers (see kroki docs).
+  kroki:
+    image: yuzutech/kroki:0.27.1
+    profiles: ["kroki"]
+    ports:
+      - "${KROKI_PORT:-8000}:8000"
+    restart: unless-stopped
 
 volumes:
   postgres-data:
