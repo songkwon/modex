@@ -157,6 +157,33 @@ export default function AdminSettingsPage() {
           <span className="field-hint">模型从接口实时获取；填好 Base URL 与 Key 后点击拉取。</span>
         </div>
 
+        <div style={{ display: "flex", gap: 16 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <label>最大回复 Tokens（可选）</label>
+            <input
+              type="number"
+              min={1}
+              value={ai.ask_max_tokens ?? ""}
+              placeholder="默认 4096（Anthropic 必填，其它留空不限）"
+              onChange={(e) => setAI({ ...ai, ask_max_tokens: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
+            />
+            <span className="field-hint">控制单次回答长度上限，避免长回答被截断。</span>
+          </div>
+          <div className="field" style={{ flex: 1 }}>
+            <label>采样温度 Temperature（可选）</label>
+            <input
+              type="number"
+              min={0}
+              max={2}
+              step={0.1}
+              value={ai.ask_temperature ?? ""}
+              placeholder="默认 0.2"
+              onChange={(e) => setAI({ ...ai, ask_temperature: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
+            />
+            <span className="field-hint">越低越确定、越贴合文档；越高越发散。</span>
+          </div>
+        </div>
+
         <div className="field">
           <label>系统提示词（可选）</label>
           <textarea

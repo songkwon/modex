@@ -191,7 +191,13 @@ type AISettings struct {
 	AskModel        string    `json:"ask_model"`         // fetched from the endpoint
 	AskAPIKey       string    `json:"ask_api_key"`       // secret; masked when read back
 	AskSystemPrompt string    `json:"ask_system_prompt"` // optional override
-	UpdatedAt       time.Time `json:"updated_at"`
+	// AskMaxTokens caps the answer length. 0 means "use the engine default".
+	// (Required by Anthropic; optional for the others.)
+	AskMaxTokens int `json:"ask_max_tokens,omitempty"`
+	// AskTemperature controls sampling. nil means "use the engine default"
+	// (so an explicit 0 for deterministic output is still distinguishable).
+	AskTemperature *float64  `json:"ask_temperature,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // Settings is the persisted, admin-editable platform configuration.

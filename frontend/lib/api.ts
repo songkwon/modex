@@ -94,6 +94,8 @@ export type AISettings = {
   ask_model?: string;
   ask_api_key?: string;
   ask_system_prompt?: string;
+  ask_max_tokens?: number;
+  ask_temperature?: number;
   updated_at?: string;
 };
 export type PlatformSettings = { ai: AISettings; ask_api_key_set: boolean };
