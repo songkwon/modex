@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Search, Trash2, UsersRound } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
 import { UserSelect } from "@/components/ui/user-select";
@@ -48,6 +48,7 @@ export default function AdminTeamsPage() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [isEdit, setIsEdit] = useState(false);
   const [keyword, setKeyword] = useState("");
+  const [picker, setPicker] = useState<null | "leader" | "members">(null);
 
   const { items: pageTeams, total, page, setPage, error: loadError, reload } = usePaged<Team>(
     "/api/admin/teams",
@@ -154,12 +155,11 @@ export default function AdminTeamsPage() {
                     </td>
                     <td>{t.leader ? <span className="badge badge-success">{t.leader}</span> : <span className="muted">—</span>}</td>
                     <td>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                        {(t.members || []).map((m) => (
-                          <span key={m} className="tag">{m}</span>
-                        ))}
-                        {(!t.members || t.members.length === 0) && <span className="muted" style={{ fontSize: 12 }}>—</span>}
-                      </div>
+                      {(t.members || []).length > 0 ? (
+                        <span className="tag">{(t.members || []).length} 人</span>
+                      ) : (
+                        <span className="muted" style={{ fontSize: 12 }}>—</span>
+                      )}
                     </td>
                     <td>
                       {owned.length > 0 ? owned.map((n) => <span key={n} className="tag" style={{ marginRight: 4 }}>{n}</span>) : <span className="muted" style={{ fontSize: 12 }}>未绑定分类</span>}
@@ -196,7 +196,7 @@ export default function AdminTeamsPage() {
         footer={
           <>
             <button className="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="button button-primary" onClick={submit} disabled={!draft.name.trim()}>
+            <button className="button button-primary" onClick={submit} disabled={!draft.name.trim() || !draft.leader.trim()}>
               {isEdit ? "保存" : "创建团队"}
             </button>
           </>
@@ -212,14 +212,50 @@ export default function AdminTeamsPage() {
           <input value={draft.description} placeholder="一句话说明团队职责" onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
         </div>
         <div className="field">
-          <label>负责人 (username)</label>
-          <input value={draft.leader} placeholder="如 alice" onChange={(e) => setDraft({ ...draft, leader: e.target.value })} />
+          <label>负责人 *</label>
+          <div className="picker-field">
+            {draft.leader ? (
+              <span className="tag">{draft.leader}</span>
+            ) : (
+              <span className="muted" style={{ fontSize: 13 }}>未指定</span>
+            )}
+            <button type="button" className="button" onClick={() => setPicker("leader")}>
+              <UserPlus size={14} /> 选择负责人
+            </button>
+          </div>
+          <span className="field-hint">负责人至少 1 人，可管理本团队负责分类下的内容；保存后会自动加入成员。</span>
         </div>
         <div className="field">
           <label>成员</label>
-          <UserSelect value={draft.members} onChange={(members) => setDraft({ ...draft, members })} />
-          <span className="field-hint">搜索并按部门展开多选；负责人保存后会自动进入成员列表。</span>
+          <div className="picker-field">
+            {draft.members.length > 0 ? (
+              draft.members.map((m) => <span key={m} className="tag">{m}</span>)
+            ) : (
+              <span className="muted" style={{ fontSize: 13 }}>暂无成员</span>
+            )}
+            <button type="button" className="button" onClick={() => setPicker("members")}>
+              <UserPlus size={14} /> 添加成员
+            </button>
+          </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={picker !== null}
+        onClose={() => setPicker(null)}
+        title={picker === "leader" ? "选择负责人" : "添加成员"}
+        subtitle={picker === "leader" ? "单选一名负责人" : "搜索并按部门展开多选"}
+        footer={<button className="button button-primary" onClick={() => setPicker(null)}>完成</button>}
+      >
+        {picker === "leader" ? (
+          <UserSelect
+            single
+            value={draft.leader ? [draft.leader] : []}
+            onChange={(v) => setDraft({ ...draft, leader: v[0] || "" })}
+          />
+        ) : picker === "members" ? (
+          <UserSelect value={draft.members} onChange={(members) => setDraft({ ...draft, members })} />
+        ) : null}
       </Modal>
     </AdminShell>
   );
