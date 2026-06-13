@@ -102,10 +102,10 @@ func NewSeeded() *Store {
 			{ID: "g-standards", GroupKey: "standards", Name: "研发规范", Source: "seed", CreatedAt: now, UpdatedAt: now},
 		},
 		teams: []Team{
-			{ID: "t-cad", Key: "cad-team", Name: "CAD 团队", Description: "CAD 内核与插件文档维护团队", Leader: "alice", Members: []string{"alice", "bob"}, CreatedAt: now, UpdatedAt: now},
-			{ID: "t-eng", Key: "engineering", Name: "工程化团队", Description: "工程化平台与 CBB 规范维护", Leader: "dev", Members: []string{"dev", "alice"}, CreatedAt: now, UpdatedAt: now},
-			{ID: "t-fe", Key: "frontend-platform", Name: "前端平台团队", Description: "前端文档框架与组件规范", Leader: "bob", Members: []string{"bob", "dev"}, CreatedAt: now, UpdatedAt: now},
-			{ID: "t-std", Key: "standards", Name: "研发规范团队", Description: "通用研发规范、流程与工具规范维护团队 (参考 GitBook/Mintlify 层级领域)", Leader: "alice", Members: []string{"alice", "dev"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-cad", Key: "cad-team", Name: "CAD 团队", Description: "CAD 内核与插件文档维护团队", Leaders: []string{"alice"}, Members: []string{"alice", "bob"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-eng", Key: "engineering", Name: "工程化团队", Description: "工程化平台与 CBB 规范维护", Leaders: []string{"dev"}, Members: []string{"dev", "alice"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-fe", Key: "frontend-platform", Name: "前端平台团队", Description: "前端文档框架与组件规范", Leaders: []string{"bob"}, Members: []string{"bob", "dev"}, CreatedAt: now, UpdatedAt: now},
+			{ID: "t-std", Key: "standards", Name: "研发规范团队", Description: "通用研发规范、流程与工具规范维护团队 (参考 GitBook/Mintlify 层级领域)", Leaders: []string{"alice"}, Members: []string{"alice", "dev"}, CreatedAt: now, UpdatedAt: now},
 		},
 		navs:       map[string][]NavItem{},
 		html:       map[string]string{},
@@ -467,8 +467,10 @@ func (s *Store) CreateTeam(t Team) (Team, error) {
 	if t.Name == "" {
 		t.Name = t.Key
 	}
-	if t.Leader != "" && !contains(t.Members, t.Leader) {
-		t.Members = append([]string{t.Leader}, t.Members...)
+	for _, l := range t.Leaders {
+		if l != "" && !contains(t.Members, l) {
+			t.Members = append(t.Members, l)
+		}
 	}
 	now := time.Now().UTC()
 	t.CreatedAt = now
@@ -493,16 +495,16 @@ func (s *Store) UpdateTeam(key string, patch Team) (Team, error) {
 		if patch.Description != "" {
 			tm.Description = patch.Description
 		}
-		if patch.Leader != "" {
-			tm.Leader = patch.Leader
-			if !contains(tm.Members, patch.Leader) {
-				tm.Members = append(tm.Members, patch.Leader)
-			}
+		if patch.Leaders != nil {
+			tm.Leaders = cloneStrings(patch.Leaders)
 		}
 		if patch.Members != nil {
 			tm.Members = cloneStrings(patch.Members)
-			if tm.Leader != "" && !contains(tm.Members, tm.Leader) {
-				tm.Members = append([]string{tm.Leader}, tm.Members...)
+		}
+		// Every leader must also be a member.
+		for _, l := range tm.Leaders {
+			if l != "" && !contains(tm.Members, l) {
+				tm.Members = append(tm.Members, l)
 			}
 		}
 		tm.UpdatedAt = time.Now().UTC()
@@ -583,7 +585,9 @@ func (s *Store) SetTeamLeader(key, leader string) (Team, error) {
 			continue
 		}
 		tm := &s.teams[i]
-		tm.Leader = leader
+		if !contains(tm.Leaders, leader) {
+			tm.Leaders = append(tm.Leaders, leader)
+		}
 		if !contains(tm.Members, leader) {
 			tm.Members = append(tm.Members, leader)
 		}
@@ -612,10 +616,7 @@ func (s *Store) TeamKeysForUser(u User) []string {
 	defer s.mu.RUnlock()
 	var keys []string
 	for _, t := range s.teams {
-		if strings.EqualFold(t.Leader, u.Username) || strings.EqualFold(t.Leader, u.ID) {
-			keys = append(keys, t.Key)
-			continue
-		}
+		// Leaders are always also members, so checking Members covers both.
 		for _, m := range t.Members {
 			if strings.EqualFold(m, u.Username) || strings.EqualFold(m, u.ID) {
 				keys = append(keys, t.Key)
