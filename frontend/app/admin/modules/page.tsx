@@ -8,7 +8,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { createModule, getCategories, getDeployToken, rotateDeployToken, updateModule } from "@/lib/api";
+import { createModule, getManagedCategories, getDeployToken, rotateDeployToken, updateModule } from "@/lib/api";
 import { usePaged } from "@/lib/use-paged";
 import type { Category, ModuleInfo } from "@/types/modex";
 
@@ -62,7 +62,7 @@ export default function AdminModulesPage() {
   );
 
   useEffect(() => {
-    getCategories().then((tree) => setCategories(tree || [])).catch(() => {});
+    getManagedCategories().then((tree) => setCategories(tree || [])).catch(() => {});
   }, []);
 
   const categoryOptions = useMemo(() => flatten(categories), [categories]);
@@ -209,7 +209,7 @@ export default function AdminModulesPage() {
         footer={
           <>
             <button className="button" onClick={() => setModalOpen(false)}>{token && !isEdit ? "完成" : "取消"}</button>
-            <button className="button button-primary" onClick={submit} disabled={!draft.name.trim()}>{isEdit ? "保存" : "创建"}</button>
+            <button className="button button-primary" onClick={submit} disabled={!draft.name.trim() || draft.category_ids.length === 0}>{isEdit ? "保存" : "创建"}</button>
           </>
         }
       >
@@ -237,7 +237,7 @@ export default function AdminModulesPage() {
         <div className="field">
           <label>归属分类</label>
           <Combobox options={categoryOptions} value={draft.category_ids} onChange={(category_ids) => setDraft({ ...draft, category_ids })} placeholder="绑定到一个分类…" />
-          <span className="field-hint">文档将挂在所选分类下（一仓一锚点）。</span>
+          <span className="field-hint">文档源必须关联至少一个分类；只能选择你所在团队负责的分类。</span>
         </div>
         <div className="field">
           <label>描述</label>

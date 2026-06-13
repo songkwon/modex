@@ -29,6 +29,8 @@ export const mockLogin = (username?: string) =>
 export const logout = () => api<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
 export const getAuthConfig = () => api<AuthConfig>("/api/config");
 export const getCategories = () => api<Category[]>("/api/categories/tree");
+// Admin views: only the category subtrees the current user may manage (full tree for super admins).
+export const getManagedCategories = () => api<Category[]>("/api/categories/tree?scope=managed");
 export const getModules = (query = "") => api<ModuleInfo[]>(`/api/modules${query}`);
 export const updateModule = (moduleKey: string, body: Partial<ModuleInfo> & { deploy_token?: string }) => api<ModuleInfo>(`/api/admin/modules/${moduleKey}`, { method: "PUT", body: JSON.stringify(body) });
 export const createModule = (body: Partial<ModuleInfo>) => api<ModuleInfo>("/api/admin/modules", { method: "POST", body: JSON.stringify(body) });

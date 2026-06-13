@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Search, Trash2, UserPlus, UsersRound, X } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, UsersRound } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
-import { Combobox } from "@/components/ui/combobox";
+import { UserSelect } from "@/components/ui/user-select";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 
@@ -13,8 +13,6 @@ import {
   createTeam,
   updateTeam,
   deleteTeam,
-  addTeamMember,
-  removeTeamMember,
   getCategories,
 } from "@/lib/api";
 import type { Team, Category } from "@/types/modex";
@@ -49,7 +47,6 @@ export default function AdminTeamsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [isEdit, setIsEdit] = useState(false);
-  const [addMemberFor, setAddMemberFor] = useState<Record<string, string>>({});
   const [keyword, setKeyword] = useState("");
 
   const { items: pageTeams, total, page, setPage, error: loadError, reload } = usePaged<Team>(
@@ -110,28 +107,6 @@ export default function AdminTeamsPage() {
     }
   }
 
-  async function doAddMember(teamKey: string) {
-    const val = (addMemberFor[teamKey] || "").trim();
-    if (!val) return;
-    try {
-      await addTeamMember(teamKey, val);
-      setAddMemberFor((m) => ({ ...m, [teamKey]: "" }));
-      reload();
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
-  async function doRemoveMember(teamKey: string, member: string) {
-    if (!confirm(`从团队移除 ${member} ?`)) return;
-    try {
-      await removeTeamMember(teamKey, member);
-      reload();
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-
   return (
     <AdminShell
       title="团队管理"
@@ -171,7 +146,6 @@ export default function AdminTeamsPage() {
             <tbody>
               {pageTeams.map((t) => {
                 const owned = ownedDomainsFor(t.key);
-                const addVal = addMemberFor[t.key] || "";
                 return (
                   <tr key={t.key}>
                     <td>
@@ -182,24 +156,9 @@ export default function AdminTeamsPage() {
                     <td>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                         {(t.members || []).map((m) => (
-                          <span key={m} className="tag">
-                            {m}
-                            <button style={{ border: 0, background: "transparent", cursor: "pointer", color: "inherit", opacity: 0.6, padding: 0, lineHeight: 0 }} onClick={() => doRemoveMember(t.key, m)} title="移除成员">
-                              <X size={12} />
-                            </button>
-                          </span>
+                          <span key={m} className="tag">{m}</span>
                         ))}
                         {(!t.members || t.members.length === 0) && <span className="muted" style={{ fontSize: 12 }}>—</span>}
-                      </div>
-                      <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
-                        <input
-                          style={{ width: 150, height: 32, fontSize: 13 }}
-                          placeholder="添加成员 username"
-                          value={addVal}
-                          onChange={(e) => setAddMemberFor((prev) => ({ ...prev, [t.key]: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && doAddMember(t.key)}
-                        />
-                        <button className="icon-btn" onClick={() => doAddMember(t.key)} title="拉人入队"><UserPlus size={14} /></button>
                       </div>
                     </td>
                     <td>
@@ -258,8 +217,8 @@ export default function AdminTeamsPage() {
         </div>
         <div className="field">
           <label>成员</label>
-          <Combobox options={draft.members.map((m) => ({ value: m, label: m }))} value={draft.members} onChange={(members) => setDraft({ ...draft, members })} allowCreate placeholder="输入 username 回车添加…" />
-          <span className="field-hint">负责人保存后会自动进入成员列表。</span>
+          <UserSelect value={draft.members} onChange={(members) => setDraft({ ...draft, members })} />
+          <span className="field-hint">搜索并按部门展开多选；负责人保存后会自动进入成员列表。</span>
         </div>
       </Modal>
     </AdminShell>

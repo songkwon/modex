@@ -144,7 +144,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, struct {
 			store.User
 			IsSuperAdmin bool `json:"is_super_admin"`
-		}{User: user, IsSuperAdmin: s.auth.IsSuperAdmin(user)})
+			IsTeamAdmin  bool `json:"is_team_admin"`
+		}{User: user, IsSuperAdmin: s.auth.IsSuperAdmin(user), IsTeamAdmin: s.isTeamAdmin(user)})
 		return
 	}
 	writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
@@ -223,7 +224,31 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.CategoryTree())
+	tree := s.store.CategoryTree()
+	// Admin views pass ?scope=managed to get only the subtrees a team admin may
+	// manage. Public/browse calls (no scope) always get the full tree.
+	if r.URL.Query().Get("scope") == "managed" {
+		if user, ok := s.currentUser(r); ok {
+			if set, all := s.accessibleCategoryIDs(user); !all {
+				tree = filterCategoryTree(tree, set)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, tree)
+}
+
+// filterCategoryTree keeps only nodes whose id is in the set, preserving any
+// ancestors needed to reach them.
+func filterCategoryTree(nodes []store.Category, set map[string]bool) []store.Category {
+	out := make([]store.Category, 0, len(nodes))
+	for _, n := range nodes {
+		children := filterCategoryTree(n.Children, set)
+		if set[n.ID] || len(children) > 0 {
+			n.Children = children
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 func (s *Server) handleModules(w http.ResponseWriter, r *http.Request) {
@@ -709,7 +734,20 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireConsole(w, r)
+	if !ok {
+		return
+	}
 	releases := s.store.Releases()
+	if set, all := s.accessibleCategoryIDs(user); !all {
+		scoped := releases[:0:0]
+		for _, rel := range releases {
+			if categoriesIntersect(s.moduleCategories(rel.ModuleKey), set) {
+				scoped = append(scoped, rel)
+			}
+		}
+		releases = scoped
+	}
 	if kw := keywordOf(r); kw != "" {
 		filtered := releases[:0:0]
 		for _, rel := range releases {
@@ -815,13 +853,23 @@ func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireConsole(w, r)
+	if !ok {
+		return
+	}
 	logs := s.store.SearchLogs()
 	type out struct {
 		store.SearchLog
 		DisplayName string `json:"display_name"`
 	}
-	res := make([]out, len(logs))
-	for i, log := range logs {
+	res := make([]out, 0, len(logs))
+	set, all := s.accessibleCategoryIDs(user)
+	for _, log := range logs {
+		// Team admins only see searches whose clicked doc maps to an owned
+		// category; searches with no resolvable category are hidden.
+		if !all && !categoriesIntersect(s.docCategoryIDs(log.ClickedDocID), set) {
+			continue
+		}
 		dn := ""
 		if log.UserID != "" {
 			if u, err := s.store.UserByID(log.UserID); err == nil {
@@ -831,7 +879,7 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		res[i] = out{SearchLog: log, DisplayName: dn}
+		res = append(res, out{SearchLog: log, DisplayName: dn})
 	}
 	if kw := keywordOf(r); kw != "" {
 		filtered := res[:0:0]
@@ -851,13 +899,22 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireConsole(w, r)
+	if !ok {
+		return
+	}
 	logs := s.store.MCPLogs()
 	type out struct {
 		store.MCPLog
 		DisplayName string `json:"display_name"`
 	}
-	res := make([]out, len(logs))
-	for i, log := range logs {
+	res := make([]out, 0, len(logs))
+	set, all := s.accessibleCategoryIDs(user)
+	for _, log := range logs {
+		// Team admins only see MCP calls resolvable to an owned category.
+		if !all && !categoriesIntersect(s.mcpLogCategoryIDs(log.InputJSON), set) {
+			continue
+		}
 		dn := ""
 		if log.UserID != "" {
 			if u, err := s.store.UserByID(log.UserID); err == nil {
@@ -867,7 +924,7 @@ func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		res[i] = out{MCPLog: log, DisplayName: dn}
+		res = append(res, out{MCPLog: log, DisplayName: dn})
 	}
 	if kw := keywordOf(r); kw != "" {
 		filtered := res[:0:0]
@@ -1045,6 +1102,125 @@ func (s *Server) categoryResponsible(id string) string {
 	return find(tree)
 }
 
+// accessibleCategoryIDs returns the set of category IDs a user may see/manage in
+// the admin console. Super admins get (nil, true) meaning "everything". A team
+// member gets the categories their team(s) own (Category.ResponsibleTeam) plus
+// all descendants. A user with no team gets an empty set.
+func (s *Server) accessibleCategoryIDs(u store.User) (set map[string]bool, all bool) {
+	if s.auth.IsSuperAdmin(u) {
+		return nil, true
+	}
+	teamKeys := map[string]bool{}
+	for _, k := range s.store.TeamKeysForUser(u) {
+		teamKeys[strings.ToLower(strings.TrimSpace(k))] = true
+	}
+	set = map[string]bool{}
+	if len(teamKeys) == 0 {
+		return set, false
+	}
+	cats := s.store.AllCategories()
+	for _, c := range cats {
+		if c.ResponsibleTeam != "" && teamKeys[strings.ToLower(c.ResponsibleTeam)] {
+			set[c.ID] = true
+		}
+	}
+	// Expand to all descendants via ParentID closure (a child without its own
+	// ResponsibleTeam is still owned through its parent).
+	for {
+		added := false
+		for _, c := range cats {
+			if !set[c.ID] && c.ParentID != "" && set[c.ParentID] {
+				set[c.ID] = true
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	return set, false
+}
+
+// hasConsoleAccess reports whether the user may enter the admin console at all
+// (super admin, or a member/leader of any team).
+func (s *Server) hasConsoleAccess(u store.User) bool {
+	return s.auth.IsSuperAdmin(u) || len(s.store.TeamKeysForUser(u)) > 0
+}
+
+// isTeamAdmin reports a non-super-admin who belongs to at least one team (the
+// team-scoped admin tier).
+func (s *Server) isTeamAdmin(u store.User) bool {
+	return !s.auth.IsSuperAdmin(u) && len(s.store.TeamKeysForUser(u)) > 0
+}
+
+// requireConsole gates console-scoped reads (logs, releases, module list). Super
+// admins and team members pass; everyone else gets 403.
+func (s *Server) requireConsole(w http.ResponseWriter, r *http.Request) (store.User, bool) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "login required")
+		return store.User{}, false
+	}
+	if !s.hasConsoleAccess(user) {
+		writeError(w, http.StatusForbidden, "forbidden", "console access required")
+		return store.User{}, false
+	}
+	return user, true
+}
+
+// docCategoryIDs resolves a document id to the categories of its module.
+func (s *Server) docCategoryIDs(docID string) []string {
+	if strings.TrimSpace(docID) == "" {
+		return nil
+	}
+	p, err := s.store.Page(docID)
+	if err != nil {
+		return nil
+	}
+	return s.moduleCategories(p.ModuleKey)
+}
+
+// mcpLogCategoryIDs best-effort resolves an MCP log to categories by parsing its
+// free-form input JSON for a doc id or module key. MCP logs carry no structured
+// module field, so this is heuristic; unresolved logs return nil (hidden from
+// team admins, shown to super admins who bypass scoping).
+func (s *Server) mcpLogCategoryIDs(inputJSON string) []string {
+	if strings.TrimSpace(inputJSON) == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(inputJSON), &m); err != nil {
+		return nil
+	}
+	str := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := m[k].(string); ok && v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	if doc := str("doc_id", "docID", "docId"); doc != "" {
+		if cats := s.docCategoryIDs(doc); len(cats) > 0 {
+			return cats
+		}
+	}
+	if mod := str("module_key", "moduleKey", "module"); mod != "" {
+		return s.moduleCategories(mod)
+	}
+	return nil
+}
+
+// categoriesIntersect reports whether any of the ids is in the accessible set.
+func categoriesIntersect(ids []string, set map[string]bool) bool {
+	for _, id := range ids {
+		if set[id] {
+			return true
+		}
+	}
+	return false
+}
+
 // requireUser writes 401 and returns false when no valid session is present.
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (store.User, bool) {
 	user, ok := s.currentUser(r)
@@ -1170,7 +1346,21 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		user, ok := s.requireConsole(w, r)
+		if !ok {
+			return
+		}
 		modules := s.store.Modules("", "")
+		// Team admins only see modules attached to a category they own.
+		if set, all := s.accessibleCategoryIDs(user); !all {
+			scoped := modules[:0:0]
+			for _, m := range modules {
+				if categoriesIntersect(m.CategoryIDs, set) {
+					scoped = append(scoped, m)
+				}
+			}
+			modules = scoped
+		}
 		if kw := keywordOf(r); kw != "" {
 			filtered := modules[:0:0]
 			for _, m := range modules {
@@ -1193,6 +1383,11 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	// Every doc source must be filed under at least one category.
+	if len(m.CategoryIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "category_required", "文档源必须关联至少一个分类")
+		return
+	}
 	if _, ok := s.requirePlatform(w, r, m.CategoryIDs); !ok {
 		return
 	}
@@ -1213,7 +1408,8 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 		s.handleMigrateModule(w, r, moduleKey)
 		return
 	}
-	if _, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey)); !ok {
+	user, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey))
+	if !ok {
 		return
 	}
 	// Reveal / rotate the CI deploy token (kept out of normal serialization).
@@ -1247,6 +1443,22 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 		if err := decodeBody(r, &m); err != nil {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
+		}
+		// A doc source must keep at least one category; reject an explicit clear.
+		if m.CategoryIDs != nil && len(m.CategoryIDs) == 0 {
+			writeError(w, http.StatusBadRequest, "category_required", "文档源必须关联至少一个分类")
+			return
+		}
+		// Team admins may only file modules under categories they own.
+		if len(m.CategoryIDs) > 0 {
+			if set, all := s.accessibleCategoryIDs(user); !all {
+				for _, cid := range m.CategoryIDs {
+					if !set[cid] {
+						writeError(w, http.StatusForbidden, "forbidden", "只能选择本团队负责的分类")
+						return
+					}
+				}
+			}
 		}
 		updated, err := s.store.UpdateModule(moduleKey, m)
 		writeMutation(w, updated, http.StatusOK, err)

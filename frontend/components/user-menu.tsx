@@ -73,7 +73,7 @@ export function UserMenu() {
     );
   }
 
-  const isAdmin = (user.roles || []).includes("admin") || user.is_super_admin;
+  const isAdmin = user.is_super_admin || user.is_team_admin || (user.roles || []).includes("admin");
 
   return (
     <div className="user-menu" ref={ref}>

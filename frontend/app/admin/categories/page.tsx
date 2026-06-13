@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CategoryIcon, IconPicker } from "@/components/ui/icon-picker";
-import { getCategories, getTeams, createCategory, updateCategory, deleteCategory, moveCategory } from "@/lib/api";
+import { getManagedCategories, getMe, getTeams, createCategory, updateCategory, deleteCategory, moveCategory } from "@/lib/api";
 import type { Category, Team } from "@/types/modex";
 
 type FlatRow = { category: Category; depth: number };
@@ -108,14 +108,21 @@ export default function AdminCategoriesPage() {
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [isSuper, setIsSuper] = useState(false);
   const byId = useRef<Map<string, Category>>(new Map());
+
+  useEffect(() => {
+    getMe().then((me) => setIsSuper(!!me.is_super_admin)).catch(() => {});
+    // Teams are only used for responsible-team labels/selector and are
+    // super-admin-only; tolerate a 403 for team admins instead of blanking the tree.
+    getTeams().then((ts) => setTeams(ts || [])).catch(() => {});
+  }, []);
 
   async function refresh() {
     try {
-      const [tree, ts] = await Promise.all([getCategories(), getTeams()]);
+      const tree = await getManagedCategories();
       const safe = tree || [];
       setCategories(safe);
-      setTeams(ts || []);
       byId.current = new Map(flatten(safe).map((r) => [r.category.id, r.category]));
       setExpanded((prev) => (prev.size ? prev : new Set(flatten(safe).map((r) => r.category.id))));
       setError("");
@@ -243,7 +250,7 @@ export default function AdminCategoriesPage() {
       <div className="admin-toolbar">
         <div className="muted" style={{ fontSize: 13 }}>{flatten(categories).length} 个分类节点 · 拖动卡片排序或改层级</div>
         <div className="admin-toolbar-actions">
-          <button className="button button-primary" onClick={openCreate}><Plus size={16} /> 新增顶级分类</button>
+          {isSuper ? <button className="button button-primary" onClick={openCreate}><Plus size={16} /> 新增顶级分类</button> : null}
         </div>
       </div>
 
@@ -286,7 +293,7 @@ export default function AdminCategoriesPage() {
         </div>
         <div className="field">
           <label>父分类</label>
-          <Combobox options={[{ value: "", label: "（顶级分类）" }, ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder="选择父分类…" />
+          <Combobox options={[...(isSuper ? [{ value: "", label: "（顶级分类）" }] : []), ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder="选择父分类…" />
         </div>
         <div className="field">
           <label>图标</label>
