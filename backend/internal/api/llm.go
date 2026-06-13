@@ -34,19 +34,43 @@ func normalizeProtocol(p string) string {
 	}
 }
 
+// Engine defaults applied when the admin leaves the fields unset. max_tokens is
+// generous so long answers are not truncated (Anthropic *requires* the field);
+// temperature is low for grounded, deterministic doc answers.
+const (
+	defaultAskMaxTokens   = 4096
+	defaultAskTemperature = 0.2
+)
+
+func maxTokensOf(ai store.AISettings) int {
+	if ai.AskMaxTokens > 0 {
+		return ai.AskMaxTokens
+	}
+	return defaultAskMaxTokens
+}
+
+func temperatureOf(ai store.AISettings) float64 {
+	if ai.AskTemperature != nil {
+		return *ai.AskTemperature
+	}
+	return defaultAskTemperature
+}
+
 // chatComplete sends a single-turn (system + user) completion request using the
 // protocol configured in settings and returns the assistant's text.
 func chatComplete(ctx context.Context, ai store.AISettings, system, user string) (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(ai.AskBaseURL), "/")
+	temp := temperatureOf(ai)
 	switch normalizeProtocol(ai.AskProtocol) {
 	case protoAnthropic:
-		return chatAnthropic(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+		// max_tokens is required by Anthropic; the others default to the model max.
+		return chatAnthropic(ctx, base, ai.AskAPIKey, ai.AskModel, maxTokensOf(ai), temp, system, user)
 	case protoGemini:
-		return chatGemini(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+		return chatGemini(ctx, base, ai.AskAPIKey, ai.AskModel, temp, system, user)
 	case protoOpenAIResponses:
-		return chatOpenAIResponses(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+		return chatOpenAIResponses(ctx, base, ai.AskAPIKey, ai.AskModel, temp, system, user)
 	default:
-		return chatOpenAIChat(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+		return chatOpenAIChat(ctx, base, ai.AskAPIKey, ai.AskModel, temp, system, user)
 	}
 }
 
@@ -90,7 +114,7 @@ func httpJSON(ctx context.Context, method, url string, headers map[string]string
 
 // ---- OpenAI Chat Completions ------------------------------------------------
 
-func chatOpenAIChat(ctx context.Context, base, key, model, system, user string) (string, error) {
+func chatOpenAIChat(ctx context.Context, base, key, model string, temperature float64, system, user string) (string, error) {
 	raw, code, err := httpJSON(ctx, http.MethodPost, base+"/chat/completions",
 		map[string]string{"Content-Type": "application/json", "Authorization": bearer(key)},
 		map[string]any{
@@ -99,7 +123,7 @@ func chatOpenAIChat(ctx context.Context, base, key, model, system, user string) 
 				{"role": "system", "content": system},
 				{"role": "user", "content": user},
 			},
-			"temperature": 0.2,
+			"temperature": temperature,
 			"stream":      false,
 		})
 	if err != nil {
@@ -126,13 +150,14 @@ func chatOpenAIChat(ctx context.Context, base, key, model, system, user string) 
 
 // ---- OpenAI Responses API ---------------------------------------------------
 
-func chatOpenAIResponses(ctx context.Context, base, key, model, system, user string) (string, error) {
+func chatOpenAIResponses(ctx context.Context, base, key, model string, temperature float64, system, user string) (string, error) {
 	raw, code, err := httpJSON(ctx, http.MethodPost, base+"/responses",
 		map[string]string{"Content-Type": "application/json", "Authorization": bearer(key)},
 		map[string]any{
 			"model":        model,
 			"instructions": system,
 			"input":        user,
+			"temperature":  temperature,
 		})
 	if err != nil {
 		return "", err
@@ -174,7 +199,7 @@ func anthropicBase(base string) string {
 	return strings.TrimSuffix(strings.TrimRight(base, "/"), "/v1")
 }
 
-func chatAnthropic(ctx context.Context, base, key, model, system, user string) (string, error) {
+func chatAnthropic(ctx context.Context, base, key, model string, maxTokens int, temperature float64, system, user string) (string, error) {
 	headers := map[string]string{
 		"Content-Type":      "application/json",
 		"x-api-key":         key,
@@ -182,9 +207,10 @@ func chatAnthropic(ctx context.Context, base, key, model, system, user string) (
 	}
 	raw, code, err := httpJSON(ctx, http.MethodPost, anthropicBase(base)+"/v1/messages", headers,
 		map[string]any{
-			"model":      model,
-			"max_tokens": 1024,
-			"system":     system,
+			"model":       model,
+			"max_tokens":  maxTokens,
+			"temperature": temperature,
+			"system":      system,
 			"messages": []map[string]string{
 				{"role": "user", "content": user},
 			},
@@ -223,15 +249,18 @@ func geminiBase(base string) string {
 	return b
 }
 
-func chatGemini(ctx context.Context, base, key, model, system, user string) (string, error) {
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", geminiBase(base), model, key)
+func chatGemini(ctx context.Context, base, key, model string, temperature float64, system, user string) (string, error) {
+	// Pass the key via the x-goog-api-key header rather than a ?key= query param
+	// so it does not end up in proxy/gateway access logs.
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", geminiBase(base), model)
 	raw, code, err := httpJSON(ctx, http.MethodPost, url,
-		map[string]string{"Content-Type": "application/json"},
+		map[string]string{"Content-Type": "application/json", "x-goog-api-key": key},
 		map[string]any{
 			"systemInstruction": map[string]any{"parts": []map[string]string{{"text": system}}},
 			"contents": []map[string]any{
 				{"role": "user", "parts": []map[string]string{{"text": user}}},
 			},
+			"generationConfig": map[string]any{"temperature": temperature},
 		})
 	if err != nil {
 		return "", err
@@ -288,32 +317,51 @@ func modelsOpenAI(ctx context.Context, base, key string) ([]string, error) {
 }
 
 func modelsAnthropic(ctx context.Context, base, key string) ([]string, error) {
-	raw, code, err := httpJSON(ctx, http.MethodGet, anthropicBase(base)+"/v1/models",
-		map[string]string{"x-api-key": key, "anthropic-version": "2023-06-01"}, nil)
-	if err != nil {
-		return nil, err
-	}
-	if code >= 300 {
-		return nil, fmt.Errorf("%d: %s", code, string(raw))
-	}
-	var parsed struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(raw, &parsed)
-	ids := make([]string, 0, len(parsed.Data))
-	for _, m := range parsed.Data {
-		if m.ID != "" {
-			ids = append(ids, m.ID)
+	headers := map[string]string{"x-api-key": key, "anthropic-version": "2023-06-01"}
+	root := anthropicBase(base)
+	ids := make([]string, 0, 16)
+	afterID := ""
+	// The models list is paginated; follow has_more / last_id so every model is
+	// returned, not just the first page. Cap the loop defensively.
+	for page := 0; page < 20; page++ {
+		url := root + "/v1/models?limit=1000"
+		if afterID != "" {
+			url += "&after_id=" + afterID
 		}
+		raw, code, err := httpJSON(ctx, http.MethodGet, url, headers, nil)
+		if err != nil {
+			return nil, err
+		}
+		if code >= 300 {
+			return nil, fmt.Errorf("%d: %s", code, string(raw))
+		}
+		var parsed struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+			HasMore bool   `json:"has_more"`
+			LastID  string `json:"last_id"`
+		}
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, err
+		}
+		for _, m := range parsed.Data {
+			if m.ID != "" {
+				ids = append(ids, m.ID)
+			}
+		}
+		if !parsed.HasMore || parsed.LastID == "" {
+			break
+		}
+		afterID = parsed.LastID
 	}
 	return ids, nil
 }
 
 func modelsGemini(ctx context.Context, base, key string) ([]string, error) {
 	raw, code, err := httpJSON(ctx, http.MethodGet,
-		fmt.Sprintf("%s/v1beta/models?key=%s", geminiBase(base), key), nil, nil)
+		geminiBase(base)+"/v1beta/models?pageSize=1000",
+		map[string]string{"x-goog-api-key": key}, nil)
 	if err != nil {
 		return nil, err
 	}
