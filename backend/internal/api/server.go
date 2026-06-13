@@ -3,12 +3,15 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -53,7 +56,16 @@ func New(st *store.Store) *Server {
 		accessKey := os.Getenv("MINIO_ROOT_USER")
 		secretKey := os.Getenv("MINIO_ROOT_PASSWORD")
 		secure := strings.HasPrefix(strings.ToLower(endpoint), "https://")
-		client, err := minio.New(endpoint, &minio.Options{
+		// minio-go expects a bare host:port; strip any scheme/trailing slash so
+		// MINIO_ENDPOINT=http://minio:9000 doesn't fail init ("Endpoint url
+		// cannot have fully qualified paths"), which would silently drop us to
+		// the in-memory fallback and never create the bucket.
+		host := endpoint
+		if i := strings.Index(host, "://"); i >= 0 {
+			host = host[i+3:]
+		}
+		host = strings.TrimRight(host, "/")
+		client, err := minio.New(host, &minio.Options{
 			Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 			Secure: secure,
 		})
@@ -79,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/api/auth/me", s.handleMe)
+	mux.HandleFunc("/api/me/mcp-token", s.handleMeMCPToken)
 	mux.HandleFunc("/api/auth/mock-login", s.handleMockLogin)
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/callback", s.handleCallback)
@@ -98,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/deploy", s.handleDeploy)
 	mux.HandleFunc("/api/analytics/page-view", s.handlePageView)
 	mux.HandleFunc("/api/analytics/read-progress", s.handleReadProgress)
+	mux.HandleFunc("/api/analytics/doc", s.handleDocAnalytics)
 	mux.HandleFunc("/api/admin/releases", s.handleReleases)
 	mux.HandleFunc("/api/admin/releases/", s.handleReleaseRoutes)
 	mux.HandleFunc("/api/admin/analytics/pages", s.handlePageAnalytics)
@@ -344,9 +358,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "search_failed", err.Error())
 		return
 	}
-	filters, _ := json.Marshal(req.Filters)
-	user, _ := s.currentUser(r)
-	s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
+	// Only persist explicit, user-committed searches (Enter / search button /
+	// result click). Live as-you-type queries set Log=false to avoid flooding
+	// the log with one row per keystroke.
+	if req.Log && strings.TrimSpace(req.Query) != "" {
+		filters, _ := json.Marshal(req.Filters)
+		user, _ := s.currentUser(r)
+		s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -388,7 +407,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	answer, provider := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
 	user, _ := s.currentUser(r)
-	s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
+	s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"query":    req.Query,
 		"answer":   answer,
@@ -477,48 +496,8 @@ func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, q
 		system = "你是企业研发文档助手。只依据提供的【文档片段】回答用户问题，使用简洁中文；若片段中没有答案，明确说明未在文档中找到，不要编造。回答末尾不要重复罗列来源。"
 	}
 	userMsg := fmt.Sprintf("文档片段：\n%s\n问题：%s", ctxBuilder.String(), query)
-	payload, _ := json.Marshal(map[string]any{
-		"model": ai.AskModel,
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": userMsg},
-		},
-		"temperature": 0.2,
-		"stream":      false,
-	})
-	endpoint := strings.TrimRight(ai.AskBaseURL, "/") + "/chat/completions"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if ai.AskAPIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+ai.AskAPIKey)
-	}
-	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("chat endpoint %d: %s", resp.StatusCode, string(body))
-	}
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		return "", err
-	}
-	if len(out.Choices) == 0 {
-		return "", fmt.Errorf("chat endpoint returned no choices")
-	}
-	return out.Choices[0].Message.Content, nil
+	// Dispatch to the configured API format (OpenAI / Anthropic / Gemini / …).
+	return chatComplete(ctx, ai, system, userMsg)
 }
 
 func firstNonEmptyStr(vals ...string) string {
@@ -562,16 +541,18 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		BaseURL string `json:"base_url"`
-		APIKey  string `json:"api_key"`
+		Protocol string `json:"protocol"`
+		BaseURL  string `json:"base_url"`
+		APIKey   string `json:"api_key"`
 	}
 	if err := decodeBody(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	cur := s.store.Settings().AI
 	base := strings.TrimSpace(body.BaseURL)
 	if base == "" {
-		base = s.store.Settings().AI.AskBaseURL
+		base = cur.AskBaseURL
 	}
 	if base == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "base_url required")
@@ -579,38 +560,16 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 	}
 	key := strings.TrimSpace(body.APIKey)
 	if key == "" {
-		key = s.store.Settings().AI.AskAPIKey
+		key = cur.AskAPIKey
 	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, strings.TrimRight(base, "/")+"/models", nil)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
-		return
+	protocol := strings.TrimSpace(body.Protocol)
+	if protocol == "" {
+		protocol = cur.AskProtocol
 	}
-	if key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
-	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	ids, err := listModels(r.Context(), protocol, base, key)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "models_failed", err.Error())
 		return
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		writeError(w, http.StatusBadGateway, "models_failed", fmt.Sprintf("%d: %s", resp.StatusCode, string(raw)))
-		return
-	}
-	var parsed struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(raw, &parsed)
-	ids := make([]string, 0, len(parsed.Data))
-	for _, m := range parsed.Data {
-		if m.ID != "" {
-			ids = append(ids, m.ID)
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"models": ids})
 }
@@ -795,6 +754,28 @@ func (s *Server) handlePageView(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded", "view_id": pv.ID})
 }
 
+// handleDocAnalytics powers the doc-page "eye" popover: a daily read trend and
+// a per-reader breakdown for one document. PostHog is used when configured
+// (server-side), otherwise the built-in page_views store is the source.
+func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
+	docID := strings.TrimSpace(r.URL.Query().Get("doc_id"))
+	if docID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "doc_id is required")
+		return
+	}
+	days := 30
+	if v := r.URL.Query().Get("days"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 180 {
+			days = n
+		}
+	}
+	if stats, ok := posthogDocStats(docID, days); ok {
+		writeJSON(w, http.StatusOK, map[string]any{"source": "posthog", "stats": stats})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"source": "internal", "stats": s.store.PageReadStats(docID, days)})
+}
+
 func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
@@ -819,11 +800,47 @@ func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.SearchLogs())
+	logs := s.store.SearchLogs()
+	type out struct {
+		store.SearchLog
+		DisplayName string `json:"display_name"`
+	}
+	res := make([]out, len(logs))
+	for i, log := range logs {
+		dn := ""
+		if log.UserID != "" {
+			if u, err := s.store.UserByID(log.UserID); err == nil {
+				dn = u.DisplayName
+				if dn == "" {
+					dn = u.Username
+				}
+			}
+		}
+		res[i] = out{SearchLog: log, DisplayName: dn}
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.MCPLogs())
+	logs := s.store.MCPLogs()
+	type out struct {
+		store.MCPLog
+		DisplayName string `json:"display_name"`
+	}
+	res := make([]out, len(logs))
+	for i, log := range logs {
+		dn := ""
+		if log.UserID != "" {
+			if u, err := s.store.UserByID(log.UserID); err == nil {
+				dn = u.DisplayName
+				if dn == "" {
+					dn = u.Username
+				}
+			}
+		}
+		res[i] = out{MCPLog: log, DisplayName: dn}
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleMCPLog(w http.ResponseWriter, r *http.Request) {
@@ -838,8 +855,41 @@ func (s *Server) handleMCPLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _ := s.currentUser(r)
+	if user.ID == "" {
+		if tok := bearerToken(r); tok != "" {
+			if u, err := s.store.UserByMCPToken(tok); err == nil {
+				user = u
+			}
+		}
+	}
 	s.store.AddMCPLog(store.MCPLog{ID: fmt.Sprintf("ml-%d", time.Now().UnixNano()), ToolName: req.ToolName, UserID: user.ID, Query: req.Query, InputJSON: req.InputJSON, ResultCount: req.ResultCount, CreatedAt: time.Now().UTC()})
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "logged"})
+}
+
+func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.currentUser(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]string{"mcp_token": user.MCPToken})
+	case http.MethodPost:
+		tok, err := randomToken(32)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "token_gen_failed", err.Error())
+			return
+		}
+		updated, err := s.store.SetUserMCPToken(user.ID, tok)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "update_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"mcp_token": updated.MCPToken})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+	}
 }
 
 // currentUser returns the authenticated user from the session cookie. Login is
@@ -1613,7 +1663,7 @@ func toStoreArtifact(a deploy.Artifact) store.DeployArtifact {
 		out.Documents = append(out.Documents, store.DeployDocument{
 			DocID: d.DocID, ModuleKey: d.ModuleKey, ModuleName: d.ModuleName, DocsVersion: d.DocsVersion,
 			PackageVersion: d.PackageVersion, EntryKey: d.EntryKey, EntryType: d.EntryType, Title: d.Title,
-			Description: d.Description, Content: d.Content, Path: d.Path, SourceFile: d.SourceFile,
+			Description: d.Description, Content: d.Content, ContentMD: d.ContentMD, Path: d.Path, SourceFile: d.SourceFile,
 			Keywords: append([]string(nil), d.Keywords...), Status: d.Status,
 		})
 	}
@@ -1678,4 +1728,38 @@ func envInt64(key string, fallback int64) int64 {
 		return fallback
 	}
 	return v
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.Index(xff, ","); i != -1 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := r.Header.Get("X-Real-Ip"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func bearerToken(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if strings.HasPrefix(auth, prefix) {
+		return strings.TrimSpace(auth[len(prefix):])
+	}
+	return ""
+}
+
+func randomToken(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }

@@ -13,7 +13,6 @@ const adminLinks: [string, string, typeof FolderTree][] = [
   ["/admin/users", "用户管理", Users],
   ["/admin/settings", "模型设置", Settings],
   ["/admin/releases", "发布记录", History],
-  ["/admin/analytics", "阅读统计", BarChart3],
   ["/admin/search-logs", "搜索日志", Search],
   ["/admin/mcp-logs", "MCP 日志", MessageSquareText],
 ];

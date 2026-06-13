@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, UserPlus, UsersRound, X } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
 import { Combobox } from "@/components/ui/combobox";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Pagination } from "@/components/ui/pagination";
+
+const PAGE_SIZE = 8;
 import {
   getTeams,
   createTeam,
@@ -47,6 +51,8 @@ export default function AdminTeamsPage() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [isEdit, setIsEdit] = useState(false);
   const [addMemberFor, setAddMemberFor] = useState<Record<string, string>>({});
+  const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
 
   async function refresh() {
     try {
@@ -67,6 +73,18 @@ export default function AdminTeamsPage() {
   function ownedDomainsFor(teamKey: string): string[] {
     return flatCats.filter((c) => c.responsible_team === teamKey).map((c) => c.name);
   }
+
+  const filtered = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    if (!q) return teams || [];
+    return (teams || []).filter((t) =>
+      (t.name || "").toLowerCase().includes(q) ||
+      (t.key || "").toLowerCase().includes(q) ||
+      (t.leader || "").toLowerCase().includes(q) ||
+      (t.members || []).some((m) => m.toLowerCase().includes(q)),
+    );
+  }, [teams, keyword]);
+  const pageTeams = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function openCreate() {
     setDraft(emptyDraft);
@@ -101,7 +119,7 @@ export default function AdminTeamsPage() {
   }
 
   async function removeTeam(t: Team) {
-    if (!confirm(`确认删除团队 ${t.key}? 关联的领域负责人不会自动清除。`)) return;
+    if (!confirm(`确认删除团队 ${t.key}? 关联的分类负责方不会自动清除。`)) return;
     try {
       await deleteTeam(t.key);
       await refresh();
@@ -135,13 +153,20 @@ export default function AdminTeamsPage() {
   return (
     <AdminShell
       title="团队管理"
-      kicker="Teams & Domain Ownership"
-      description="文档维护团队（负责人 + 成员）。负责人可直接拉人进团队。团队可被指定为「领域/分类」的负责人，负责维护该领域下文档结构与模块归属。"
+      kicker="Teams"
+      description="文档维护团队（负责人 + 成员）。负责人可直接添加成员。团队可被指定为某个分类的负责方，负责维护该分类下的文档结构与归属。"
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <div className="admin-toolbar">
-        <div className="muted" style={{ fontSize: 13 }}>共 {teams?.length ?? 0} 个团队</div>
+        <div className="search-inline">
+          <Search size={15} />
+          <input
+            placeholder="搜索团队名 / 标识 / 负责人 / 成员"
+            value={keyword}
+            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+          />
+        </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}>
             <Plus size={16} /> 新增团队
@@ -157,12 +182,12 @@ export default function AdminTeamsPage() {
                 <th>团队</th>
                 <th>负责人</th>
                 <th>成员</th>
-                <th>负责领域</th>
+                <th>负责分类</th>
                 <th style={{ textAlign: "right" }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {(teams || []).map((t) => {
+              {pageTeams.map((t) => {
                 const owned = ownedDomainsFor(t.key);
                 const addVal = addMemberFor[t.key] || "";
                 return (
@@ -196,7 +221,7 @@ export default function AdminTeamsPage() {
                       </div>
                     </td>
                     <td>
-                      {owned.length > 0 ? owned.map((n) => <span key={n} className="tag" style={{ marginRight: 4 }}>{n}</span>) : <span className="muted" style={{ fontSize: 12 }}>未绑定领域</span>}
+                      {owned.length > 0 ? owned.map((n) => <span key={n} className="tag" style={{ marginRight: 4 }}>{n}</span>) : <span className="muted" style={{ fontSize: 12 }}>未绑定分类</span>}
                     </td>
                     <td>
                       <div className="row-actions" style={{ justifyContent: "flex-end" }}>
@@ -207,24 +232,26 @@ export default function AdminTeamsPage() {
                   </tr>
                 );
               })}
-              {(teams || []).length === 0 ? (
-                <tr><td colSpan={5}><div className="empty-state" style={{ minHeight: 170, border: 0, background: "transparent" }}>
-                  <div>
-                    <div style={{ fontWeight: 640, color: "hsl(var(--foreground))" }}>暂无团队</div>
-                    <p style={{ marginTop: 4, fontSize: 13 }}>创建一个团队，并将其设置为某个领域的负责人，即可开始维护文档结构。</p>
-                  </div>
-                </div></td></tr>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={5}>
+                  <EmptyState
+                    icon={UsersRound}
+                    title={keyword ? "没有匹配的团队" : "暂无团队"}
+                    hint={keyword ? "换个关键词试试。" : "创建一个团队，并将其设为某个分类的负责方，即可开始维护文档结构。"}
+                  />
+                </td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPage={setPage} />
       </div>
 
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={isEdit ? `编辑团队 · ${draft.key}` : "新增团队"}
-        subtitle={isEdit ? "更新团队信息与成员" : "负责人会自动加入成员列表；Key 可用于领域负责人绑定"}
+        subtitle={isEdit ? "更新团队信息与成员" : "负责人会自动加入成员列表；标识可用于分类负责方绑定"}
         footer={
           <>
             <button className="button" onClick={() => setModalOpen(false)}>取消</button>

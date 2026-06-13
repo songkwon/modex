@@ -21,6 +21,9 @@ type User struct {
 	// super admin status can be granted either statically (env, for bootstrap)
 	// or dynamically via the admin UI.
 	SuperAdmin  bool      `json:"is_super_admin,omitempty"`
+	// MCPToken is the user's personal bearer token for the MCP server, so MCP
+	// calls can be attributed to them. Never serialized (revealed via /api/me/mcp-token).
+	MCPToken    string    `json:"-"`
 	LastLoginAt time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time `json:"created_at,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at,omitempty"`
@@ -173,6 +176,7 @@ type Page struct {
 	Tags           []string  `json:"tags"`
 	ContentText    string    `json:"content_text"`
 	ContentHTML    string    `json:"content_html,omitempty"`
+	ContentMD      string    `json:"content_md,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
@@ -180,8 +184,11 @@ type Page struct {
 // AI answers (RAG). It targets any OpenAI-compatible /chat/completions endpoint
 // (OpenAI, DeepSeek, Qwen/DashScope-compat, local vLLM/Ollama, …).
 type AISettings struct {
+	// AskProtocol selects the API format of the chat endpoint:
+	// "openai-chat" (default), "openai-responses", "anthropic", or "gemini".
+	AskProtocol     string    `json:"ask_protocol"`
 	AskBaseURL      string    `json:"ask_base_url"`      // e.g. https://api.openai.com/v1
-	AskModel        string    `json:"ask_model"`         // e.g. gpt-4o-mini, deepseek-chat
+	AskModel        string    `json:"ask_model"`         // fetched from the endpoint
 	AskAPIKey       string    `json:"ask_api_key"`       // secret; masked when read back
 	AskSystemPrompt string    `json:"ask_system_prompt"` // optional override
 	UpdatedAt       time.Time `json:"updated_at"`
@@ -217,6 +224,7 @@ type DeployDocument struct {
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
 	Content        string   `json:"content"`
+	ContentMD      string   `json:"content_md,omitempty"`
 	Path           string   `json:"path"`
 	SourceFile     string   `json:"source_file"`
 	Keywords       []string `json:"keywords"`
@@ -262,6 +270,7 @@ type SiteFile struct {
 type SearchLog struct {
 	ID           string    `json:"id"`
 	UserID       string    `json:"user_id"`
+	IPAddress    string    `json:"ip_address,omitempty"` // recorded for anonymous searches
 	Query        string    `json:"query"`
 	Mode         string    `json:"mode"`
 	FiltersJSON  string    `json:"filters_json"`
@@ -307,4 +316,27 @@ type PageStat struct {
 	Reads30d       int       `json:"reads_30d"`
 	AvgDurationSec int       `json:"avg_duration_seconds"`
 	LastViewedAt   time.Time `json:"last_viewed_at"`
+}
+
+// DailyReadPoint is one day's read count for a single page (line-chart point).
+type DailyReadPoint struct {
+	Date  string `json:"date"` // YYYY-MM-DD (UTC)
+	Count int    `json:"count"`
+}
+
+// ReaderStat is one reader's aggregated read activity for a single page.
+type ReaderStat struct {
+	Reader     string    `json:"reader"` // display name, username, or "匿名"
+	UserID     string    `json:"user_id"`
+	Count      int       `json:"count"`
+	LastReadAt time.Time `json:"last_read_at"`
+}
+
+// PageReadStats is the per-page reading detail surfaced behind the doc-page
+// "eye" popover: a daily read trend plus a per-reader breakdown.
+type PageReadStats struct {
+	DocID   string           `json:"doc_id"`
+	Total   int              `json:"total"`
+	Daily   []DailyReadPoint `json:"daily"`
+	Readers []ReaderStat     `json:"readers"`
 }

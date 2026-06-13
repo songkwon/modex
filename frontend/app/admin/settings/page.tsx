@@ -6,15 +6,35 @@ import { AdminShell } from "@/components/admin-shell";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchModels, getSettings, saveSettings, type AISettings } from "@/lib/api";
 
-const PRESETS: { label: string; base: string; model: string }[] = [
-  { label: "OpenAI", base: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-  { label: "DeepSeek", base: "https://api.deepseek.com/v1", model: "deepseek-chat" },
-  { label: "通义千问 (DashScope 兼容)", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus" },
-  { label: "本地 Ollama", base: "http://localhost:11434/v1", model: "qwen2.5" },
+// Supported chat API formats. "openai-chat" covers OpenAI and every
+// OpenAI-compatible vendor (DeepSeek, Qwen, GLM, Moonshot, Ollama, vLLM, …);
+// the others are the native protocols of the major providers.
+const PROTOCOLS: { value: string; label: string }[] = [
+  { value: "openai-chat", label: "OpenAI Chat Completions" },
+  { value: "anthropic", label: "Anthropic Messages（原生）" },
+  { value: "gemini", label: "Gemini generateContent（原生）" },
+  { value: "openai-responses", label: "OpenAI Responses API" },
 ];
 
+// Provider presets only fill the API format + Base URL — the model is always
+// fetched from the endpoint, never hardcoded. Both fields stay editable.
+const PRESETS: { label: string; base: string; protocol: string }[] = [
+  { label: "OpenAI", base: "https://api.openai.com/v1", protocol: "openai-chat" },
+  { label: "Anthropic Claude", base: "https://api.anthropic.com", protocol: "anthropic" },
+  { label: "Google Gemini", base: "https://generativelanguage.googleapis.com", protocol: "gemini" },
+  { label: "DeepSeek", base: "https://api.deepseek.com/v1", protocol: "openai-chat" },
+  { label: "通义千问 Qwen", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", protocol: "openai-chat" },
+  { label: "智谱 GLM", base: "https://open.bigmodel.cn/api/paas/v4", protocol: "openai-chat" },
+  { label: "Kimi (Moonshot)", base: "https://api.moonshot.cn/v1", protocol: "openai-chat" },
+  { label: "SiliconFlow", base: "https://api.siliconflow.cn/v1", protocol: "openai-chat" },
+  { label: "Ollama（本地）", base: "http://localhost:11434/v1", protocol: "openai-chat" },
+  { label: "vLLM（自托管）", base: "http://localhost:8000/v1", protocol: "openai-chat" },
+];
+
+const DEFAULT_AI: AISettings = { ask_protocol: "openai-chat", ask_base_url: "", ask_model: "", ask_api_key: "", ask_system_prompt: "" };
+
 export default function AdminSettingsPage() {
-  const [ai, setAI] = useState<AISettings>({ ask_base_url: "", ask_model: "", ask_api_key: "", ask_system_prompt: "" });
+  const [ai, setAI] = useState<AISettings>(DEFAULT_AI);
   const [keySet, setKeySet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -22,14 +42,16 @@ export default function AdminSettingsPage() {
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
+  const protocol = ai.ask_protocol || "openai-chat";
+
   async function loadModels() {
     if (!ai.ask_base_url) { setError("请先填写 API Base URL"); return; }
     setLoadingModels(true);
     setError("");
     try {
-      const r = await fetchModels(ai.ask_base_url, ai.ask_api_key);
+      const r = await fetchModels(ai.ask_base_url, ai.ask_api_key, protocol);
       setModels(r.models || []);
-      if (!r.models?.length) setError("该端点未返回模型列表");
+      if (!r.models?.length) setError("该端点未返回模型列表，请确认地址、密钥和 API 格式是否匹配。");
     } catch (e) {
       setError(String(e));
     } finally {
@@ -40,7 +62,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     getSettings()
       .then((s) => {
-        setAI({ ...s.ai, ask_api_key: "" });
+        setAI({ ...DEFAULT_AI, ...s.ai, ask_api_key: "" });
         setKeySet(s.ask_api_key_set);
       })
       .catch((e) => setError(String(e)));
@@ -54,7 +76,7 @@ export default function AdminSettingsPage() {
       const payload: AISettings = { ...ai };
       if (!payload.ask_api_key) delete payload.ask_api_key; // keep existing key
       const s = await saveSettings(payload);
-      setAI({ ...s.ai, ask_api_key: "" });
+      setAI({ ...DEFAULT_AI, ...s.ai, ask_api_key: "" });
       setKeySet(s.ask_api_key_set);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -66,7 +88,7 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <AdminShell title="模型设置" kicker="AI Model" description="对接任意 OpenAI 兼容的对话模型，用于全站 AI 问答（RAG）。未配置时回退到基于检索的摘要式回答。">
+    <AdminShell title="模型设置" kicker="AI Model" description="对接对话模型用于全站 AI 问答（RAG）。支持 OpenAI、Anthropic、Gemini 等主流 API 格式与任意兼容端点；未配置时回退到基于检索的摘要式回答。">
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <section className="card" style={{ display: "grid", gap: 18 }}>
@@ -74,17 +96,30 @@ export default function AdminSettingsPage() {
           <label>快速预设</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {PRESETS.map((p) => (
-              <button key={p.label} className="shelf-tab" onClick={() => setAI({ ...ai, ask_base_url: p.base, ask_model: p.model })}>
+              <button key={p.label} className="shelf-tab" onClick={() => { setModels([]); setAI({ ...ai, ask_base_url: p.base, ask_protocol: p.protocol, ask_model: "" }); }}>
                 {p.label}
               </button>
             ))}
           </div>
+          <span className="field-hint">选择预设只填入 API 格式与 Base URL，模型请点「获取模型列表」从接口拉取。</span>
+        </div>
+
+        <div className="field">
+          <label>API 格式</label>
+          <Combobox
+            options={PROTOCOLS}
+            value={[protocol]}
+            onChange={(v) => { setModels([]); setAI({ ...ai, ask_protocol: v[0] || "openai-chat", ask_model: "" }); }}
+            multiple={false}
+            placeholder="选择 API 格式…"
+          />
+          <span className="field-hint">决定请求的端点与报文格式。大多数国产/开源服务用 <code className="code-chip">OpenAI Chat Completions</code>。</span>
         </div>
 
         <div className="field">
           <label>API Base URL</label>
           <input value={ai.ask_base_url || ""} placeholder="https://api.openai.com/v1" onChange={(e) => setAI({ ...ai, ask_base_url: e.target.value })} />
-          <span className="field-hint">OpenAI 兼容地址，自动追加 <code className="code-chip">/chat/completions</code> 与 <code className="code-chip">/models</code>。</span>
+          <span className="field-hint">服务的根地址；不同 API 格式会自动追加各自的路径（如 <code className="code-chip">/chat/completions</code>、<code className="code-chip">/v1/messages</code>）。</span>
         </div>
 
         <div className="field">
@@ -112,14 +147,14 @@ export default function AdminSettingsPage() {
                 onChange={(v) => setAI({ ...ai, ask_model: v[0] || "" })}
                 multiple={false}
                 allowCreate
-                placeholder={models.length ? "选择模型…" : "先获取模型列表，或手动输入"}
+                placeholder={models.length ? "选择模型…" : "点右侧「获取模型列表」从接口拉取"}
               />
             </div>
             <button className="button" onClick={loadModels} disabled={loadingModels} style={{ flex: "none", height: 42 }}>
               {loadingModels ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 获取模型列表
             </button>
           </div>
-          <span className="field-hint">填好 Base URL 与 Key 后点击获取；也可直接输入模型名。</span>
+          <span className="field-hint">模型从接口实时获取；填好 Base URL 与 Key 后点击拉取。</span>
         </div>
 
         <div className="field">
@@ -141,7 +176,7 @@ export default function AdminSettingsPage() {
       </section>
 
       <p className="muted" style={{ fontSize: 12 }}>
-        提示：向量检索（embedding）当前由部署环境变量配置；对话模型在此页配置后立即生效，无需重启。
+        提示：对话模型在此页配置后立即生效，无需重启。向量 / 重排序模型配置将在后续版本加入。
       </p>
     </AdminShell>
   );

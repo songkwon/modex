@@ -1,9 +1,29 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Copy, KeyRound, RefreshCw, Check } from "lucide-react";
+import { getMCPToken, rotateMCPToken } from "@/lib/api";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://modex.example.com";
 
 export default function McpUsagePage() {
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  useEffect(() => {
+    getMCPToken()
+      .then((r) => setToken(r.mcp_token || ""))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const displayToken = token || "<你的 token>";
+
   const claudeCmd = `claude mcp add modex-docs \\
   --env MODEX_API_BASE_URL=${API_BASE} \\
-  --env MODEX_MCP_TOKEN=<你的 token> \\
+  --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y modex-docs-mcp`;
 
   const cursorJson = `{
@@ -13,11 +33,27 @@ export default function McpUsagePage() {
       "args": ["-y", "modex-docs-mcp"],
       "env": {
         "MODEX_API_BASE_URL": "${API_BASE}",
-        "MODEX_MCP_TOKEN": "<你的 token>"
+        "MODEX_MCP_TOKEN": "${displayToken}"
       }
     }
   }
 }`;
+
+  async function handleRotate() {
+    try {
+      const r = await rotateMCPToken();
+      setToken(r.mcp_token);
+    } catch (e) {
+      alert(String(e));
+    }
+  }
+
+  function copyText(text: string, setter: (v: boolean) => void) {
+    navigator.clipboard.writeText(text).then(() => {
+      setter(true);
+      setTimeout(() => setter(false), 1500);
+    });
+  }
 
   return (
     <main className="main">
@@ -32,27 +68,86 @@ export default function McpUsagePage() {
         </header>
 
         <section className="card">
+          <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 720 }}>你的 MCP Token</h2>
+            <button className="button button-primary" onClick={handleRotate} disabled={loading}>
+              <RefreshCw size={14} /> {token ? "重新生成" : "生成 Token"}
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
+            每个用户拥有独立的 token，服务端可在 MCP 日志中追踪调用来源。
+          </p>
+          <div className="mcp-code" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {loading ? "加载中…" : displayToken}
+            </code>
+            {token && (
+              <button
+                className="icon-btn"
+                onClick={() => copyText(token, setCopiedCmd)}
+                aria-label="复制 token"
+                title="复制 token"
+              >
+                {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="card">
           <h2 style={{ fontSize: 16, fontWeight: 720 }}>Claude Code</h2>
-          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>在终端执行（把 token 换成你的）：</p>
-          <pre className="mcp-code">{claudeCmd}</pre>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>在终端执行（token 已自动填入上方生成的值）：</p>
+          <div style={{ position: "relative" }}>
+            <pre className="mcp-code">{claudeCmd}</pre>
+            <button
+              className="icon-btn"
+              style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
+              onClick={() => copyText(claudeCmd, setCopiedCmd)}
+              aria-label="复制命令"
+            >
+              {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
         </section>
 
         <section className="card">
           <h2 style={{ fontSize: 16, fontWeight: 720 }}>Cursor / Windsurf 等</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>加入 MCP 配置文件（如 <code className="code-chip">~/.cursor/mcp.json</code>）：</p>
-          <pre className="mcp-code">{cursorJson}</pre>
+          <div style={{ position: "relative" }}>
+            <pre className="mcp-code">{cursorJson}</pre>
+            <button
+              className="icon-btn"
+              style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
+              onClick={() => copyText(cursorJson, setCopiedJson)}
+              aria-label="复制配置"
+            >
+              {copiedJson ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
         </section>
 
         <section className="card">
           <h2 style={{ fontSize: 16, fontWeight: 720 }}>可用工具</h2>
-          <ul style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 14 }}>
-            <li><span className="tag">list_modules</span> 按分类 / 关键词列出文档源</li>
-            <li><span className="tag">list_versions</span> 列出某文档源的版本</li>
-            <li><span className="tag">search_docs</span> keyword / semantic / hybrid 检索</li>
-            <li><span className="tag">get_doc_page</span> 按 doc_id 读取文档正文</li>
+          <ul className="mcp-tool-list" style={{ marginTop: 10 }}>
+            <li>
+              <span className="tag">list_modules</span>
+              <span className="mcp-tool-desc">按分类 / 关键词列出文档源</span>
+            </li>
+            <li>
+              <span className="tag">list_versions</span>
+              <span className="mcp-tool-desc">列出某文档源的版本</span>
+            </li>
+            <li>
+              <span className="tag">search_docs</span>
+              <span className="mcp-tool-desc">keyword / semantic / hybrid 检索</span>
+            </li>
+            <li>
+              <span className="tag">get_doc_page</span>
+              <span className="mcp-tool-desc">按 doc_id 读取文档正文</span>
+            </li>
           </ul>
           <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-            说明：MCP 与平台搜索共用同一套检索能力。token 即平台的 <code className="code-chip">MCP_TOKEN</code>；管理员可在「管理 → MCP 日志」查看调用记录。
+            说明：MCP 与平台搜索共用同一套检索能力。安装后 AI 客户端会自动发现这些工具并在需要时调用，无需额外配置 Skill。
           </p>
         </section>
       </section>

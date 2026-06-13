@@ -48,8 +48,23 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
     return () => clearTimeout(debounce.current);
   }, [query, moduleKey, categoryId]);
 
+  // logSearch records one search-log row for an explicit, user-committed search
+  // (Enter / result click / Ask AI). Live as-you-type queries never log, so the
+  // search log isn't flooded with one row per keystroke. Fire-and-forget.
+  function logSearch() {
+    const q = query.trim();
+    if (!q) return;
+    const filters: Record<string, unknown> = {};
+    if (moduleKey) filters.modules = [moduleKey];
+    if (categoryId) filters.category_ids = [categoryId];
+    const body: Record<string, unknown> = { query: q, mode: "hybrid", page_size: 1, log: true };
+    if (Object.keys(filters).length) body.filters = filters;
+    searchDocs(body).catch(() => {});
+  }
+
   async function runAsk() {
     if (!query.trim()) return;
+    logSearch();
     setAsking(true);
     setAnswer(null);
     try {
@@ -63,6 +78,7 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
   }
 
   function go(path: string) {
+    logSearch();
     onNavigate?.();
     router.push(path);
   }

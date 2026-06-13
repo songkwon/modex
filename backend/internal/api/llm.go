@@ -1,0 +1,341 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"modex/backend/internal/store"
+)
+
+// LLM API formats supported for the AI-ask feature. The frontend exposes these
+// as selectable "API 格式" options so any mainstream provider can be wired in.
+const (
+	protoOpenAIChat      = "openai-chat"      // POST /chat/completions  (OpenAI & all compatible vendors)
+	protoOpenAIResponses = "openai-responses" // POST /responses         (OpenAI Responses API)
+	protoAnthropic       = "anthropic"        // POST /v1/messages       (Anthropic Messages)
+	protoGemini          = "gemini"           // POST /v1beta/models/{m}:generateContent (Google Gemini)
+)
+
+func normalizeProtocol(p string) string {
+	switch strings.TrimSpace(strings.ToLower(p)) {
+	case protoOpenAIResponses:
+		return protoOpenAIResponses
+	case protoAnthropic:
+		return protoAnthropic
+	case protoGemini:
+		return protoGemini
+	default:
+		return protoOpenAIChat
+	}
+}
+
+// chatComplete sends a single-turn (system + user) completion request using the
+// protocol configured in settings and returns the assistant's text.
+func chatComplete(ctx context.Context, ai store.AISettings, system, user string) (string, error) {
+	base := strings.TrimRight(strings.TrimSpace(ai.AskBaseURL), "/")
+	switch normalizeProtocol(ai.AskProtocol) {
+	case protoAnthropic:
+		return chatAnthropic(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+	case protoGemini:
+		return chatGemini(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+	case protoOpenAIResponses:
+		return chatOpenAIResponses(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+	default:
+		return chatOpenAIChat(ctx, base, ai.AskAPIKey, ai.AskModel, system, user)
+	}
+}
+
+// listModels fetches available model ids from the provider for the given
+// protocol so the admin never has to type a model name by hand.
+func listModels(ctx context.Context, protocol, base, key string) ([]string, error) {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	switch normalizeProtocol(protocol) {
+	case protoAnthropic:
+		return modelsAnthropic(ctx, base, key)
+	case protoGemini:
+		return modelsGemini(ctx, base, key)
+	default: // openai-chat & openai-responses share the /models listing
+		return modelsOpenAI(ctx, base, key)
+	}
+}
+
+func httpJSON(ctx context.Context, method, url string, headers map[string]string, body any) ([]byte, int, error) {
+	var reader io.Reader
+	if body != nil {
+		raw, _ := json.Marshal(body)
+		reader = strings.NewReader(string(raw))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, reader)
+	if err != nil {
+		return nil, 0, err
+	}
+	for k, v := range headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	return raw, resp.StatusCode, nil
+}
+
+// ---- OpenAI Chat Completions ------------------------------------------------
+
+func chatOpenAIChat(ctx context.Context, base, key, model, system, user string) (string, error) {
+	raw, code, err := httpJSON(ctx, http.MethodPost, base+"/chat/completions",
+		map[string]string{"Content-Type": "application/json", "Authorization": bearer(key)},
+		map[string]any{
+			"model": model,
+			"messages": []map[string]string{
+				{"role": "system", "content": system},
+				{"role": "user", "content": user},
+			},
+			"temperature": 0.2,
+			"stream":      false,
+		})
+	if err != nil {
+		return "", err
+	}
+	if code >= 300 {
+		return "", fmt.Errorf("chat endpoint %d: %s", code, string(raw))
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", err
+	}
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("chat endpoint returned no choices")
+	}
+	return out.Choices[0].Message.Content, nil
+}
+
+// ---- OpenAI Responses API ---------------------------------------------------
+
+func chatOpenAIResponses(ctx context.Context, base, key, model, system, user string) (string, error) {
+	raw, code, err := httpJSON(ctx, http.MethodPost, base+"/responses",
+		map[string]string{"Content-Type": "application/json", "Authorization": bearer(key)},
+		map[string]any{
+			"model":        model,
+			"instructions": system,
+			"input":        user,
+		})
+	if err != nil {
+		return "", err
+	}
+	if code >= 300 {
+		return "", fmt.Errorf("responses endpoint %d: %s", code, string(raw))
+	}
+	// Prefer the flattened convenience field; fall back to walking output[].
+	var out struct {
+		OutputText string `json:"output_text"`
+		Output     []struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(out.OutputText) != "" {
+		return out.OutputText, nil
+	}
+	for _, o := range out.Output {
+		for _, c := range o.Content {
+			if c.Text != "" {
+				return c.Text, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("responses endpoint returned no text")
+}
+
+// ---- Anthropic Messages -----------------------------------------------------
+
+// anthropicBase normalizes a base URL to the host root (Messages lives at
+// /v1/messages), tolerating a base entered with or without a trailing /v1.
+func anthropicBase(base string) string {
+	return strings.TrimSuffix(strings.TrimRight(base, "/"), "/v1")
+}
+
+func chatAnthropic(ctx context.Context, base, key, model, system, user string) (string, error) {
+	headers := map[string]string{
+		"Content-Type":      "application/json",
+		"x-api-key":         key,
+		"anthropic-version": "2023-06-01",
+	}
+	raw, code, err := httpJSON(ctx, http.MethodPost, anthropicBase(base)+"/v1/messages", headers,
+		map[string]any{
+			"model":      model,
+			"max_tokens": 1024,
+			"system":     system,
+			"messages": []map[string]string{
+				{"role": "user", "content": user},
+			},
+		})
+	if err != nil {
+		return "", err
+	}
+	if code >= 300 {
+		return "", fmt.Errorf("anthropic endpoint %d: %s", code, string(raw))
+	}
+	var out struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", err
+	}
+	for _, c := range out.Content {
+		if c.Type == "text" && c.Text != "" {
+			return c.Text, nil
+		}
+	}
+	return "", fmt.Errorf("anthropic endpoint returned no text")
+}
+
+// ---- Google Gemini ----------------------------------------------------------
+
+// geminiBase normalizes to the API root; generateContent lives under
+// /v1beta/models/{model}:generateContent.
+func geminiBase(base string) string {
+	b := strings.TrimRight(base, "/")
+	b = strings.TrimSuffix(b, "/v1beta")
+	b = strings.TrimSuffix(b, "/v1")
+	return b
+}
+
+func chatGemini(ctx context.Context, base, key, model, system, user string) (string, error) {
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", geminiBase(base), model, key)
+	raw, code, err := httpJSON(ctx, http.MethodPost, url,
+		map[string]string{"Content-Type": "application/json"},
+		map[string]any{
+			"systemInstruction": map[string]any{"parts": []map[string]string{{"text": system}}},
+			"contents": []map[string]any{
+				{"role": "user", "parts": []map[string]string{{"text": user}}},
+			},
+		})
+	if err != nil {
+		return "", err
+	}
+	if code >= 300 {
+		return "", fmt.Errorf("gemini endpoint %d: %s", code, string(raw))
+	}
+	var out struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", err
+	}
+	for _, c := range out.Candidates {
+		for _, p := range c.Content.Parts {
+			if p.Text != "" {
+				return p.Text, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("gemini endpoint returned no text")
+}
+
+// ---- Model listing per protocol ---------------------------------------------
+
+func modelsOpenAI(ctx context.Context, base, key string) ([]string, error) {
+	raw, code, err := httpJSON(ctx, http.MethodGet, base+"/models",
+		map[string]string{"Authorization": bearer(key)}, nil)
+	if err != nil {
+		return nil, err
+	}
+	if code >= 300 {
+		return nil, fmt.Errorf("%d: %s", code, string(raw))
+	}
+	var parsed struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &parsed)
+	ids := make([]string, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids, nil
+}
+
+func modelsAnthropic(ctx context.Context, base, key string) ([]string, error) {
+	raw, code, err := httpJSON(ctx, http.MethodGet, anthropicBase(base)+"/v1/models",
+		map[string]string{"x-api-key": key, "anthropic-version": "2023-06-01"}, nil)
+	if err != nil {
+		return nil, err
+	}
+	if code >= 300 {
+		return nil, fmt.Errorf("%d: %s", code, string(raw))
+	}
+	var parsed struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &parsed)
+	ids := make([]string, 0, len(parsed.Data))
+	for _, m := range parsed.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids, nil
+}
+
+func modelsGemini(ctx context.Context, base, key string) ([]string, error) {
+	raw, code, err := httpJSON(ctx, http.MethodGet,
+		fmt.Sprintf("%s/v1beta/models?key=%s", geminiBase(base), key), nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if code >= 300 {
+		return nil, fmt.Errorf("%d: %s", code, string(raw))
+	}
+	var parsed struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	_ = json.Unmarshal(raw, &parsed)
+	ids := make([]string, 0, len(parsed.Models))
+	for _, m := range parsed.Models {
+		ids = append(ids, strings.TrimPrefix(m.Name, "models/"))
+	}
+	return ids, nil
+}
+
+func bearer(key string) string {
+	if key == "" {
+		return ""
+	}
+	return "Bearer " + key
+}

@@ -34,6 +34,10 @@ type Request struct {
 	Filters  Filters `json:"filters"`
 	Page     int     `json:"page"`
 	PageSize int     `json:"page_size"`
+	// Log marks an explicit, user-committed search (Enter / search button /
+	// result click) that should be persisted to the search log. Live
+	// as-you-type queries leave this false so the log isn't flooded.
+	Log bool `json:"log"`
 }
 
 type Result struct {

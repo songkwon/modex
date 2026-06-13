@@ -61,6 +61,7 @@ type DocumentRecord struct {
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
 	Content        string   `json:"content"`
+	ContentMD      string   `json:"content_md,omitempty"`
 	Path           string   `json:"path"`
 	SourceFile     string   `json:"source_file"`
 	Keywords       []string `json:"keywords"`

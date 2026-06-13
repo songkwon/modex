@@ -58,14 +58,27 @@ func main() {
 		must(docs.Package(buildDir, artifact))
 		fmt.Println("docsctl package ok:", artifact)
 	case "deploy":
-		must(deploy(artifact))
+		must(deploy(root, buildDir, artifact))
 		fmt.Println("docsctl deploy ok")
 	default:
 		fatal("unknown command: " + os.Args[1])
 	}
 }
 
-func deploy(artifact string) error {
+func deploy(root, buildDir, artifact string) error {
+	if _, err := os.Stat(artifact); err != nil {
+		// Auto-build and package when the artifact is missing, so `docsctl deploy`
+		// is the only command users need in CI/local workflows.
+		if err := docs.Validate(root); err != nil {
+			return err
+		}
+		if err := docs.Build(root, buildDir); err != nil {
+			return err
+		}
+		if err := docs.Package(buildDir, artifact); err != nil {
+			return err
+		}
+	}
 	b, err := os.ReadFile(artifact)
 	if err != nil {
 		return err

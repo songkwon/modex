@@ -66,10 +66,10 @@ export function SearchResults({ s }: { s: Search }) {
             <button className="button ds-answer-close" onClick={() => setAnswer(null)}>关闭</button>
           </div>
           <div className="ds-answer-body">{answer.answer}</div>
-          {answer.sources.length > 0 ? (
+          {(answer.sources?.length ?? 0) > 0 ? (
             <div className="ds-sources">
               <div className="muted ds-sources-label">引用文档</div>
-              {answer.sources.map((src) => (
+              {(answer.sources || []).map((src) => (
                 <button className="ds-source" key={src.doc_id} onClick={() => go(src.path)}>
                   <span className="ds-crumb">{src.breadcrumb}</span>
                   <span className="ds-title">{src.title}</span>
