@@ -709,7 +709,22 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.Releases())
+	releases := s.store.Releases()
+	if kw := keywordOf(r); kw != "" {
+		filtered := releases[:0:0]
+		for _, rel := range releases {
+			if containsFold(rel.ModuleKey, kw) || containsFold(rel.Publisher, kw) || containsFold(rel.DocsVersion, kw) || containsFold(rel.ReleaseID, kw) {
+				filtered = append(filtered, rel)
+			}
+		}
+		releases = filtered
+	}
+	if wantsPage(r) {
+		page, limit := pageParams(r)
+		writeJSON(w, http.StatusOK, paginate(releases, page, limit))
+		return
+	}
+	writeJSON(w, http.StatusOK, releases)
 }
 
 func (s *Server) handlePageAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -818,6 +833,20 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		res[i] = out{SearchLog: log, DisplayName: dn}
 	}
+	if kw := keywordOf(r); kw != "" {
+		filtered := res[:0:0]
+		for _, l := range res {
+			if containsFold(l.Query, kw) || containsFold(l.DisplayName, kw) || containsFold(l.UserID, kw) || containsFold(l.IPAddress, kw) {
+				filtered = append(filtered, l)
+			}
+		}
+		res = filtered
+	}
+	if wantsPage(r) {
+		page, limit := pageParams(r)
+		writeJSON(w, http.StatusOK, paginate(res, page, limit))
+		return
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -839,6 +868,20 @@ func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		res[i] = out{MCPLog: log, DisplayName: dn}
+	}
+	if kw := keywordOf(r); kw != "" {
+		filtered := res[:0:0]
+		for _, l := range res {
+			if containsFold(l.ToolName, kw) || containsFold(l.Query, kw) || containsFold(l.DisplayName, kw) || containsFold(l.UserID, kw) {
+				filtered = append(filtered, l)
+			}
+		}
+		res = filtered
+	}
+	if wantsPage(r) {
+		page, limit := pageParams(r)
+		writeJSON(w, http.StatusOK, paginate(res, page, limit))
+		return
 	}
 	writeJSON(w, http.StatusOK, res)
 }
@@ -1127,7 +1170,22 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusOK, s.store.Modules("", ""))
+		modules := s.store.Modules("", "")
+		if kw := keywordOf(r); kw != "" {
+			filtered := modules[:0:0]
+			for _, m := range modules {
+				if containsFold(m.Name, kw) || containsFold(m.ModuleKey, kw) || containsFold(m.RepoURL, kw) || containsFold(m.Description, kw) {
+					filtered = append(filtered, m)
+				}
+			}
+			modules = filtered
+		}
+		if wantsPage(r) {
+			page, limit := pageParams(r)
+			writeJSON(w, http.StatusOK, paginate(modules, page, limit))
+			return
+		}
+		writeJSON(w, http.StatusOK, modules)
 		return
 	}
 	var m store.Module
@@ -1316,6 +1374,11 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		for i := range users {
 			users[i].SuperAdmin = s.auth.IsSuperAdmin(users[i])
 		}
+		if wantsPage(r) {
+			page, limit := pageParams(r)
+			writeJSON(w, http.StatusOK, paginate(users, page, limit))
+			return
+		}
 		writeJSON(w, http.StatusOK, users)
 	case http.MethodPost:
 		var u store.User
@@ -1393,7 +1456,22 @@ func (s *Server) handleAdminTeams(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.store.Teams())
+		teams := s.store.Teams()
+		if kw := keywordOf(r); kw != "" {
+			filtered := teams[:0:0]
+			for _, t := range teams {
+				if containsFold(t.Name, kw) || containsFold(t.Key, kw) || containsFold(t.Leader, kw) || containsFold(t.Description, kw) || containsFold(strings.Join(t.Members, " "), kw) {
+					filtered = append(filtered, t)
+				}
+			}
+			teams = filtered
+		}
+		if wantsPage(r) {
+			page, limit := pageParams(r)
+			writeJSON(w, http.StatusOK, paginate(teams, page, limit))
+			return
+		}
+		writeJSON(w, http.StatusOK, teams)
 	case http.MethodPost:
 		var t store.Team
 		if err := decodeBody(r, &t); err != nil {

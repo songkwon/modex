@@ -8,7 +8,8 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { createModule, getCategories, getDeployToken, getModules, rotateDeployToken, updateModule } from "@/lib/api";
+import { createModule, getCategories, getDeployToken, rotateDeployToken, updateModule } from "@/lib/api";
+import { usePaged } from "@/lib/use-paged";
 import type { Category, ModuleInfo } from "@/types/modex";
 
 const PAGE_SIZE = 8;
@@ -46,34 +47,25 @@ function flatten(cats: Category[], depth = 0): ComboOption[] {
 }
 
 export default function AdminModulesPage() {
-  const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [token, setToken] = useState<{ deploy_token: string; deploy_url: string } | null>(null);
   const isEdit = !!draft.module_key;
 
-  async function refresh() {
-    try {
-      const [ms, tree] = await Promise.all([getModules(), getCategories()]);
-      setModules(ms || []);
-      setCategories(tree || []);
-      setError("");
-    } catch (e) {
-      setError(String(e));
-    }
-  }
-  useEffect(() => { refresh(); }, []);
+  const { items: pageItems, total, page, setPage, error: loadError, reload } = usePaged<ModuleInfo>(
+    "/api/admin/modules",
+    PAGE_SIZE,
+    keyword.trim(),
+  );
+
+  useEffect(() => {
+    getCategories().then((tree) => setCategories(tree || [])).catch(() => {});
+  }, []);
 
   const categoryOptions = useMemo(() => flatten(categories), [categories]);
-  const filtered = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    return (modules || []).filter((m) => !q || m.name.toLowerCase().includes(q) || m.module_key.toLowerCase().includes(q) || (m.repo_url || "").toLowerCase().includes(q));
-  }, [modules, keyword]);
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function openCreate() {
     setDraft(emptyDraft);
@@ -120,7 +112,7 @@ export default function AdminModulesPage() {
         setDraft({ ...draft, module_key: created.module_key });
         setToken(t);
       }
-      await refresh();
+      reload();
     } catch (e) {
       setError(String(e));
     }
@@ -140,12 +132,12 @@ export default function AdminModulesPage() {
 
   return (
     <AdminShell title="文档源管理" kicker="Doc Sources" description="接入 Git / SVN 文档仓库：选择文档框架、绑定分类、生成 Deploy Token，CI 推送后即归档到对应分类。">
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
+      {(error || loadError) ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error || loadError}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
-          <input placeholder="搜索名称 / key / 仓库" value={keyword} onChange={(e) => { setKeyword(e.target.value); setPage(1); }} />
+          <input placeholder="搜索名称 / key / 仓库" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}><Plus size={16} /> 接入文档源</button>
@@ -206,7 +198,7 @@ export default function AdminModulesPage() {
             </tbody>
           </table>
         </div>
-        <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPage={setPage} />
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
       </div>
 
       <Modal

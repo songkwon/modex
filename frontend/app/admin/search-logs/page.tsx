@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Search } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { api } from "@/lib/api";
+import { usePaged } from "@/lib/use-paged";
 
 const PAGE_SIZE = 12;
 
@@ -22,30 +22,8 @@ type SearchLog = {
 };
 
 export default function SearchLogsPage() {
-  const [data, setData] = useState<SearchLog[]>([]);
-  const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    let cancelled = false;
-    api<SearchLog[]>("/api/admin/analytics/search")
-      .then((d) => { if (!cancelled) setData(d || []); })
-      .catch((e) => { if (!cancelled) setError(String(e)); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((l) =>
-      (l.query || "").toLowerCase().includes(q) ||
-      (l.display_name || "").toLowerCase().includes(q) ||
-      (l.user_id || "").toLowerCase().includes(q) ||
-      (l.ip_address || "").toLowerCase().includes(q),
-    );
-  }, [data, keyword]);
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { items: pageRows, total, page, setPage, error } = usePaged<SearchLog>("/api/admin/analytics/search", PAGE_SIZE, keyword.trim());
 
   return (
     <AdminShell title="搜索日志" kicker="Search Analytics" description="观察高频搜索词、无结果查询和搜索点击行为。">
@@ -57,13 +35,13 @@ export default function SearchLogsPage() {
           <input
             placeholder="搜索查询词 / 用户 / IP"
             value={keyword}
-            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+            onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
       </div>
 
       <div className="table-card">
-        {filtered.length === 0 ? (
+        {total === 0 ? (
           <EmptyState
             icon={Search}
             title={keyword ? "没有匹配的搜索日志" : "暂无搜索日志"}
@@ -105,7 +83,7 @@ export default function SearchLogsPage() {
                 ))}
               </tbody>
             </table></div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPage={setPage} />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
           </>
         )}
       </div>

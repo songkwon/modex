@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { History, Search } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
-import { api } from "@/lib/api";
+import { usePaged } from "@/lib/use-paged";
 
 const PAGE_SIZE = 12;
 
@@ -24,30 +24,8 @@ type Release = {
 };
 
 export default function ReleasesPage() {
-  const [releases, setReleases] = useState<Release[]>([]);
-  const [error, setError] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    let cancelled = false;
-    api<Release[]>("/api/admin/releases")
-      .then((r) => { if (!cancelled) setReleases(r || []); })
-      .catch((e) => { if (!cancelled) setError(String(e)); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    if (!q) return releases;
-    return releases.filter((r) =>
-      (r.module_key || "").toLowerCase().includes(q) ||
-      (r.publisher || "").toLowerCase().includes(q) ||
-      (r.docs_version || "").toLowerCase().includes(q) ||
-      (r.release_id || "").toLowerCase().includes(q),
-    );
-  }, [releases, keyword]);
-  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { items: pageRows, total, page, setPage, error } = usePaged<Release>("/api/admin/releases", PAGE_SIZE, keyword.trim());
 
   return (
     <AdminShell title="发布记录" kicker="Releases" description="追踪每次文档发布的来源、构建系统、版本与状态。">
@@ -59,13 +37,13 @@ export default function ReleasesPage() {
           <input
             placeholder="搜索模块 / 发布人 / 版本"
             value={keyword}
-            onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+            onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
       </div>
 
       <div className="table-card">
-        {filtered.length === 0 ? (
+        {total === 0 ? (
           <EmptyState
             icon={History}
             title={keyword ? "没有匹配的发布记录" : "暂无发布记录"}
@@ -102,7 +80,7 @@ export default function ReleasesPage() {
                 ))}
               </tbody>
             </table></div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPage={setPage} />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
           </>
         )}
       </div>
