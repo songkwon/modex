@@ -120,6 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/mcp/log", s.handleMCPLog)
 	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
 	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
+	mux.HandleFunc("/api/admin/plugins", s.handleAdminPlugins)
 	mux.HandleFunc("/api/admin/categories", s.handleAdminCategories)
 	mux.HandleFunc("/api/admin/categories/", s.handleAdminCategoryByID)
 	mux.HandleFunc("/api/admin/modules", s.handleAdminModules)
@@ -220,6 +221,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"oidc_login_enabled": cfg.LoginReady(),
 		"login_url":          loginURL,
 		"frontend_base_url":  cfg.FrontendBaseURL,
+		// Effective doc-engine plugin state (enabled + non-secret config) so the
+		// renderer can conditionally apply plugins without admin rights.
+		"plugins": s.store.PluginEffective(),
 	})
 }
 
@@ -550,6 +554,30 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		saved := s.store.SaveAISettings(body)
 		writeJSON(w, http.StatusOK, maskedSettings(saved))
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
+	}
+}
+
+// handleAdminPlugins exposes the built-in doc-engine plugin registry. GET
+// returns the catalog merged with saved overrides; PUT persists enable/config
+// overrides. Super-admin only; effective state is served to viewers via /api/config.
+func (s *Server) handleAdminPlugins(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.store.PluginStates()})
+	case http.MethodPut, http.MethodPost:
+		var body struct {
+			Plugins map[string]store.PluginSetting `json:"plugins"`
+		}
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.store.SavePluginSettings(body.Plugins)})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}

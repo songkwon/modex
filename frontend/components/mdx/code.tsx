@@ -4,6 +4,7 @@ import { Children, ReactElement, ReactNode, isValidElement, useRef, useState } f
 import { Copy, Check } from "lucide-react";
 import { Mermaid } from "./mermaid";
 import { Kroki, isKrokiLang } from "./kroki";
+import { usePluginConfig, pluginEnabled } from "./mdx-config";
 
 function extractText(node: unknown): string {
   if (node == null) return "";
@@ -77,10 +78,11 @@ export function CodeBlock({
 export function Pre({ children }: { children?: ReactNode }) {
   const codeEl = Children.toArray(children).find(isValidElement) as ReactElement | undefined;
   const parsed = parseCodeEl(codeEl);
-  if (parsed.lang === "mermaid") {
+  const cfg = usePluginConfig();
+  if (parsed.lang === "mermaid" && pluginEnabled(cfg, "mermaid")) {
     return <Mermaid chart={parsed.text} />;
   }
-  if (isKrokiLang(parsed.lang)) {
+  if (isKrokiLang(parsed.lang) && pluginEnabled(cfg, "kroki")) {
     return <Kroki lang={parsed.lang} code={parsed.text} />;
   }
   return (

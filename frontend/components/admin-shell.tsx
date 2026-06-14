@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { BarChart3, Boxes, FolderTree, History, MessageSquareText, Search, Settings, Users, UsersRound } from "lucide-react";
+import { BarChart3, Boxes, FolderTree, History, MessageSquareText, Plug, Search, Settings, Users, UsersRound } from "lucide-react";
 import { getMe } from "@/lib/api";
 
 // level "super" links are only visible to super admins; "all" links are shared
@@ -15,6 +15,7 @@ const adminLinks: [string, string, typeof FolderTree, "super" | "all"][] = [
   ["/admin/modules", "文档源管理", Boxes, "all"],
   ["/admin/users", "用户管理", Users, "super"],
   ["/admin/settings", "模型设置", Settings, "super"],
+  ["/admin/plugins", "插件管理", Plug, "super"],
   ["/admin/releases", "发布记录", History, "all"],
   ["/admin/search-logs", "搜索日志", Search, "all"],
   ["/admin/mcp-logs", "MCP 日志", MessageSquareText, "all"],
