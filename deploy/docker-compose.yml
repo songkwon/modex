@@ -79,6 +79,9 @@ services:
       HYBRID_SEMANTIC_WEIGHT: ${HYBRID_SEMANTIC_WEIGHT:-0.4}
       MCP_ENABLED: ${MCP_ENABLED:-true}
       MCP_TOKEN: ${MCP_TOKEN:-dev-token}
+      # Directory the backend serves the MCP npx package from (intranet download).
+      # The package is bind-mounted read-only below.
+      MCP_DIST_DIR: ${MCP_DIST_DIR:-/app/mcp-dist}
       POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
       POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
       POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
@@ -89,6 +92,8 @@ services:
       - "${BACKEND_PORT:-8671}:${BACKEND_PORT:-8671}"
     volumes:
       - backend-data:/data
+      # MCP npx package served for intranet download (GET /api/mcp/dist/*).
+      - ../mcp/npx:/app/mcp-dist:ro
       # === Optional Application Config (config.yaml) ===
       # This is the recommended way to configure things like OIDC claim mappings
       # (unique_id_claim, avatar_claim, display_name_claim, secondary_info_claim).

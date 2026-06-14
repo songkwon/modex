@@ -118,6 +118,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/analytics/search", s.handleSearchLogs)
 	mux.HandleFunc("/api/admin/analytics/mcp", s.handleMCPLogs)
 	mux.HandleFunc("/api/mcp/log", s.handleMCPLog)
+	mux.HandleFunc("/api/mcp/dist", s.handleMcpDist)
+	mux.HandleFunc("/api/mcp/dist/", s.handleMcpDist)
 	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
 	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/admin/plugins", s.handleAdminPlugins)
