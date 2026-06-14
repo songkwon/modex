@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePluginConfig, pluginValue } from "./mdx-config";
 
 // Diagram-as-code rendered via a Kroki server (https://kroki.io). One HTTP API
 // covers PlantUML, Graphviz, C4, DITAA, BPMN, Excalidraw, Vega, D2 and more.
-// The base URL is configurable so deployments can point at a self-hosted Kroki
-// instance and keep diagram source off the public service.
-const KROKI_BASE = (process.env.NEXT_PUBLIC_KROKI_URL || "https://kroki.io").replace(/\/+$/, "");
+// The base URL is configurable (admin plugin config, then env) so deployments
+// can point at a self-hosted Kroki instance and keep diagram source private.
+const ENV_KROKI_BASE = (process.env.NEXT_PUBLIC_KROKI_URL || "https://kroki.io").replace(/\/+$/, "");
 
 // Fenced-code language → Kroki diagram type. Aliases map to canonical types.
 const KROKI_TYPES: Record<string, string> = {
@@ -47,6 +48,8 @@ export function isKrokiLang(lang: string): boolean {
 
 export function Kroki({ lang, code }: { lang: string; code: string }) {
   const type = KROKI_TYPES[lang.toLowerCase()] || lang.toLowerCase();
+  const cfg = usePluginConfig();
+  const base = (pluginValue(cfg, "kroki", "base_url") || ENV_KROKI_BASE).replace(/\/+$/, "");
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const source = code.trim();
@@ -56,7 +59,7 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
     setError(null);
     (async () => {
       try {
-        const res = await fetch(`${KROKI_BASE}/${type}/svg`, {
+        const res = await fetch(`${base}/${type}/svg`, {
           method: "POST",
           headers: { "Content-Type": "text/plain", Accept: "image/svg+xml" },
           body: source
@@ -71,7 +74,7 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
     return () => {
       cancelled = true;
     };
-  }, [type, source]);
+  }, [type, source, base]);
 
   if (error) {
     return (

@@ -106,5 +106,26 @@ export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admi
 export const fetchModels = (base_url: string, api_key?: string, protocol?: string) =>
   api<{ models: string[] }>("/api/admin/settings/models", { method: "POST", body: JSON.stringify({ base_url, api_key: api_key || "", protocol: protocol || "" }) });
 
+// Doc-engine plugin registry (built-in, admin-managed). Effective enabled+config
+// is also served (un-gated) on /api/config so the renderer can read it.
+export type PluginSetting = { enabled: boolean; config?: Record<string, string> };
+export type PluginConfig = Record<string, PluginSetting>;
+export type PluginField = { key: string; label: string; placeholder?: string; default?: string };
+export type PluginState = {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  default_enabled: boolean;
+  fields?: PluginField[];
+  enabled: boolean;
+  config: Record<string, string>;
+};
+export const getPlugins = () => api<{ plugins: PluginState[] }>("/api/admin/plugins");
+export const savePlugins = (plugins: PluginConfig) =>
+  api<{ plugins: PluginState[] }>("/api/admin/plugins", { method: "PUT", body: JSON.stringify({ plugins }) });
+// Effective plugin config for the doc renderer (subset of /api/config).
+export const getDocsPluginConfig = () => api<{ plugins?: PluginConfig }>("/api/config");
+
 export const getMCPToken = () => api<{ mcp_token: string }>("/api/me/mcp-token");
 export const rotateMCPToken = () => api<{ mcp_token: string }>("/api/me/mcp-token", { method: "POST", body: "{}" });

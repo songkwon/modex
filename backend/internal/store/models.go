@@ -205,6 +205,9 @@ type AISettings struct {
 // Settings is the persisted, admin-editable platform configuration.
 type Settings struct {
 	AI AISettings `json:"ai"`
+	// Plugins holds per-plugin enable/config overrides keyed by plugin key.
+	// Absent keys fall back to the built-in catalog defaults (see plugins.go).
+	Plugins map[string]PluginSetting `json:"plugins,omitempty"`
 }
 
 type NavItem struct {
