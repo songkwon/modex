@@ -11,6 +11,7 @@ export default function McpUsagePage() {
   const [loading, setLoading] = useState(true);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedOffline, setCopiedOffline] = useState(false);
 
   useEffect(() => {
     getMCPToken()
@@ -25,6 +26,12 @@ export default function McpUsagePage() {
   --env MODEX_API_BASE_URL=${API_BASE} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y modex-docs-mcp`;
+
+  const tarballUrl = `${API_BASE}/api/mcp/dist/modex-docs-mcp.tgz`;
+  const offlineCmd = `claude mcp add modex-docs \\
+  --env MODEX_API_BASE_URL=${API_BASE} \\
+  --env MODEX_MCP_TOKEN=${displayToken} \\
+  -- npx -y ${tarballUrl}`;
 
   const cursorJson = `{
   "mcpServers": {
@@ -124,6 +131,31 @@ export default function McpUsagePage() {
               {copiedJson ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
+        </section>
+
+        <section className="card">
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>离线 / 内网安装（无需公网 npm）</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            直接从本平台后端拉取 MCP 工具产物。适合内网环境，无需访问 npmjs.com：
+          </p>
+          <div style={{ position: "relative" }}>
+            <pre className="mcp-code">{offlineCmd}</pre>
+            <button
+              className="icon-btn"
+              style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
+              onClick={() => copyText(offlineCmd, setCopiedOffline)}
+              aria-label="复制命令"
+            >
+              {copiedOffline ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            或直接下载工具产物：
+            <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-docs-mcp.tgz</a>
+            （也可下载
+            <a href={`${API_BASE}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
+            用 <code className="code-chip">node index.mjs</code> 直接运行）。
+          </p>
         </section>
 
         <section className="card">
