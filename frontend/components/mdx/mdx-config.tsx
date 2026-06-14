@@ -26,3 +26,15 @@ export function pluginEnabled(cfg: PluginConfig | null, key: string, fallback = 
 export function pluginValue(cfg: PluginConfig | null, key: string, field: string): string | undefined {
   return cfg?.[key]?.config?.[field];
 }
+
+// Uploaded fence plugins: maps a fenced-code language → its JSX source, so the
+// client `Pre` can route ```lang blocks to a sandboxed plugin.
+const UploadedFencesContext = createContext<Record<string, string>>({});
+
+export function UploadedFencesProvider({ value, children }: { value: Record<string, string>; children: ReactNode }) {
+  return <UploadedFencesContext.Provider value={value}>{children}</UploadedFencesContext.Provider>;
+}
+
+export function useUploadedFence(lang: string): string | undefined {
+  return useContext(UploadedFencesContext)[lang];
+}

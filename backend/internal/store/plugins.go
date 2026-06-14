@@ -30,10 +30,17 @@ type PluginDef struct {
 }
 
 // PluginState is a catalog entry merged with its saved override (admin view).
+// Uploaded (imported) plugins carry extra fields so the admin UI can show their
+// provenance, kind and source.
 type PluginState struct {
 	PluginDef
-	Enabled bool              `json:"enabled"`
-	Config  map[string]string `json:"config"`
+	Enabled  bool              `json:"enabled"`
+	Config   map[string]string `json:"config"`
+	Uploaded bool              `json:"uploaded,omitempty"`
+	Kind     string            `json:"kind,omitempty"`
+	Tag      string            `json:"tag,omitempty"`
+	Lang     string            `json:"lang,omitempty"`
+	Code     string            `json:"code,omitempty"`
 }
 
 // pluginCatalog is the curated set of built-in doc-engine plugins.
@@ -61,9 +68,10 @@ var pluginCatalog = []PluginDef{
 // PluginCatalog returns the static built-in plugin catalog.
 func PluginCatalog() []PluginDef { return pluginCatalog }
 
-// mergePlugins overlays saved overrides onto the catalog defaults.
-func mergePlugins(overrides map[string]PluginSetting) []PluginState {
-	out := make([]PluginState, 0, len(pluginCatalog))
+// mergePlugins overlays saved overrides onto the catalog defaults, then appends
+// uploaded plugins (which default to disabled).
+func mergePlugins(overrides map[string]PluginSetting, uploaded []UploadedPlugin) []PluginState {
+	out := make([]PluginState, 0, len(pluginCatalog)+len(uploaded))
 	for _, def := range pluginCatalog {
 		st := PluginState{PluginDef: def, Enabled: def.DefaultEnabled, Config: map[string]string{}}
 		for _, f := range def.Fields {
@@ -79,6 +87,22 @@ func mergePlugins(overrides map[string]PluginSetting) []PluginState {
 		}
 		out = append(out, st)
 	}
+	for _, up := range uploaded {
+		st := PluginState{
+			PluginDef: PluginDef{Key: up.Key, Name: up.Name, Description: up.Description, Category: up.Category, DefaultEnabled: false},
+			Enabled:   false,
+			Config:    map[string]string{},
+			Uploaded:  true,
+			Kind:      up.Kind,
+			Tag:       up.Tag,
+			Lang:      up.Lang,
+			Code:      up.Code,
+		}
+		if ov, ok := overrides[up.Key]; ok {
+			st.Enabled = ov.Enabled
+		}
+		out = append(out, st)
+	}
 	return out
 }
 
@@ -86,8 +110,9 @@ func mergePlugins(overrides map[string]PluginSetting) []PluginState {
 func (s *Store) PluginStates() []PluginState {
 	s.mu.RLock()
 	overrides := s.settings.Plugins
+	uploaded := s.settings.UploadedPlugins
 	s.mu.RUnlock()
-	return mergePlugins(overrides)
+	return mergePlugins(overrides, uploaded)
 }
 
 // SavePluginSettings persists enable/config overrides, ignoring unknown plugin
@@ -101,6 +126,15 @@ func (s *Store) SavePluginSettings(overrides map[string]PluginSetting) []PluginS
 		}
 		allowed[def.Key] = fs
 	}
+	s.mu.RLock()
+	uploaded := s.settings.UploadedPlugins
+	for _, up := range uploaded {
+		if _, ok := allowed[up.Key]; !ok {
+			allowed[up.Key] = map[string]bool{} // uploaded plugins: enable flag only
+		}
+	}
+	s.mu.RUnlock()
+
 	clean := map[string]PluginSetting{}
 	for key, ov := range overrides {
 		fields, known := allowed[key]
@@ -119,8 +153,9 @@ func (s *Store) SavePluginSettings(overrides map[string]PluginSetting) []PluginS
 	}
 	s.mu.Lock()
 	s.settings.Plugins = clean
+	uploaded = s.settings.UploadedPlugins
 	s.mu.Unlock()
-	return mergePlugins(clean)
+	return mergePlugins(clean, uploaded)
 }
 
 // PluginEffective returns a slim enabled+config map for the public config API,

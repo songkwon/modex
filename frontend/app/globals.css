@@ -2658,6 +2658,14 @@ tr:hover .row-actions { opacity: 1; }
 .snippet-row { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid hsl(var(--border)); }
 .snippet-row:first-of-type { border-top: 0; padding-top: 0; }
 
+/* Sandboxed (imported) plugin iframe */
+.mdx-plugin { margin: 1.1rem 0; border: 1px solid hsl(var(--border)); border-radius: 12px; overflow: hidden; background: #fff; }
+.mdx-plugin__frame { margin: 1.1rem 0; border: 1px solid hsl(var(--border)) !important; border-radius: 12px; background: #fff; }
+.mdx-plugin--loading { height: 40px; background: hsl(var(--panel-subtle)); }
+.mdx-plugin--error { padding: 10px 12px; background: hsl(var(--panel)); display: grid; gap: 6px; }
+.mdx-plugin--error .mdx-plugin__tag { font-size: 12px; font-weight: 600; color: hsl(0 64% 55%); }
+.mdx-plugin--error pre { margin: 0; font-family: ui-monospace, monospace; font-size: 12.5px; white-space: pre-wrap; color: hsl(var(--muted)); }
+
 /* MDX: API playground + OpenAPI */
 .mdx-apiplay { border: 1px solid hsl(var(--border)); border-radius: 12px; background: hsl(var(--panel)); padding: 12px; margin: 1.1rem 0; }
 .mdx-apiplay__title { font-size: 13px; font-weight: 600; color: hsl(var(--muted)); margin-bottom: 8px; }

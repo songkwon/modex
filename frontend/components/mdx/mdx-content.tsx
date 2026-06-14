@@ -1,4 +1,5 @@
 import "katex/dist/katex.min.css";
+import type { ReactElement } from "react";
 import { compileMDX } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -7,9 +8,11 @@ import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import { mdxComponents } from "./index";
 import { remarkCodeMeta, remarkGithubAlerts, rehypeToc } from "./remark-plugins";
-import { MdxConfigProvider } from "./mdx-config";
+import { MdxConfigProvider, UploadedFencesProvider } from "./mdx-config";
+import { SandboxedPlugin } from "./sandboxed-plugin";
+import { serializableProps } from "./plugin-utils";
 import { expandSnippets } from "./snippets";
-import { getDocsPluginConfig, getDocsSnippets, type PluginConfig } from "@/lib/api";
+import { getDocsPluginConfig, getDocsSnippets, getDocsUploadedPlugins, type PluginConfig, type UploadedPlugin } from "@/lib/api";
 
 // Effective plugin config drives which plugins run. On any failure we fall back
 // to "all enabled" (empty config → pluginEnabled returns its true default).
@@ -34,6 +37,15 @@ async function loadSnippets(): Promise<{ snippets: Record<string, string>; vars:
   }
 }
 
+// Enabled uploaded plugins for the renderer. Empty on failure.
+async function loadUploadedPlugins(): Promise<UploadedPlugin[]> {
+  try {
+    return (await getDocsUploadedPlugins()).plugins || [];
+  } catch {
+    return [];
+  }
+}
+
 const on = (cfg: PluginConfig, key: string) => !(key in cfg) || cfg[key].enabled;
 
 export async function MdxContent({ source }: { source: string }) {
@@ -41,6 +53,22 @@ export async function MdxContent({ source }: { source: string }) {
   if (on(plugins, "snippets")) {
     const { snippets, vars } = await loadSnippets();
     source = expandSnippets(source, snippets, vars);
+  }
+
+  // Uploaded plugins: component-kind become dynamic MDX tags rendered in a
+  // sandboxed iframe; fence-kind are routed by <Pre> via the fences context.
+  const uploaded = await loadUploadedPlugins();
+  const dynamicComponents: Record<string, (p: Record<string, unknown>) => ReactElement> = {};
+  const uploadedFences: Record<string, string> = {};
+  for (const up of uploaded) {
+    if (up.kind === "component" && up.tag) {
+      const codeStr = up.code;
+      dynamicComponents[up.tag] = (p: Record<string, unknown>) => (
+        <SandboxedPlugin code={codeStr} props={serializableProps(p)} />
+      );
+    } else if (up.kind === "fence" && up.lang) {
+      uploadedFences[up.lang] = up.code;
+    }
   }
   const remarkPlugins: any[] = [
     remarkGfm,
@@ -58,7 +86,7 @@ export async function MdxContent({ source }: { source: string }) {
   try {
     const { content } = await compileMDX({
       source,
-      components: mdxComponents,
+      components: { ...mdxComponents, ...dynamicComponents },
       options: {
         parseFrontmatter: true,
         // Mintlify-style components rely on JSX expression props (cols={2}) and
@@ -72,7 +100,9 @@ export async function MdxContent({ source }: { source: string }) {
     });
     return (
       <MdxConfigProvider value={plugins}>
-        <div className="mdx">{content}</div>
+        <UploadedFencesProvider value={uploadedFences}>
+          <div className="mdx">{content}</div>
+        </UploadedFencesProvider>
       </MdxConfigProvider>
     );
   } catch (err) {

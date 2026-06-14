@@ -4,7 +4,8 @@ import { Children, ReactElement, ReactNode, isValidElement, useRef, useState } f
 import { Copy, Check } from "lucide-react";
 import { Mermaid } from "./mermaid";
 import { Kroki, isKrokiLang } from "./kroki";
-import { usePluginConfig, pluginEnabled } from "./mdx-config";
+import { usePluginConfig, pluginEnabled, useUploadedFence } from "./mdx-config";
+import { SandboxedPlugin } from "./sandboxed-plugin";
 
 function extractText(node: unknown): string {
   if (node == null) return "";
@@ -79,11 +80,15 @@ export function Pre({ children }: { children?: ReactNode }) {
   const codeEl = Children.toArray(children).find(isValidElement) as ReactElement | undefined;
   const parsed = parseCodeEl(codeEl);
   const cfg = usePluginConfig();
+  const fenceCode = useUploadedFence(parsed.lang);
   if (parsed.lang === "mermaid" && pluginEnabled(cfg, "mermaid")) {
     return <Mermaid chart={parsed.text} />;
   }
   if (isKrokiLang(parsed.lang) && pluginEnabled(cfg, "kroki")) {
     return <Kroki lang={parsed.lang} code={parsed.text} />;
+  }
+  if (fenceCode) {
+    return <SandboxedPlugin code={fenceCode} props={{ source: parsed.text }} />;
   }
   return (
     <CodeBlock lang={parsed.lang} filename={parsed.filename} text={parsed.text}>
