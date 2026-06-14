@@ -123,8 +123,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
 	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/admin/plugins", s.handleAdminPlugins)
+	mux.HandleFunc("/api/admin/plugins/import", s.handleAdminPluginImport)
+	mux.HandleFunc("/api/admin/plugins/import/", s.handleAdminPluginImport)
 	mux.HandleFunc("/api/admin/snippets", s.handleAdminSnippets)
 	mux.HandleFunc("/api/docs/snippets", s.handleDocsSnippets)
+	mux.HandleFunc("/api/docs/plugins", s.handleDocsPlugins)
 	mux.HandleFunc("/api/admin/categories", s.handleAdminCategories)
 	mux.HandleFunc("/api/admin/categories/", s.handleAdminCategoryByID)
 	mux.HandleFunc("/api/admin/modules", s.handleAdminModules)
@@ -585,6 +588,51 @@ func (s *Server) handleAdminPlugins(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
+}
+
+// handleAdminPluginImport imports (POST) or removes (DELETE) a sandbox-rendered
+// JSX plugin. Super-admin only. Imports stay disabled until toggled on.
+func (s *Server) handleAdminPluginImport(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/admin/plugins/import"), "/")
+	switch r.Method {
+	case http.MethodPost, http.MethodPut:
+		var body store.UploadedPlugin
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		saved, err := s.store.SaveUploadedPlugin(body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_plugin", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"plugin": saved, "plugins": s.store.PluginStates()})
+	case http.MethodDelete:
+		if key == "" {
+			writeError(w, http.StatusBadRequest, "bad_request", "plugin key required")
+			return
+		}
+		if !s.store.DeleteUploadedPlugin(key) {
+			writeError(w, http.StatusNotFound, "not_found", "plugin not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "key": key, "plugins": s.store.PluginStates()})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST or DELETE")
+	}
+}
+
+// handleDocsPlugins exposes enabled uploaded plugins (with their JSX source) to
+// the renderer. Read-only and un-gated, like /api/docs/snippets.
+func (s *Server) handleDocsPlugins(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plugins": s.store.EnabledUploadedPlugins()})
 }
 
 // handleAdminSnippets manages the reusable snippet library and variables.

@@ -120,12 +120,38 @@ export type PluginState = {
   fields?: PluginField[];
   enabled: boolean;
   config: Record<string, string>;
+  // Set for admin-imported plugins.
+  uploaded?: boolean;
+  kind?: "component" | "fence";
+  tag?: string;
+  lang?: string;
+  code?: string;
 };
 export const getPlugins = () => api<{ plugins: PluginState[] }>("/api/admin/plugins");
 export const savePlugins = (plugins: PluginConfig) =>
   api<{ plugins: PluginState[] }>("/api/admin/plugins", { method: "PUT", body: JSON.stringify({ plugins }) });
 // Effective plugin config for the doc renderer (subset of /api/config).
 export const getDocsPluginConfig = () => api<{ plugins?: PluginConfig }>("/api/config");
+
+// Admin-imported, sandbox-rendered JSX plugins.
+export type UploadedPlugin = {
+  key: string;
+  name: string;
+  description?: string;
+  category?: string;
+  kind: "component" | "fence";
+  tag?: string;
+  lang?: string;
+  code: string;
+  format?: string;
+  version?: number;
+};
+export const importPlugin = (p: UploadedPlugin) =>
+  api<{ plugin: UploadedPlugin; plugins: PluginState[] }>("/api/admin/plugins/import", { method: "POST", body: JSON.stringify(p) });
+export const deletePlugin = (key: string) =>
+  api<{ status: string; plugins: PluginState[] }>(`/api/admin/plugins/import/${encodeURIComponent(key)}`, { method: "DELETE" });
+// Enabled uploaded plugins for the renderer (includes JSX source).
+export const getDocsUploadedPlugins = () => api<{ plugins: UploadedPlugin[] }>("/api/docs/plugins");
 
 // Reusable snippets + variables (Mintlify-style partials).
 export type Snippet = { key: string; name: string; content: string };

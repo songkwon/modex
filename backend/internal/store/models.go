@@ -211,6 +211,9 @@ type Settings struct {
 	// Snippets and Variables power reusable doc content (see snippets.go).
 	Snippets  []Snippet         `json:"snippets,omitempty"`
 	Variables map[string]string `json:"variables,omitempty"`
+	// UploadedPlugins are admin-imported, sandbox-rendered JSX plugins
+	// (see uploaded_plugins.go). Enable/disable reuses Plugins overrides.
+	UploadedPlugins []UploadedPlugin `json:"uploaded_plugins,omitempty"`
 }
 
 type NavItem struct {
