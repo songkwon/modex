@@ -121,6 +121,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
 	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/admin/plugins", s.handleAdminPlugins)
+	mux.HandleFunc("/api/admin/snippets", s.handleAdminSnippets)
+	mux.HandleFunc("/api/docs/snippets", s.handleDocsSnippets)
 	mux.HandleFunc("/api/admin/categories", s.handleAdminCategories)
 	mux.HandleFunc("/api/admin/categories/", s.handleAdminCategoryByID)
 	mux.HandleFunc("/api/admin/modules", s.handleAdminModules)
@@ -581,6 +583,43 @@ func (s *Server) handleAdminPlugins(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
+}
+
+// handleAdminSnippets manages the reusable snippet library and variables.
+// Super-admin only. GET returns the current set; PUT replaces it.
+func (s *Server) handleAdminSnippets(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		snips, vars := s.store.SnippetData()
+		writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
+	case http.MethodPut, http.MethodPost:
+		var body struct {
+			Snippets  []store.Snippet   `json:"snippets"`
+			Variables map[string]string `json:"variables"`
+		}
+		if err := decodeBody(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		snips, vars := s.store.SaveSnippetData(body.Snippets, body.Variables)
+		writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
+	}
+}
+
+// handleDocsSnippets exposes the snippet library + variables to the renderer.
+// Read-only and un-gated (no secrets), mirroring /api/config.
+func (s *Server) handleDocsSnippets(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
+		return
+	}
+	snips, vars := s.store.SnippetData()
+	writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
 }
 
 // handleAdminModels proxies GET {base}/models so the admin UI can populate a

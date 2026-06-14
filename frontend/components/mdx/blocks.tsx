@@ -32,3 +32,10 @@ export function Update({ label, description, children }: { label?: string; descr
 export function Banner({ children }: { children: ReactNode }) {
   return <div className="mdx-banner">{children}</div>;
 }
+
+// Snippet is the fallback for <Snippet name="…"/> tags that survive the
+// pre-compile expansion (unknown name, or the snippets plugin is disabled).
+// It renders nothing so a missing partial never breaks the page.
+export function Snippet(_: { name?: string; children?: ReactNode }) {
+  return null;
+}

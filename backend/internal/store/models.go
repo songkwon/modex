@@ -208,6 +208,9 @@ type Settings struct {
 	// Plugins holds per-plugin enable/config overrides keyed by plugin key.
 	// Absent keys fall back to the built-in catalog defaults (see plugins.go).
 	Plugins map[string]PluginSetting `json:"plugins,omitempty"`
+	// Snippets and Variables power reusable doc content (see snippets.go).
+	Snippets  []Snippet         `json:"snippets,omitempty"`
+	Variables map[string]string `json:"variables,omitempty"`
 }
 
 type NavItem struct {

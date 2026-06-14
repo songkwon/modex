@@ -127,5 +127,14 @@ export const savePlugins = (plugins: PluginConfig) =>
 // Effective plugin config for the doc renderer (subset of /api/config).
 export const getDocsPluginConfig = () => api<{ plugins?: PluginConfig }>("/api/config");
 
+// Reusable snippets + variables (Mintlify-style partials).
+export type Snippet = { key: string; name: string; content: string };
+export type SnippetData = { snippets: Snippet[]; variables: Record<string, string> };
+export const getSnippets = () => api<SnippetData>("/api/admin/snippets");
+export const saveSnippets = (data: SnippetData) =>
+  api<SnippetData>("/api/admin/snippets", { method: "PUT", body: JSON.stringify(data) });
+// Read-only copy for the renderer (un-gated, no secrets).
+export const getDocsSnippets = () => api<SnippetData>("/api/docs/snippets");
+
 export const getMCPToken = () => api<{ mcp_token: string }>("/api/me/mcp-token");
 export const rotateMCPToken = () => api<{ mcp_token: string }>("/api/me/mcp-token", { method: "POST", body: "{}" });

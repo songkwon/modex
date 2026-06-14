@@ -8,7 +8,8 @@ import rehypeHighlight from "rehype-highlight";
 import { mdxComponents } from "./index";
 import { remarkCodeMeta, remarkGithubAlerts, rehypeToc } from "./remark-plugins";
 import { MdxConfigProvider } from "./mdx-config";
-import { getDocsPluginConfig, type PluginConfig } from "@/lib/api";
+import { expandSnippets } from "./snippets";
+import { getDocsPluginConfig, getDocsSnippets, type PluginConfig } from "@/lib/api";
 
 // Effective plugin config drives which plugins run. On any failure we fall back
 // to "all enabled" (empty config → pluginEnabled returns its true default).
@@ -21,10 +22,26 @@ async function loadPluginConfig(): Promise<PluginConfig> {
   }
 }
 
+// Snippet library + variables, keyed for expansion. Empty on failure.
+async function loadSnippets(): Promise<{ snippets: Record<string, string>; vars: Record<string, string> }> {
+  try {
+    const data = await getDocsSnippets();
+    const snippets: Record<string, string> = {};
+    for (const s of data.snippets || []) snippets[s.key] = s.content;
+    return { snippets, vars: data.variables || {} };
+  } catch {
+    return { snippets: {}, vars: {} };
+  }
+}
+
 const on = (cfg: PluginConfig, key: string) => !(key in cfg) || cfg[key].enabled;
 
 export async function MdxContent({ source }: { source: string }) {
   const plugins = await loadPluginConfig();
+  if (on(plugins, "snippets")) {
+    const { snippets, vars } = await loadSnippets();
+    source = expandSnippets(source, snippets, vars);
+  }
   const remarkPlugins: any[] = [
     remarkGfm,
     ...(on(plugins, "math") ? [remarkMath] : []),
