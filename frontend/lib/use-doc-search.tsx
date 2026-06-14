@@ -17,7 +17,7 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
   const [answer, setAnswer] = useState<AskResponse | null>(null);
   const [asking, setAsking] = useState(false);
   const [active, setActive] = useState(0);
-  const debounce = useRef<ReturnType<typeof setTimeout>>();
+  const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { moduleKey, categoryId } = scope;
 
