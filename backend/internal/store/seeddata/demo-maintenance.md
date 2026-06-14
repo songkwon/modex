@@ -92,3 +92,11 @@ $$
 服务按无状态设计部署[^1]，便于水平扩容。
 
 [^1]: 无状态指实例不保存会话数据，请求可被任意副本处理。
+
+### API 调试台
+
+<ApiPlayground method="GET" url="https://httpbin.org/get" title="在线调试一个接口" />
+
+也可从 OpenAPI 规范生成接口参考（在「插件管理」配置默认规范地址，或用 `spec` 属性）：
+
+<OpenApi operation="get /pets" />

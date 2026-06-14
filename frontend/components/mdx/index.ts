@@ -9,6 +9,7 @@ import { ParamField, ResponseField, Field, Response } from "./fields";
 import { Tooltip, Badge, Color, IconTag } from "./inline";
 import { Tree, Folder, File } from "./tree";
 import { Mermaid } from "./mermaid";
+import { ApiPlayground, RequestExample, ResponseExample, OpenApi } from "./api-playground";
 
 // Component map handed to MDX. Tag names mirror Mintlify exactly.
 export const mdxComponents = {
@@ -46,6 +47,11 @@ export const mdxComponents = {
   ResponseField,
   Field,
   Response,
+  // api playground / openapi
+  ApiPlayground,
+  RequestExample,
+  ResponseExample,
+  OpenApi,
   // inline
   Tooltip,
   Badge,
