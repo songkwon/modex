@@ -26,6 +26,10 @@ export default async function DocPage({
   const contentHTML = extractDocumentBody(pagePayload.content_html || "");
   const contentMD = (page.content_md || pagePayload.content_md || "").trim();
   const isMarkdown = page.entry_type === "markdown";
+  // Right-rail TOC: the current page's own heading structure (h2/h3), not the
+  // module's entry list. getNav returns every entry with its headings as
+  // children, so pick the entry matching this page.
+  const headingTree = nav.find((n) => n.path === `/${entryKey}`)?.children ?? [];
 
   // VitePress/VuePress/Fumadocs entries ship a full static site (with their own
   // sidebar, search, theme, mermaid/plantuml). Serve it as-is in an iframe from
@@ -87,7 +91,6 @@ export default async function DocPage({
             <h1 className="doc-title" id="overview">{page.title}</h1>
             <DocReadStats docId={page.doc_id} />
           </div>
-          {page.description ? <p className="doc-lead">{page.description}</p> : null}
           {contentMD ? (
             <MdxContent source={contentMD} />
           ) : contentHTML ? (
@@ -102,19 +105,19 @@ export default async function DocPage({
 
         <aside className="doc-toc">
           <div className="doc-toc-card">
-            {isMarkdown && nav.length > 0 ? (
+            {isMarkdown && headingTree.length > 0 ? (
               <>
-                <p className="doc-toc-title">目录</p>
+                <p className="doc-toc-title">本页目录</p>
                 <nav className="doc-toc-tree">
-                  {nav.map((item) => (
-                    <a key={item.path} href={`/docs/${moduleKey}/${docsVersion}/${entryKey}${item.path}`} className="doc-toc-link">
+                  {headingTree.map((item) => (
+                    <a key={item.path} href={item.path} className="doc-toc-link">
                       {item.title}
                     </a>
                   ))}
                 </nav>
               </>
             ) : null}
-            <p className={`doc-toc-title${isMarkdown && nav.length > 0 ? " mt-5" : ""}`}>元数据</p>
+            <p className={`doc-toc-title${isMarkdown && headingTree.length > 0 ? " mt-5" : ""}`}>元数据</p>
             <dl className="doc-meta">
               <div><dt>doc_id</dt><dd className="break-all font-mono text-xs">{page.doc_id}</dd></div>
               <div><dt>owner</dt><dd>{page.owner_group || "—"}</dd></div>

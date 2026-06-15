@@ -109,7 +109,7 @@ a {
 
 .nav {
   display: flex;
-  gap: 2px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -1761,14 +1761,18 @@ select:focus {
 .topbar-search {
   height: 36px;
   min-height: 36px;
+  min-width: 260px;
   gap: 8px;
-  padding: 0 10px;
+  padding: 0 12px;
+  justify-content: flex-start;
   border-color: hsl(var(--border));
   color: hsl(var(--muted));
   background: hsl(var(--panel-subtle));
 }
 .topbar-search:hover { color: hsl(var(--foreground)); background: hsl(var(--panel)); }
 .topbar-search-label { font-size: 13px; }
+/* Push the shortcut hint to the far right so the box reads as a real search field. */
+.topbar-search-kbd { margin-left: auto; }
 .topbar-search-kbd {
   font-size: 11px;
   border: 1px solid hsl(var(--border));
@@ -1780,8 +1784,9 @@ select:focus {
 .topbar-chat {
   height: 36px;
   min-height: 36px;
-  gap: 7px;
+  gap: 6px;
   padding: 0 12px;
+  font-size: 13px;
   border-color: hsl(var(--accent) / 0.4);
   color: hsl(var(--accent));
   background: hsl(var(--accent-soft));
