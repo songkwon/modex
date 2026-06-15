@@ -68,3 +68,17 @@ func TestKeywordModeSkipsEmbeddingButStillMatches(t *testing.T) {
 		t.Fatalf("keyword search should not populate embedding cache, got %d", s.Store.EmbeddingCount())
 	}
 }
+
+func TestPlainText(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"**二、使用指南**", "二、使用指南"},
+		{"# **系统概述**\n## **产品定位**\n**[CBB系统](https://cbb.fsdev.cn/#/x)** 是一个集质量管控", "系统概述 产品定位 CBB系统 是一个集质量管控"},
+		{"```html\nCBB V25\n```\n- [0.概述](https://x)", "0.概述"},
+		{"use C# here", "use C# here"}, // hash not a heading marker
+	}
+	for _, c := range cases {
+		if got := plainText(c.in); got != c.want {
+			t.Errorf("plainText(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

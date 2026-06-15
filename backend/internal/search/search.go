@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -139,7 +140,7 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 			breadcrumb = p.ModuleName
 		}
 		scored = append(scored, Result{
-			DocID: p.DocID, Title: p.Title, Snippet: snippet(req.Query, p.ContentText), Path: p.Path,
+			DocID: p.DocID, Title: plainText(p.Title), Snippet: snippet(req.Query, plainText(p.ContentText)), Path: p.Path,
 			Score: final, SearchMode: req.Mode, ModuleKey: p.ModuleKey, ModuleName: p.ModuleName,
 			DocsVersion: p.DocsVersion, PackageVersion: p.PackageVersion, EntryType: p.EntryType,
 			OwnerGroup: p.OwnerGroup, Status: p.Status, UpdatedAt: p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -252,6 +253,44 @@ func cosine(a, b []float32) float64 {
 		return 0
 	}
 	return (dot/math.Sqrt(an*bn) + 1) / 2
+}
+
+// Markdown-stripping patterns for plainText. Applied in order so links/images
+// resolve to their text before stray emphasis markers are removed.
+var (
+	mdCodeFence   = regexp.MustCompile("(?s)```.*?```")
+	mdImage       = regexp.MustCompile(`!\[([^\]]*)\]\([^)]*\)`)
+	mdLink        = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	mdInlineCode  = regexp.MustCompile("`([^`]*)`")
+	mdTableSep    = regexp.MustCompile(`(?m)^\s*\|?[\s:|-]{3,}\|?\s*$`)
+	mdHeadingHash = regexp.MustCompile(`(?m)(^|\s)#{1,6}\s+`)
+	mdBlockquote  = regexp.MustCompile(`(?m)^\s{0,3}>\s?`)
+	mdListMarker  = regexp.MustCompile(`(?m)^\s{0,3}([-*+]|\d+\.)\s+`)
+	mdHTMLTag     = regexp.MustCompile(`<[^>]+>`)
+	mdEmphasis    = regexp.MustCompile(`[*_~]{1,3}`)
+	mdWhitespace  = regexp.MustCompile(`\s+`)
+)
+
+// plainText strips common Markdown syntax so search titles and snippets read as
+// clean prose instead of raw markup (** , #, [text](url), ``` ... ```, tables).
+// It is display-only; keyword scoring and embeddings still use the raw content.
+func plainText(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = mdCodeFence.ReplaceAllString(s, " ")
+	s = mdImage.ReplaceAllString(s, "$1")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = mdInlineCode.ReplaceAllString(s, "$1")
+	s = mdTableSep.ReplaceAllString(s, " ")
+	s = mdHeadingHash.ReplaceAllString(s, "$1")
+	s = mdBlockquote.ReplaceAllString(s, "")
+	s = mdListMarker.ReplaceAllString(s, "")
+	s = mdHTMLTag.ReplaceAllString(s, "")
+	s = mdEmphasis.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "|", " ")
+	s = mdWhitespace.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
 }
 
 // snippet returns a rune-safe excerpt centered on the first matched term, with
