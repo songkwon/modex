@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, KeyRound, ListChecks, Loader2, Sparkles } from "lucide-react";
+import { Check, KeyRound, ListChecks, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchModels, getSettings, saveSettings, type AISettings } from "@/lib/api";
@@ -41,6 +41,7 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [promptDefault, setPromptDefault] = useState("");
 
   const protocol = ai.ask_protocol || "openai-chat";
 
@@ -62,7 +63,15 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     getSettings()
       .then((s) => {
-        setAI({ ...DEFAULT_AI, ...s.ai, ask_api_key: "" });
+        setPromptDefault(s.ask_system_prompt_default || "");
+        setAI({
+          ...DEFAULT_AI,
+          ...s.ai,
+          ask_api_key: "",
+          // Pre-fill the built-in prompt so admins edit on top of it instead of a
+          // blank box. An empty stored value means "use the default".
+          ask_system_prompt: s.ai?.ask_system_prompt || s.ask_system_prompt_default || "",
+        });
         setKeySet(s.ask_api_key_set);
       })
       .catch((e) => setError(String(e)));
@@ -185,13 +194,26 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="field">
-          <label>系统提示词（可选）</label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <label style={{ margin: 0 }}>系统提示词</label>
+            <button
+              type="button"
+              className="shelf-tab"
+              onClick={() => setAI({ ...ai, ask_system_prompt: promptDefault })}
+              disabled={!promptDefault || ai.ask_system_prompt === promptDefault}
+              title="恢复为内置默认提示词"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <RotateCcw size={13} /> 重置为默认
+            </button>
+          </div>
           <textarea
-            style={{ minHeight: 84, padding: "10px 12px", lineHeight: 1.6 }}
+            style={{ minHeight: 120, padding: "10px 12px", lineHeight: 1.6 }}
             value={ai.ask_system_prompt || ""}
-            placeholder="留空使用内置中文 RAG 提示词"
+            placeholder={promptDefault || "留空使用内置中文 RAG 提示词"}
             onChange={(e) => setAI({ ...ai, ask_system_prompt: e.target.value })}
           />
+          <span className="field-hint">已预填内置默认提示词，可在此基础上修改；点「重置为默认」可还原。留空保存则回退到内置版本。</span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

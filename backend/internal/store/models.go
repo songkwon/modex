@@ -182,6 +182,11 @@ type Page struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+// DefaultAskSystemPrompt is the built-in RAG system prompt used when an admin
+// has not configured a custom one. It is exposed via the settings API so the
+// admin UI can pre-fill the editor and offer a "reset to default" action.
+const DefaultAskSystemPrompt = "你是企业研发文档助手。只依据提供的【文档片段】回答用户问题，使用简洁中文；若片段中没有答案，明确说明未在文档中找到，不要编造。回答末尾不要重复罗列来源。"
+
 // AISettings holds the admin-configured large-model connection used to power
 // AI answers (RAG). It targets any OpenAI-compatible /chat/completions endpoint
 // (OpenAI, DeepSeek, Qwen/DashScope-compat, local vLLM/Ollama, …).

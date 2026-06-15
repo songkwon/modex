@@ -529,7 +529,7 @@ func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, q
 	}
 	system := strings.TrimSpace(ai.AskSystemPrompt)
 	if system == "" {
-		system = "你是企业研发文档助手。只依据提供的【文档片段】回答用户问题，使用简洁中文；若片段中没有答案，明确说明未在文档中找到，不要编造。回答末尾不要重复罗列来源。"
+		system = store.DefaultAskSystemPrompt
 	}
 	userMsg := fmt.Sprintf("文档片段：\n%s\n问题：%s", ctxBuilder.String(), query)
 	// Dispatch to the configured API format (OpenAI / Anthropic / Gemini / …).
@@ -722,8 +722,9 @@ func maskedSettings(set store.Settings) map[string]any {
 	keySet := strings.TrimSpace(ai.AskAPIKey) != ""
 	ai.AskAPIKey = ""
 	return map[string]any{
-		"ai":              ai,
-		"ask_api_key_set": keySet,
+		"ai":                        ai,
+		"ask_api_key_set":           keySet,
+		"ask_system_prompt_default": store.DefaultAskSystemPrompt,
 	}
 }
 
