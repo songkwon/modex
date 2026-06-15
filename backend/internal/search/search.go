@@ -110,6 +110,12 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	if req.Mode != ModeKeyword && strings.TrimSpace(req.Query) != "" {
 		queryVec, _ = s.Embedder.EmbedText(ctx, req.Query)
 	}
+	// The mock provider returns pseudo-random vectors (no real semantics). In
+	// hybrid mode that noise floats weak docs up and buries strong keyword hits
+	// (e.g. an "EventBus" page for the query "EventBus怎么用"), so when embeddings
+	// are mock we score hybrid by keyword only. Explicit semantic mode still uses
+	// the vectors — that's the caller asking for vector ranking specifically.
+	mockEmbed := s.Embedder.Name() == "mock"
 	var scored []Result
 	for _, p := range pages {
 		if !matchFilters(p, req.Filters) {
@@ -127,7 +133,11 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		case ModeSemantic:
 			final = sScore
 		default:
-			final = kScore*kw + sScore*sw
+			if mockEmbed {
+				final = kScore
+			} else {
+				final = kScore*kw + sScore*sw
+			}
 			req.Mode = ModeHybrid
 		}
 		if strings.TrimSpace(req.Query) != "" && final <= 0 {
@@ -170,8 +180,18 @@ func matchFilters(p store.Page, f Filters) bool {
 		inValue(p.Status, f.Status)
 }
 
+// queryTokenRe splits a query into searchable tokens: runs of ASCII
+// letters/digits and runs of CJK (Han) characters. Plain whitespace splitting
+// fails on mixed input like "EventBus怎么用" (no spaces), collapsing it to one
+// token that matches nothing; this separates it into "eventbus" + "怎么用".
+var queryTokenRe = regexp.MustCompile(`[a-z0-9]+|\p{Han}+`)
+
+func queryTokens(query string) []string {
+	return queryTokenRe.FindAllString(strings.ToLower(query), -1)
+}
+
 func keywordScore(query string, p store.Page) float64 {
-	q := strings.Fields(strings.ToLower(query))
+	q := queryTokens(query)
 	if len(q) == 0 {
 		return 1
 	}
@@ -341,8 +361,7 @@ func snippet(query, content string) string {
 func matchTerms(query string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, f := range strings.Fields(strings.ToLower(query)) {
-		f = strings.Trim(f, ",.;:!?，。、；：！？\"'")
+	for _, f := range queryTokens(query) {
 		if f == "" || seen[f] {
 			continue
 		}
