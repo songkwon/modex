@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowUpRight, BookOpen } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { getCategories, getEntries, getModules } from "@/lib/api";
@@ -47,27 +47,19 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
   );
 }
 
-function SingleModuleView({ module }: { module: ModuleInfo }) {
+async function SingleModuleView({ module }: { module: ModuleInfo }) {
   const isStaticSite = module.doc_type === "vitepress" || module.doc_type === "vuepress" || module.doc_type === "fumadocs";
   if (isStaticSite) {
-    return <StaticSiteEmbed module={module} />;
+    // Site-builder docs ship their own full chrome, so open them in the
+    // full-width, no-Modex-nav viewer rather than a cramped embedded frame.
+    const entries = await getEntries(module.module_key, module.default_version);
+    const primary = entries.find((e) => e.is_primary) || entries[0];
+    if (!primary) {
+      return <div className="empty-state">暂无文档入口</div>;
+    }
+    redirect(`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`);
   }
   return <MarkdownModuleView module={module} />;
-}
-
-async function StaticSiteEmbed({ module }: { module: ModuleInfo }) {
-  const entries = await getEntries(module.module_key, module.default_version);
-  const primary = entries.find((e) => e.is_primary) || entries[0];
-  if (!primary) {
-    return <div className="empty-state">暂无文档入口</div>;
-  }
-  const apiBase = process.env.INTERNAL_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
-  const src = `${apiBase}/api/docs/${module.module_key}/${module.default_version}/${primary.entry_key}/site/index.html`;
-  return (
-    <div className="embedded-site-frame">
-      <iframe src={src} title={module.name} className="site-iframe" sandbox="allow-same-origin allow-scripts allow-popups" />
-    </div>
-  );
 }
 
 async function MarkdownModuleView({ module }: { module: ModuleInfo }) {
