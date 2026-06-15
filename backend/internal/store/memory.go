@@ -4,6 +4,7 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"sort"
 	"strconv"
@@ -1013,7 +1014,7 @@ func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 			EntryType:      firstNonEmpty(d.EntryType, entryTypeForEntry(a.Entries, entryKey)),
 			Title:          firstNonEmpty(d.Title, titleForEntry(a.Entries, entryKey)),
 			Description:    d.Description,
-			Path:           "/docs/" + a.ModuleKey + "/" + a.DocsVersion + "/" + entryKey,
+			Path:           docPagePath(a.ModuleKey, a.DocsVersion, entryKey, firstNonEmpty(d.EntryType, entryTypeForEntry(a.Entries, entryKey)), d.Path),
 			SourceFile:     d.SourceFile,
 			DocType:        firstNonEmpty(d.EntryType, entryTypeForEntry(a.Entries, entryKey)),
 			Status:         firstNonEmpty(d.Status, "active"),
@@ -1905,6 +1906,30 @@ func routeKey(moduleKey, docsVersion, entryKey string) string {
 
 func siteFileKey(moduleKey, docsVersion, entryKey, name string) string {
 	return routeKey(moduleKey, docsVersion, entryKey) + ":" + path.Clean(strings.TrimPrefix(name, "/"))
+}
+
+// isSiteBuilderType reports whether an entry ships a pre-built static site
+// (VitePress/VuePress/Fumadocs) rather than Markdown rendered by Modex.
+func isSiteBuilderType(entryType string) bool {
+	switch strings.ToLower(entryType) {
+	case "vitepress", "vuepress", "fumadocs":
+		return true
+	default:
+		return false
+	}
+}
+
+// docPagePath builds the in-app URL for an indexed page. For site-builder
+// entries it preserves the per-page route as a ?p= deep link so a search hit
+// opens the matched page inside the embedded site, instead of collapsing every
+// page to the entry root. Markdown/static entries keep the plain entry URL.
+func docPagePath(moduleKey, docsVersion, entryKey, entryType, route string) string {
+	base := "/docs/" + moduleKey + "/" + docsVersion + "/" + entryKey
+	route = strings.TrimSpace(route)
+	if isSiteBuilderType(entryType) && route != "" && route != "/" && !strings.HasPrefix(route, "/docs/") {
+		return base + "?p=" + url.QueryEscape(route)
+	}
+	return base
 }
 
 func cloneStrings(xs []string) []string {

@@ -2133,7 +2133,10 @@ func toStoreArtifact(a deploy.Artifact) store.DeployArtifact {
 		out.SiteHTML[name] = html
 	}
 	for name, content := range a.SiteFiles {
-		out.SiteFiles[name] = append([]byte(nil), content...)
+		// Hand over the bytes directly instead of cloning: the source artifact is
+		// discarded right after ingestion, and cloning a large (image/GIF-heavy)
+		// site here doubles peak memory and can OOM the backend on big deploys.
+		out.SiteFiles[name] = content
 	}
 	return out
 }

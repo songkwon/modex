@@ -933,6 +933,51 @@ select:focus {
   border: 0;
 }
 
+/* Full-screen viewer for site-builder docs (VitePress/VuePress/Fumadocs): the
+   embedded site fills the viewport. */
+.doc-fullscreen {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.doc-fullscreen .doc-embed-frame {
+  height: 100vh;
+}
+
+/* Immersive mode (set by ImmersiveChrome on the full-screen doc page): the
+   Modex topbar stays available but overlays the site and auto-hides; it slides
+   back in when the pointer reaches the top edge. */
+.doc-immersive .topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  transition: transform 0.28s ease;
+}
+
+.doc-immersive.topbar-hidden .topbar {
+  transform: translateY(-100%);
+}
+
+/* Thin hover strip kept above the iframe so reaching the top edge reveals the
+   bar even though the iframe captures its own pointer events. */
+.topbar-reveal-zone {
+  display: none;
+}
+
+.doc-immersive .topbar-reveal-zone {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  z-index: 55;
+}
+
 .doc-sidebar,
 .doc-toc {
   position: sticky;

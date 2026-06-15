@@ -5,9 +5,17 @@ import { DocScope } from "@/components/doc-scope";
 import { CodeBlockCopy } from "@/components/code-block-copy";
 import { DocReadStats } from "@/components/doc-read-stats";
 import { MdxContent } from "@/components/mdx/mdx-content";
+import { ImmersiveChrome } from "@/components/immersive-chrome";
 
-export default async function DocPage({ params }: { params: Promise<{ moduleKey: string; docsVersion: string; entryKey: string }> }) {
+export default async function DocPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ moduleKey: string; docsVersion: string; entryKey: string }>;
+  searchParams: Promise<{ p?: string }>;
+}) {
   const { moduleKey, docsVersion, entryKey } = await params;
+  const { p: deepLink } = await searchParams;
   const [module, entries, nav, pagePayload] = await Promise.all([
     getModule(moduleKey),
     getEntries(moduleKey, docsVersion),
@@ -27,11 +35,17 @@ export default async function DocPage({ params }: { params: Promise<{ moduleKey:
   // from.
   if (!isMarkdown) {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
-    const siteSrc = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${entryKey}/site/`;
+    // Deep-link into the built site: a search hit passes ?p=<route> (e.g.
+    // /posts/cbb/x). Convert it to the built file path (posts/cbb/x.html;
+    // dir routes keep their trailing slash to load that dir's index.html).
+    let rel = (deepLink || "").replace(/^\/+/, "");
+    if (rel && !rel.endsWith("/")) rel += ".html";
+    const siteSrc = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${entryKey}/site/${rel}`;
     return (
-      <main className="main docs-shell docs-shell--embedded">
+      <main className="doc-fullscreen">
         <PageViewTracker docId={page.doc_id} />
         <DocScope moduleKey={module.module_key} moduleName={module.name} />
+        <ImmersiveChrome />
         <iframe
           className="doc-embed-frame"
           src={siteSrc}
