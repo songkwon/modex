@@ -11,7 +11,9 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
   const category = findCategory(categories, id);
   if (!category) notFound();
 
-  const modules = await getModules(`?category_id=${encodeURIComponent(id)}`);
+  // A category with no direct modules (e.g. a parent that only holds
+  // sub-categories) returns null from the API — coalesce so .length is safe.
+  const modules = (await getModules(`?category_id=${encodeURIComponent(id)}`)) ?? [];
 
   return (
     <main className="main">
@@ -47,40 +49,17 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
   );
 }
 
+// A category with a single doc set opens that doc directly in the full doc
+// viewer (which renders Markdown with Modex's own layout, or a site-builder doc
+// full-width). Embedding it in an iframe here nested a second Modex chrome
+// inside the page ("文档套文档"), so we redirect instead.
 async function SingleModuleView({ module }: { module: ModuleInfo }) {
-  const isStaticSite = module.doc_type === "vitepress" || module.doc_type === "vuepress" || module.doc_type === "fumadocs";
-  if (isStaticSite) {
-    // Site-builder docs ship their own full chrome, so open them in the
-    // full-width, no-Modex-nav viewer rather than a cramped embedded frame.
-    const entries = await getEntries(module.module_key, module.default_version);
-    const primary = entries.find((e) => e.is_primary) || entries[0];
-    if (!primary) {
-      return <div className="empty-state">暂无文档入口</div>;
-    }
-    redirect(`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`);
-  }
-  return <MarkdownModuleView module={module} />;
-}
-
-async function MarkdownModuleView({ module }: { module: ModuleInfo }) {
   const entries = await getEntries(module.module_key, module.default_version);
   const primary = entries.find((e) => e.is_primary) || entries[0];
   if (!primary) {
     return <div className="empty-state">暂无文档入口</div>;
   }
-  return (
-    <div className="embedded-doc-frame">
-      <Link href={`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`} className="button mb-3 inline-flex">
-        在文档页中打开 <ArrowUpRight size={14} />
-      </Link>
-      <iframe
-        src={`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`}
-        title={module.name}
-        className="doc-iframe"
-        sandbox="allow-same-origin allow-scripts allow-popups"
-      />
-    </div>
-  );
+  redirect(`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`);
 }
 
 function ModuleRow({ module }: { module: ModuleInfo }) {
