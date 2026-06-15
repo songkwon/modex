@@ -6,6 +6,7 @@ import remarkMath from "remark-math";
 import rehypeSlug from "rehype-slug";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
+import rehypeRaw from "rehype-raw";
 import { mdxComponents } from "./index";
 import { remarkCodeMeta, remarkGithubAlerts, rehypeToc } from "./remark-plugins";
 import { MdxConfigProvider, UploadedFencesProvider } from "./mdx-config";
@@ -83,8 +84,8 @@ export async function MdxContent({ source }: { source: string }) {
     [rehypeHighlight, { ignoreMissing: true, detect: true }]
   ];
 
-  try {
-    const { content } = await compileMDX({
+  const compile = (format: "mdx" | "md") =>
+    compileMDX({
       source,
       components: { ...mdxComponents, ...dynamicComponents },
       options: {
@@ -95,22 +96,39 @@ export async function MdxContent({ source }: { source: string }) {
         // and other escape hatches at compile time.
         blockJS: false,
         blockDangerousJS: true,
-        mdxOptions: { remarkPlugins, rehypePlugins }
+        // format "md" parses as plain CommonMark: `{...}` and `<...>` (e.g. Pascal
+        // braces, generics) are literal text, not JSX. We try MDX first so authored
+        // docs keep their components, then fall back to md for imported plain
+        // Markdown that isn't MDX-safe — rather than dumping raw source. In md mode
+        // we allow raw HTML and run rehype-raw so stray angle-bracket content
+        // (Delphi generics, <br/>) is preserved instead of silently dropped.
+        mdxOptions:
+          format === "md"
+            ? { format, remarkRehypeOptions: { allowDangerousHtml: true }, remarkPlugins, rehypePlugins: [rehypeRaw, ...rehypePlugins] }
+            : { format, remarkPlugins, rehypePlugins }
       }
     });
-    return (
-      <MdxConfigProvider value={plugins}>
-        <UploadedFencesProvider value={uploadedFences}>
-          <div className="mdx">{content}</div>
-        </UploadedFencesProvider>
-      </MdxConfigProvider>
-    );
-  } catch (err) {
-    return (
-      <div className="mdx mdx--error">
-        <p className="muted text-sm">文档渲染失败，已回退为纯文本。</p>
-        <pre className="mdx-code__pre">{source}</pre>
-      </div>
-    );
+
+  let content: Awaited<ReturnType<typeof compileMDX>>["content"] | null = null;
+  try {
+    content = (await compile("mdx")).content;
+  } catch {
+    try {
+      content = (await compile("md")).content;
+    } catch {
+      return (
+        <div className="mdx mdx--error">
+          <p className="muted text-sm">文档渲染失败，已回退为纯文本。</p>
+          <pre className="mdx-code__pre">{source}</pre>
+        </div>
+      );
+    }
   }
+  return (
+    <MdxConfigProvider value={plugins}>
+      <UploadedFencesProvider value={uploadedFences}>
+        <div className="mdx">{content}</div>
+      </UploadedFencesProvider>
+    </MdxConfigProvider>
+  );
 }

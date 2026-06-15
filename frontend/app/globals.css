@@ -2429,8 +2429,15 @@ tr:hover .row-actions { opacity: 1; }
 .mdx p { margin: 0; }
 .mdx a { color: hsl(var(--accent-strong)); text-decoration: none; font-weight: 520; }
 .mdx a:hover { text-decoration: underline; }
-.mdx ul, .mdx ol { padding-left: 1.4rem; margin: 0; }
+/* Re-enable list markers: the global CSS reset strips list-style, so plain
+   Markdown lists would otherwise render with no bullets/numbers. */
+.mdx ul, .mdx ol { padding-left: 1.5rem; margin: .6rem 0; }
+.mdx ul { list-style: disc; }
+.mdx ul ul { list-style: circle; }
+.mdx ul ul ul { list-style: square; }
+.mdx ol { list-style: decimal; }
 .mdx li { margin: .3rem 0; }
+.mdx li::marker { color: hsl(var(--muted)); }
 .mdx li > ul, .mdx li > ol { margin-top: .3rem; }
 .mdx :not(pre) > code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -2439,7 +2446,7 @@ tr:hover .row-actions { opacity: 1; }
   color: hsl(var(--accent-strong));
 }
 .mdx blockquote {
-  margin: 0; padding: .6rem 1rem; border-left: 3px solid hsl(var(--accent-border));
+  margin: 1rem 0; padding: .6rem 1rem; border-left: 3px solid hsl(var(--accent-border));
   background: hsl(var(--panel-subtle)); border-radius: 0 8px 8px 0; color: hsl(var(--muted));
 }
 .mdx hr { border: none; border-top: 1px solid hsl(var(--border)); margin: 2rem 0; }
