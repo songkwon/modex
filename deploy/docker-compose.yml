@@ -43,12 +43,16 @@ services:
     environment:
       PORT: ${BACKEND_PORT:-8671}
       DATA_DIR: ${DATA_DIR:-/data}
+      DOCS_DEPLOY_MAX_BYTES: ${DOCS_DEPLOY_MAX_BYTES:-536870912}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8671}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3456}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3456}
       DATABASE_URL: ${DATABASE_URL:-postgres://modex:modex@postgres:5432/modex?sslmode=disable}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-modex}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-modex-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-modex}
       MEILISEARCH_URL: ${MEILISEARCH_URL:-http://meilisearch:7700}
       MEILISEARCH_PUBLIC_URL: ${MEILISEARCH_PUBLIC_URL:-http://localhost:7700}
       AUTH_MODE: ${AUTH_MODE:-mock}
