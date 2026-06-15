@@ -100,7 +100,7 @@ export type AISettings = {
   ask_temperature?: number;
   updated_at?: string;
 };
-export type PlatformSettings = { ai: AISettings; ask_api_key_set: boolean };
+export type PlatformSettings = { ai: AISettings; ask_api_key_set: boolean; ask_system_prompt_default: string };
 export const getSettings = () => api<PlatformSettings>("/api/admin/settings");
 export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify(ai) });
 export const fetchModels = (base_url: string, api_key?: string, protocol?: string) =>
