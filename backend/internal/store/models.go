@@ -38,22 +38,55 @@ type Group struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type ConnectedApp struct {
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description,omitempty"`
+	ClientID         string    `json:"client_id"`
+	ClientSecretHash string    `json:"client_secret_hash,omitempty"`
+	RedirectURIs     []string  `json:"redirect_uris"`
+	Scopes           []string  `json:"scopes"`
+	Trusted          bool      `json:"trusted"`
+	Enabled          bool      `json:"enabled"`
+	CreatedBy        string    `json:"created_by,omitempty"`
+	LastUsedAt       time.Time `json:"last_used_at,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type OAuthGrant struct {
+	ID               string    `json:"id"`
+	AppID            string    `json:"app_id"`
+	UserID           string    `json:"user_id"`
+	CodeHash         string    `json:"code_hash,omitempty"`
+	AccessTokenHash  string    `json:"access_token_hash,omitempty"`
+	RefreshTokenHash string    `json:"refresh_token_hash,omitempty"`
+	RedirectURI      string    `json:"redirect_uri,omitempty"`
+	Scopes           []string  `json:"scopes,omitempty"`
+	CodeExpiresAt    time.Time `json:"code_expires_at,omitempty"`
+	AccessExpiresAt  time.Time `json:"access_expires_at,omitempty"`
+	RefreshExpiresAt time.Time `json:"refresh_expires_at,omitempty"`
+	RevokedAt        time.Time `json:"revoked_at,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
 // Team represents a document maintenance team (文档维护团队).
 // A team has a leader (负责人) who can add/remove members. Teams can be
 // assigned as responsible_party for one or more Categories (领域/分类),
 // owning the doc structure and maintenance under those domains.
 // Team.Key can be used as owner_group / group reference for compatibility.
 type Team struct {
-	ID          string    `json:"id"`
-	Key         string    `json:"key"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
+	ID          string `json:"id"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 	// Leaders are the team's responsible people (at least one). Every leader is
 	// also kept in Members.
-	Leaders     []string  `json:"leaders"`
-	Members     []string  `json:"members"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Leaders   []string  `json:"leaders"`
+	Members   []string  `json:"members"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type Category struct {

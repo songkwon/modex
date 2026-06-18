@@ -40,7 +40,7 @@ func main() {
 func handle(c client.Client, req rpcRequest) (any, error) {
 	switch req.Method {
 	case "initialize":
-		return map[string]any{"protocolVersion": "2024-11-05", "serverInfo": map[string]any{"name": "docs-mcp-server", "version": "0.1.0"}, "capabilities": map[string]any{"tools": map[string]any{}}}, nil
+		return map[string]any{"protocolVersion": "2024-11-05", "serverInfo": map[string]any{"name": "modex-mcp-server", "version": "0.1.0"}, "capabilities": map[string]any{"tools": map[string]any{}}}, nil
 	case "tools/list":
 		return map[string]any{"tools": []map[string]any{
 			tool("list_modules", "List documentation modules by category or keyword"),

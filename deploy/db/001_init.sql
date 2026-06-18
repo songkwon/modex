@@ -39,6 +39,43 @@ CREATE TABLE IF NOT EXISTS user_groups (
   PRIMARY KEY (user_id, group_id)
 );
 
+CREATE TABLE IF NOT EXISTS connected_app (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  client_id TEXT NOT NULL UNIQUE,
+  client_secret_hash TEXT,
+  redirect_uris JSONB DEFAULT '[]'::jsonb,
+  scopes JSONB DEFAULT '[]'::jsonb,
+  trusted BOOLEAN DEFAULT false,
+  enabled BOOLEAN DEFAULT true,
+  created_by TEXT REFERENCES users(id),
+  last_used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_grant (
+  id TEXT PRIMARY KEY,
+  app_id TEXT REFERENCES connected_app(id),
+  user_id TEXT REFERENCES users(id),
+  code_hash TEXT,
+  access_token_hash TEXT,
+  refresh_token_hash TEXT,
+  redirect_uri TEXT,
+  scopes JSONB DEFAULT '[]'::jsonb,
+  code_expires_at TIMESTAMPTZ,
+  access_expires_at TIMESTAMPTZ,
+  refresh_expires_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_grant_code_hash ON oauth_grant(code_hash);
+CREATE INDEX IF NOT EXISTS idx_oauth_grant_access_token_hash ON oauth_grant(access_token_hash);
+CREATE INDEX IF NOT EXISTS idx_oauth_grant_refresh_token_hash ON oauth_grant(refresh_token_hash);
+
 CREATE TABLE IF NOT EXISTS docs_category (
   id TEXT PRIMARY KEY,
   parent_id TEXT REFERENCES docs_category(id),

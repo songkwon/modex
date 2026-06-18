@@ -24,6 +24,8 @@ type Store struct {
 	user       User
 	users      []User
 	groups     []Group
+	apps       []ConnectedApp
+	grants     []OAuthGrant
 	teams      []Team
 	categories []Category
 	modules    []Module
@@ -69,6 +71,8 @@ func New() *Store {
 	return &Store{
 		users:      []User{},
 		groups:     []Group{},
+		apps:       []ConnectedApp{},
+		grants:     []OAuthGrant{},
 		teams:      []Team{},
 		categories: []Category{},
 		modules:    []Module{},
@@ -95,6 +99,8 @@ func NewSeeded() *Store {
 			{ID: "u-alice", Username: "alice", DisplayName: "Alice", Email: "alice@example.com", Department: "CAD", Groups: []string{"cad-team"}, Roles: []string{"maintainer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
 			{ID: "u-bob", Username: "bob", DisplayName: "Bob", Email: "bob@example.com", Department: "前端", Groups: []string{"frontend-platform"}, Roles: []string{"viewer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
 		},
+		apps:   []ConnectedApp{},
+		grants: []OAuthGrant{},
 		groups: []Group{
 			{ID: "g-admin", GroupKey: "admin", Name: "平台管理员", Source: "seed", CreatedAt: now, UpdatedAt: now},
 			{ID: "g-engineering", GroupKey: "engineering", Name: "工程化", Source: "seed", CreatedAt: now, UpdatedAt: now},
