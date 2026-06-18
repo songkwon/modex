@@ -21,18 +21,6 @@ func TestAdminReleaseRollbackRequiresLogin(t *testing.T) {
 	}
 }
 
-func TestAdminPageAnalyticsRequiresLogin(t *testing.T) {
-	srv := New(store.NewSeeded())
-	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/pages", nil)
-	rr := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", rr.Code, http.StatusUnauthorized)
-	}
-}
-
 func TestEmbedTextRequiresAdminSession(t *testing.T) {
 	srv := New(store.NewSeeded())
 	req := httptest.NewRequest(http.MethodPost, "/api/embeddings/embed-text", strings.NewReader(`{"text":"hello"}`))

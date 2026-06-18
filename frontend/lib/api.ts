@@ -1,4 +1,4 @@
-import type { AnalyticsPages, AskResponse, AuthConfig, Category, Group, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
+import type { AskResponse, AuthConfig, Category, Group, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
 
 const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
 const SERVER_API_BASE = process.env.INTERNAL_API_BASE_URL || PUBLIC_API_BASE;
@@ -45,25 +45,18 @@ export const searchDocs = (body: unknown) => api<SearchResponse>("/api/search", 
 export const askAI = (query: string, scope?: { module_key?: string; category_ids?: string[] }) =>
   api<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, ...(scope || {}) }) });
 
-export const recordPageView = (body: { doc_id: string; session_id: string; duration_seconds?: number; scroll_depth?: number }) =>
-  api<{ status: string; view_id: string }>("/api/analytics/page-view", { method: "POST", body: JSON.stringify(body) });
-
-export const recordReadProgress = (body: { doc_id: string; session_id: string; duration_seconds: number; scroll_depth: number }) =>
-  api<{ status: string }>("/api/analytics/read-progress", { method: "POST", body: JSON.stringify(body) });
-
 export const recordDocFeedback = (body: { doc_id: string; rating: "good" | "bad"; session_id: string; comment?: string }) =>
   api<{ status: string }>("/api/analytics/feedback", { method: "POST", body: JSON.stringify(body) });
-
-export const getPageAnalytics = () => api<AnalyticsPages>("/api/admin/analytics/pages");
 
 export type DocReadStats = {
   doc_id: string;
   total: number;
+  avg_duration_seconds: number;
   daily: { date: string; count: number }[];
-  readers: { reader: string; user_id: string; count: number; last_read_at: string }[];
+  readers: { reader: string; user_id: string; count: number; avg_duration_seconds: number; last_read_at: string }[];
 };
 export const getDocAnalytics = (docId: string, days = 30) =>
-  api<{ source: "internal" | "posthog"; stats: DocReadStats }>(
+  api<{ source: "posthog"; stats: DocReadStats }>(
     `/api/analytics/doc?doc_id=${encodeURIComponent(docId)}&days=${days}`
   );
 

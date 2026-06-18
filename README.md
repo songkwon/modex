@@ -359,15 +359,14 @@ Send JSON-RPC lines on stdin:
 
 ## Analytics & Admin APIs
 
-Reading statistics are tracked in the backend and surfaced in the admin portal:
-
-- `POST /api/analytics/page-view`: records a page view (`doc_id`, `session_id`).
-- `POST /api/analytics/read-progress`: updates dwell time and scroll depth.
-- `GET /api/admin/analytics/pages`: aggregated PV / UV / 7-day / 30-day reads per page.
-
-The docs reading page records views automatically via the `PageViewTracker`
-client component, and `frontend/lib/analytics.ts` holds the PostHog init and
-`capture()` event helpers (enabled by setting `NEXT_PUBLIC_POSTHOG_KEY`).
+Reading statistics use one PostHog project. In `deploy/.env`, configure
+`POSTHOG_HOST`, `POSTHOG_PROJECT_API_KEY`, `POSTHOG_PERSONAL_API_KEY`, and
+`POSTHOG_PROJECT_ID`. Docker Compose maps the project API key/host into the
+Next.js `NEXT_PUBLIC_*` build variables for browser capture, while the backend
+uses the same host/project with the personal API key for read-stat queries. No
+reading statistics are collected or displayed when PostHog is not configured.
+The document eye popover supports 7/30/90-day daily trends and per-reader totals
+and average duration.
 
 Admin registry mutations are implemented against the in-memory store:
 

@@ -95,7 +95,7 @@ services:
       # The package is bind-mounted read-only below.
       MCP_DIST_DIR: ${MCP_DIST_DIR:-/app/mcp-dist}
       MODEX_SKILL_DIST_DIR: ${MODEX_SKILL_DIST_DIR:-/app/modex-skill}
-      POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-}
       POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
       POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
       # CONFIG_FILE: set this (e.g. to /app/config.yaml) when you mount a config file below.
@@ -145,8 +145,8 @@ services:
       context: ../frontend
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
-        NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
-        NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
+        NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
         # Diagram-as-code (PlantUML/Graphviz/C4/…) render server. Defaults to the
         # public kroki.io; set to http://localhost:8000 (the `kroki` profile below)
         # to keep diagram source on-prem.
@@ -155,8 +155,8 @@ services:
       PORT: 3456
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8671}
-      NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
-      NEXT_PUBLIC_POSTHOG_HOST: ${NEXT_PUBLIC_POSTHOG_HOST:-https://app.posthog.com}
+      NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
+      NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
       NEXT_PUBLIC_KROKI_URL: ${NEXT_PUBLIC_KROKI_URL:-https://kroki.io}
     ports:
       - "${FRONTEND_PORT:-3456}:3456"

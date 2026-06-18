@@ -5,17 +5,18 @@ import { Eye, Loader2, LineChart as LineChartIcon, Users } from "lucide-react";
 import { getDocAnalytics, type DocReadStats as Stats } from "@/lib/api";
 
 type Tab = "trend" | "readers";
+type RangeDays = 7 | 30 | 90;
 
 // DocReadStats renders an "eye" button on a document page. Clicking it opens a
 // popover with the page's reading activity: a daily read trend line chart and a
-// per-reader breakdown. Data comes from PostHog when the server is configured
-// for it, otherwise from the built-in page-view store.
+// per-reader breakdown. Data comes exclusively from PostHog.
 export function DocReadStats({ docId }: { docId: string }) {
+  const posthogEnabled = Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("trend");
+  const [days, setDays] = useState<RangeDays>(30);
   const [data, setData] = useState<Stats | null>(null);
-  const [source, setSource] = useState<string>("");
   const [error, setError] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -23,14 +24,17 @@ export function DocReadStats({ docId }: { docId: string }) {
     if (!open || data) return;
     setLoading(true);
     setError(false);
-    getDocAnalytics(docId)
+    getDocAnalytics(docId, days)
       .then((res) => {
         setData(res.stats);
-        setSource(res.source);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [open, docId, data]);
+  }, [open, docId, days, data]);
+
+  useEffect(() => {
+    setData(null);
+  }, [docId, days]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,6 +51,8 @@ export function DocReadStats({ docId }: { docId: string }) {
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  if (!posthogEnabled) return null;
 
   return (
     <div className="read-stats" ref={ref}>
@@ -65,7 +71,17 @@ export function DocReadStats({ docId }: { docId: string }) {
         <div className="read-stats-pop">
           <div className="read-stats-head">
             <strong>阅读情况</strong>
-            <span className="tag">{source === "posthog" ? "PostHog" : "内置统计"}</span>
+            <span className="tag">PostHog</span>
+            <select
+              className="read-stats-range"
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value) as RangeDays)}
+              aria-label="统计时间范围"
+            >
+              <option value={7}>近 7 天</option>
+              <option value={30}>近 30 天</option>
+              <option value={90}>近 90 天</option>
+            </select>
             <div className="read-stats-tabs">
               <button className={`read-stats-tab${tab === "trend" ? " active" : ""}`} onClick={() => setTab("trend")}>
                 <LineChartIcon size={14} /> 趋势
@@ -83,7 +99,7 @@ export function DocReadStats({ docId }: { docId: string }) {
           ) : !data || data.total === 0 ? (
             <div className="read-stats-empty muted">暂无阅读记录</div>
           ) : tab === "trend" ? (
-            <TrendChart daily={data.daily} />
+            <TrendChart stats={data} />
           ) : (
             <ReadersTable readers={data.readers} />
           )}
@@ -93,7 +109,8 @@ export function DocReadStats({ docId }: { docId: string }) {
   );
 }
 
-function TrendChart({ daily }: { daily: Stats["daily"] }) {
+function TrendChart({ stats }: { stats: Stats }) {
+  const { daily } = stats;
   const W = 320;
   const H = 120;
   const padX = 6;
@@ -110,6 +127,10 @@ function TrendChart({ daily }: { daily: Stats["daily"] }) {
 
   return (
     <div className="read-stats-body">
+      <div className="read-stats-summary">
+        <span><strong>{stats.total}</strong><small>总阅读</small></span>
+        <span><strong>{fmtDuration(stats.avg_duration_seconds)}</strong><small>平均时长</small></span>
+      </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="read-stats-chart" role="img" aria-label="每日阅读量趋势">
         <path d={area} className="read-stats-area" />
         <path d={line} className="read-stats-line" fill="none" />
@@ -136,13 +157,21 @@ function ReadersTable({ readers }: { readers: Stats["readers"] }) {
         {readers.map((r, i) => (
           <div className="read-stats-reader" key={`${r.user_id || r.reader}-${i}`}>
             <span className="read-stats-reader-name">{r.reader}</span>
-            <span className="read-stats-reader-count">{r.count} 次</span>
+            <span className="read-stats-reader-count">{r.count} 次 · 平均 {fmtDuration(r.avg_duration_seconds)}</span>
             <span className="read-stats-reader-time muted">{fmtTime(r.last_read_at)}</span>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+function fmtDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0 秒";
+  if (seconds < 60) return `${Math.round(seconds)} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
 }
 
 function fmtTime(iso: string) {

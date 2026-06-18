@@ -140,16 +140,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/embeddings/embed-text", s.handleEmbedText)
 	mux.HandleFunc("/api/embeddings/reindex", s.handleEmbeddingReindex)
 	mux.HandleFunc("/api/deploy", s.handleDeploy)
-	mux.HandleFunc("/api/analytics/page-view", s.handlePageView)
-	mux.HandleFunc("/api/analytics/read-progress", s.handleReadProgress)
 	mux.HandleFunc("/api/analytics/feedback", s.handleDocFeedback)
 	mux.HandleFunc("/api/analytics/doc", s.handleDocAnalytics)
 	mux.HandleFunc("/api/admin/releases", s.handleReleases)
 	mux.HandleFunc("/api/admin/releases/", s.handleReleaseRoutes)
-	mux.HandleFunc("/api/admin/analytics/pages", s.handlePageAnalytics)
 	mux.HandleFunc("/api/admin/analytics/feedback", s.handleDocFeedbackLogs)
 	mux.HandleFunc("/api/admin/analytics/search", s.handleSearchLogs)
 	mux.HandleFunc("/api/admin/analytics/mcp", s.handleMCPLogs)
+	mux.HandleFunc("/api/admin/analytics/pages", http.NotFound)
 	mux.HandleFunc("/api/mcp/log", s.handleMCPLog)
 	mux.HandleFunc("/api/mcp/dist", s.handleMcpDist)
 	mux.HandleFunc("/api/mcp/dist/", s.handleMcpDist)
@@ -1139,65 +1137,9 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, releases)
 }
 
-func (s *Server) handlePageAnalytics(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.requireConsole(w, r)
-	if !ok {
-		return
-	}
-	stats := s.store.PageAnalytics()
-	if set, all := s.accessibleCategoryIDs(user); !all {
-		scoped := stats[:0:0]
-		for _, st := range stats {
-			if categoriesIntersect(s.moduleCategories(st.ModuleKey), set) {
-				scoped = append(scoped, st)
-			}
-		}
-		stats = scoped
-	}
-	var totalPV, totalReads7d int
-	for _, st := range stats {
-		totalPV += st.PV
-		totalReads7d += st.Reads7d
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"popular_pages": stats,
-		"total_pv":      totalPV,
-		"reads_7d":      totalReads7d,
-		"events":        []string{"docs_page_view", "docs_search_result_click"},
-	})
-}
-
-func (s *Server) handlePageView(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
-		return
-	}
-	var req struct {
-		DocID       string  `json:"doc_id"`
-		SessionID   string  `json:"session_id"`
-		Duration    int     `json:"duration_seconds"`
-		ScrollDepth float64 `json:"scroll_depth"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
-		return
-	}
-	if strings.TrimSpace(req.DocID) == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "doc_id is required")
-		return
-	}
-	user, _ := s.currentUser(r)
-	pv := s.store.RecordPageView(store.PageView{
-		DocID: req.DocID, UserID: user.ID, SessionID: req.SessionID,
-		DurationSeconds: req.Duration, ScrollDepth: req.ScrollDepth,
-	})
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded", "view_id": pv.ID})
-}
-
 // handleDocAnalytics powers the doc-page "eye" popover: a daily read trend and
-// a per-reader breakdown for one document. When PostHog is configured (server-
-// side), all reads go through PostHog and errors are returned to the caller.
-// Otherwise the built-in page_views store is used.
+// a per-reader breakdown for one document. Reading statistics are available
+// only when the server-side PostHog query credentials are configured.
 func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
 	docID := strings.TrimSpace(r.URL.Query().Get("doc_id"))
 	if docID == "" {
@@ -1213,37 +1155,13 @@ func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
 	stats, err := posthogDocStats(docID, days)
 	if err != nil {
 		if errors.Is(err, errPosthogNotConfigured) {
-			stats = s.store.PageReadStats(docID, days)
-			writeJSON(w, http.StatusOK, map[string]any{"source": "internal", "stats": stats})
+			writeError(w, http.StatusServiceUnavailable, "posthog_not_configured", "reading statistics are unavailable because PostHog is not configured")
 			return
 		}
 		writeError(w, http.StatusBadGateway, "posthog_error", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"source": "posthog", "stats": stats})
-}
-
-func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
-		return
-	}
-	var req struct {
-		DocID       string  `json:"doc_id"`
-		SessionID   string  `json:"session_id"`
-		Duration    int     `json:"duration_seconds"`
-		ScrollDepth float64 `json:"scroll_depth"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
-		return
-	}
-	if strings.TrimSpace(req.DocID) == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "doc_id is required")
-		return
-	}
-	s.store.RecordReadProgress(req.DocID, req.SessionID, req.Duration, req.ScrollDepth)
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded"})
 }
 
 func (s *Server) handleDocFeedback(w http.ResponseWriter, r *http.Request) {
