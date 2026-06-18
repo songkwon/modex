@@ -19,7 +19,7 @@ func analyticsSource() string {
 	if api.PosthogConfigured() {
 		return "PostHog (project_id=" + os.Getenv("POSTHOG_PROJECT_ID") + ", host=" + api.PosthogHost() + ")"
 	}
-	return "internal store (PostHog not configured)"
+	return "disabled (PostHog not configured)"
 }
 
 func main() {

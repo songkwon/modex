@@ -13,13 +13,12 @@ import (
 	"modex/backend/internal/store"
 )
 
-// errPosthogNotConfigured signals that PostHog credentials are missing so the
-// caller should use the built-in analytics store instead.
+// errPosthogNotConfigured signals that reading statistics are unavailable.
 var errPosthogNotConfigured = errors.New("posthog not configured")
 
 // posthogHost returns the configured PostHog API host or the default.
 func posthogHost() string {
-	host := strings.TrimRight(os.Getenv("POSTHOG_API_HOST"), "/")
+	host := strings.TrimRight(os.Getenv("POSTHOG_HOST"), "/")
 	if host == "" {
 		return "https://app.posthog.com"
 	}
@@ -39,7 +38,7 @@ func PosthogConfigured() bool { return posthogConfigured() }
 func PosthogHost() string     { return posthogHost() }
 
 // posthogDocStats queries PostHog (HogQL) for the daily read trend and per-user
-// breakdown of one document. It returns an error when PostHog is configured but
+// reading totals/duration of one document. It returns an error when configured but
 // the query fails, so callers can surface the problem instead of silently
 // falling back. The event/property names match what the frontend captures:
 // a "docs_page_view" event carrying a "doc_id" property.
@@ -87,11 +86,14 @@ func posthogDocStats(docID string, days int) (store.PageReadStats, error) {
 			"AND timestamp >= now() - INTERVAL %d DAY GROUP BY d ORDER BY d",
 		esc, days)
 	readersHogQL := fmt.Sprintf(
-		"SELECT coalesce(person.properties.name, person.properties.email, distinct_id) AS reader, "+
-			"count() AS c, max(timestamp) AS last FROM events "+
-			"WHERE event = 'docs_page_view' AND properties.doc_id = '%s' "+
-			"GROUP BY reader ORDER BY c DESC LIMIT 200",
-		esc)
+		"SELECT reader, user_id, count() AS c, avg(duration) AS avg_duration, max(last) AS last_read "+
+			"FROM (SELECT coalesce(person.properties.name, person.properties.email, distinct_id) AS reader, "+
+			"distinct_id AS user_id, properties.read_id AS read_id, "+
+			"max(toFloat64OrZero(toString(properties.duration_seconds))) AS duration, max(timestamp) AS last "+
+			"FROM events WHERE event = 'docs_page_read' AND properties.doc_id = '%s' "+
+			"AND timestamp >= now() - INTERVAL %d DAY GROUP BY reader, user_id, read_id) "+
+			"GROUP BY reader, user_id ORDER BY c DESC LIMIT 200",
+		esc, days)
 
 	dailyRows, err1 := query(dailyHogQL)
 	readerRows, err2 := query(readersHogQL)
@@ -107,7 +109,7 @@ func posthogDocStats(docID string, days int) (store.PageReadStats, error) {
 	idx := map[string]int{}
 	daily := make([]store.DailyReadPoint, days)
 	for i := 0; i < days; i++ {
-		key := today.AddDate(0, 0, -(days-1-i)).Format("2006-01-02")
+		key := today.AddDate(0, 0, -(days - 1 - i)).Format("2006-01-02")
 		daily[i] = store.DailyReadPoint{Date: key, Count: 0}
 		idx[key] = i
 	}
@@ -128,18 +130,34 @@ func posthogDocStats(docID string, days int) (store.PageReadStats, error) {
 	}
 
 	readers := make([]store.ReaderStat, 0, len(readerRows))
+	totalDuration := 0
+	totalTimedReads := 0
 	for _, row := range readerRows {
-		if len(row) < 3 {
+		if len(row) < 5 {
 			continue
 		}
 		name := fmt.Sprintf("%v", row[0])
 		if name == "" || name == "<nil>" {
 			name = "匿名"
 		}
-		last, _ := time.Parse(time.RFC3339, fmt.Sprintf("%v", row[2]))
-		readers = append(readers, store.ReaderStat{Reader: name, Count: toInt(row[1]), LastReadAt: last})
+		count := toInt(row[2])
+		avgDuration := toInt(row[3])
+		last, _ := time.Parse(time.RFC3339, fmt.Sprintf("%v", row[4]))
+		readers = append(readers, store.ReaderStat{
+			Reader: name, UserID: fmt.Sprintf("%v", row[1]), Count: count,
+			AvgDurationSec: avgDuration, LastReadAt: last,
+		})
+		totalDuration += count * avgDuration
+		totalTimedReads += count
 	}
-	return store.PageReadStats{DocID: docID, Total: total, Daily: daily, Readers: readers}, nil
+	avgDuration := 0
+	if totalTimedReads > 0 {
+		avgDuration = totalDuration / totalTimedReads
+	}
+	return store.PageReadStats{
+		DocID: docID, Total: total, AvgDurationSec: avgDuration,
+		Daily: daily, Readers: readers,
+	}, nil
 }
 
 func toInt(v any) int {

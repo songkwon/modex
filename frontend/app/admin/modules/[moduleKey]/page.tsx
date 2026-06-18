@@ -60,9 +60,7 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
     ["工程版本", module.package_version],
     ["Channel", module.channel],
     ["Edition", module.edition],
-    ["源码仓库", module.repo_url],
-    ["近 7 天阅读", String(module.reads_7d)],
-    ["近 30 天阅读", String(module.reads_30d)]
+    ["源码仓库", module.repo_url]
   ];
 
   const gitlabRows = [

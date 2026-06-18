@@ -13,9 +13,7 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
     ["package_version", module.package_version],
     ["channel", module.channel],
     ["edition", module.edition],
-    ["最近发布", module.updated_at.slice(0, 10)],
-    ["近 7 天阅读", String(module.reads_7d)],
-    ["近 30 天阅读", String(module.reads_30d)]
+    ["最近发布", module.updated_at.slice(0, 10)]
   ];
   return (
     <aside className="drawer">

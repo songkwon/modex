@@ -1,14 +1,15 @@
 // Analytics helper. PostHog integration is wired here behind env config so the
 // rest of the app can capture events without importing posthog directly.
 //
-// To enable PostHog: `npm install posthog-js`, set NEXT_PUBLIC_POSTHOG_KEY and
-// (optionally) NEXT_PUBLIC_POSTHOG_HOST, then uncomment the posthog-js calls.
+// To enable PostHog, set NEXT_PUBLIC_POSTHOG_KEY and optionally
+// NEXT_PUBLIC_POSTHOG_HOST.
 
 export type AnalyticsEvent =
   | "docs_home_view"
   | "docs_module_click"
   | "docs_module_info_open"
   | "docs_page_view"
+  | "docs_page_read"
   | "docs_search"
   | "docs_search_result_click"
   | "docs_version_switch"
@@ -54,8 +55,7 @@ export function capture(event: AnalyticsEvent, props: Record<string, unknown> = 
   }
 }
 
-// sessionId returns a per-browser-session identifier used to compute UV/PV on
-// the backend until real auth sessions are wired through.
+// sessionId returns a per-browser-session identifier for feedback records.
 export function sessionId(): string {
   if (typeof window === "undefined") return "ssr";
   const KEY = "modex_session_id";

@@ -1,46 +1,43 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { recordPageView, recordReadProgress } from "@/lib/api";
-import { capture, sessionId } from "@/lib/analytics";
+import { capture } from "@/lib/analytics";
 
-// PageViewTracker records a page view on mount and flushes read progress
-// (dwell time + scroll depth) on unmount or when the tab is hidden.
+// Reading statistics are captured by PostHog. When PostHog is not configured,
+// capture() is a no-op and no reading data is collected.
 export function PageViewTracker({ docId }: { docId: string }) {
-  const startedAt = useRef<number>(Date.now());
-  const maxScroll = useRef<number>(0);
+  const startedAt = useRef(Date.now());
+  const maxScroll = useRef(0);
+  const readId = useRef("");
 
   useEffect(() => {
-    const sid = sessionId();
     startedAt.current = Date.now();
-
-    recordPageView({ doc_id: docId, session_id: sid }).catch(() => {});
-    capture("docs_page_view", { doc_id: docId });
+    maxScroll.current = 0;
+    readId.current = crypto.randomUUID();
+    capture("docs_page_view", { doc_id: docId, read_id: readId.current });
 
     const onScroll = () => {
       const scrollable = document.documentElement.scrollHeight - window.innerHeight;
       const depth = scrollable > 0 ? Math.min(1, window.scrollY / scrollable) : 1;
-      if (depth > maxScroll.current) maxScroll.current = depth;
+      maxScroll.current = Math.max(maxScroll.current, depth);
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-
     const flush = () => {
-      const duration = Math.round((Date.now() - startedAt.current) / 1000);
-      recordReadProgress({
+      capture("docs_page_read", {
         doc_id: docId,
-        session_id: sid,
-        duration_seconds: duration,
-        scroll_depth: Number(maxScroll.current.toFixed(2))
-      }).catch(() => {});
+        read_id: readId.current,
+        duration_seconds: Math.max(0, Math.round((Date.now() - startedAt.current) / 1000)),
+        scroll_depth: Number(maxScroll.current.toFixed(2)),
+      });
     };
-    const onHidden = () => {
+    const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") flush();
     };
-    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.removeEventListener("scroll", onScroll);
-      document.removeEventListener("visibilitychange", onHidden);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
     };
   }, [docId]);
