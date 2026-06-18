@@ -106,6 +106,31 @@ export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admi
 export const fetchModels = (base_url: string, api_key?: string, protocol?: string) =>
   api<{ models: string[] }>("/api/admin/settings/models", { method: "POST", body: JSON.stringify({ base_url, api_key: api_key || "", protocol: protocol || "" }) });
 
+export type ConnectedApp = {
+  id: string;
+  name: string;
+  description?: string;
+  client_id: string;
+  client_secret?: string;
+  redirect_uris: string[];
+  scopes: string[];
+  trusted: boolean;
+  enabled: boolean;
+  created_by?: string;
+  last_used_at?: string;
+  created_at: string;
+  updated_at: string;
+};
+export type ConnectedAppDraft = Pick<ConnectedApp, "name" | "description" | "redirect_uris" | "scopes" | "trusted" | "enabled"> & {
+  client_id?: string;
+};
+export const getConnectedApps = () => api<{ apps: ConnectedApp[] }>("/api/admin/connected-apps");
+export const createConnectedApp = (body: ConnectedAppDraft) =>
+  api<ConnectedApp>("/api/admin/connected-apps", { method: "POST", body: JSON.stringify(body) });
+export const updateConnectedApp = (id: string, body: ConnectedAppDraft) =>
+  api<ConnectedApp>(`/api/admin/connected-apps/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const deleteConnectedApp = (id: string) => api<{ status: string }>(`/api/admin/connected-apps/${id}`, { method: "DELETE" });
+
 // Doc-engine plugin registry (built-in, admin-managed). Effective enabled+config
 // is also served (un-gated) on /api/config so the renderer can read it.
 export type PluginSetting = { enabled: boolean; config?: Record<string, string> };
