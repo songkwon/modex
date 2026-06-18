@@ -234,8 +234,8 @@ external LLM (`ASK_HTTP_URL`) or returns an extractive answer with cited sources
 - Redis: `REDIS_URL`, `REDIS_PORT`
 - MinIO: `MINIO_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT`, `MINIO_*`
 - Meilisearch: `MEILISEARCH_URL`, `MEILISEARCH_PUBLIC_URL`, `MEILI_*`
-- Retrieval models: `EMBEDDING_PROVIDER`, `EMBEDDING_HTTP_URL`, `EMBEDDING_HTTP_API_KEY`, `EMBEDDING_DIM`, plus rerank settings from the admin model page
-- MCP: `MCP_ENABLED`, `MCP_TOKEN`
+- Retrieval models: embedding and rerank settings are managed on the admin model page
+- MCP: every user generates a personal token on the MCP page and sets it as `MODEX_MCP_TOKEN` in their client
 
 ## docsctl Examples
 
@@ -347,7 +347,7 @@ Local source run:
 
 ```bash
 cd mcp
-MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=dev-token go run ./cmd/modex-mcp-server
+MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=your-personal-token go run ./cmd/modex-mcp-server
 ```
 
 Send JSON-RPC lines on stdin:
@@ -451,7 +451,7 @@ Milvus can be plugged in behind the same vector-store interface.
 
 示例 pipeline 见 `docs/pipeline/docs-deploy.example.yml` 和 `tools/docsctl`。
 
-部署鉴权已在 `/api/deploy` 实现（支持全局 `DOCS_DEPLOY_TOKEN` 或 per-module token）。
+部署鉴权已在 `/api/deploy` 实现，使用管理后台为每个文档源生成的独立 token。
 
 这使得 rd-doc 这样的外部仓库可以持续、结构化地同步到 modex 的指定领域，同时保持构建的完整性。
 

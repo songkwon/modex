@@ -7,8 +7,8 @@
 //
 // Config via environment variables:
 //   MODEX_API_BASE_URL   Modex backend base URL (default http://localhost:8671)
-//   MODEX_MCP_TOKEN      Bearer token for the backend (matches backend MCP_TOKEN)
-// Back-compat aliases: DOCS_API_BASE_URL, MCP_TOKEN.
+//   MODEX_MCP_TOKEN      Personal bearer token generated on the Modex MCP page
+// Back-compat API URL alias: DOCS_API_BASE_URL.
 //
 // Protocol notes: only stdout carries JSON-RPC. All diagnostics go to stderr.
 
@@ -19,7 +19,7 @@ const BASE_URL = (
   process.env.DOCS_API_BASE_URL ||
   "http://localhost:8671"
 ).replace(/\/+$/, "");
-const TOKEN = process.env.MODEX_MCP_TOKEN || process.env.MCP_TOKEN || "";
+const TOKEN = process.env.MODEX_MCP_TOKEN || "";
 
 const log = (...a) => console.error("[modex-mcp]", ...a);
 

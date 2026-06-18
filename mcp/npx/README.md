@@ -17,7 +17,7 @@ to your Modex documentation platform. Zero dependencies, runs over stdio via `np
 | Env var | Default | Notes |
 |---------|---------|-------|
 | `MODEX_API_BASE_URL` | `http://localhost:8671` | Modex backend base URL |
-| `MODEX_MCP_TOKEN` | _(none)_ | Bearer token, must match backend `MCP_TOKEN` |
+| `MODEX_MCP_TOKEN` | _(none)_ | Personal bearer token generated on the Modex MCP page |
 
 ## Install
 
@@ -86,7 +86,7 @@ npx skills add https://github.com/your-org/modex/tree/main/mcp/skill
 ### Try it locally
 
 ```bash
-MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=dev-token npx -y modex-mcp
+MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=your-personal-token npx -y modex-mcp
 ```
 
 Then send a JSON-RPC line on stdin, e.g.:

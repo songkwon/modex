@@ -19,7 +19,7 @@ type Client struct {
 func FromEnv() Client {
 	return Client{
 		BaseURL: env("MODEX_API_BASE_URL", env("DOCS_API_BASE_URL", "http://localhost:8671")),
-		Token:   env("MODEX_MCP_TOKEN", os.Getenv("MCP_TOKEN")),
+		Token:   os.Getenv("MODEX_MCP_TOKEN"),
 		HTTP:    &http.Client{Timeout: 20 * time.Second},
 	}
 }

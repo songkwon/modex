@@ -89,14 +89,8 @@ services:
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
-      EMBEDDING_HTTP_URL: ${EMBEDDING_HTTP_URL:-}
-      EMBEDDING_HTTP_API_KEY: ${EMBEDDING_HTTP_API_KEY:-}
-      EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
       HYBRID_KEYWORD_WEIGHT: ${HYBRID_KEYWORD_WEIGHT:-0.6}
       HYBRID_SEMANTIC_WEIGHT: ${HYBRID_SEMANTIC_WEIGHT:-0.4}
-      MCP_ENABLED: ${MCP_ENABLED:-true}
-      MCP_TOKEN: ${MCP_TOKEN:-dev-token}
       # Directory the backend serves the MCP npx package from (intranet download).
       # The package is bind-mounted read-only below.
       MCP_DIST_DIR: ${MCP_DIST_DIR:-/app/mcp-dist}
@@ -178,7 +172,7 @@ services:
   #   docker compose --profile mcp run --rm mcp
   #
   # Most developers instead use the npx package (mcp/npx, `npx modex-mcp`)
-  # pointed at this deployment's backend URL + MCP_TOKEN.
+  # pointed at this deployment's backend URL + their personal MCP token.
   mcp:
     build:
       context: ../mcp
@@ -187,7 +181,7 @@ services:
     profiles: ["mcp"]
     environment:
       MODEX_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:8671}
-      MODEX_MCP_TOKEN: ${MCP_TOKEN:-dev-token}
+      MODEX_MCP_TOKEN: ${MODEX_MCP_TOKEN:-}
     stdin_open: true
     tty: true
     depends_on:
