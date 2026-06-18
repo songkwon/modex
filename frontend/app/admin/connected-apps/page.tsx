@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import {
   createConnectedApp,
   deleteConnectedApp,
@@ -15,12 +16,15 @@ import {
   type ConnectedAppDraft,
 } from "@/lib/api";
 
-const DEFAULT_SCOPES = "modex:mcp:read\nmodex:docs:read";
+const DEFAULT_SCOPES = ["modex:mcp:read", "modex:docs:read"];
+const SCOPE_OPTIONS: ComboOption[] = [
+  { value: "modex:mcp:read", label: "modex:mcp:read", hint: "允许 MCP 工具读取文档" },
+  { value: "modex:docs:read", label: "modex:docs:read", hint: "允许读取文档 API" },
+];
 
 type Draft = ConnectedAppDraft & {
   id?: string;
   redirect_text: string;
-  scope_text: string;
 };
 
 const emptyDraft: Draft = {
@@ -28,11 +32,10 @@ const emptyDraft: Draft = {
   description: "",
   client_id: "",
   redirect_uris: [],
-  scopes: ["modex:mcp:read", "modex:docs:read"],
+  scopes: [...DEFAULT_SCOPES],
   trusted: false,
   enabled: true,
   redirect_text: "",
-  scope_text: DEFAULT_SCOPES,
 };
 
 function lines(value: string) {
@@ -54,7 +57,6 @@ function toDraft(app?: ConnectedApp): Draft {
     trusted: !!app.trusted,
     enabled: !!app.enabled,
     redirect_text: (app.redirect_uris || []).join("\n"),
-    scope_text: (app.scopes || []).join("\n"),
   };
 }
 
@@ -62,9 +64,8 @@ function payload(draft: Draft): ConnectedAppDraft {
   return {
     name: draft.name.trim(),
     description: draft.description?.trim(),
-    client_id: draft.client_id?.trim() || undefined,
     redirect_uris: lines(draft.redirect_text),
-    scopes: lines(draft.scope_text),
+    scopes: draft.scopes,
     trusted: draft.trusted,
     enabled: draft.enabled,
   };
@@ -270,24 +271,26 @@ export default function AdminConnectedAppsPage() {
             <div style={{ display: "flex", gap: 8 }}>
               <input readOnly value={createdSecret} style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} />
               <button className="button" onClick={() => copy(createdSecret, (v) => setCopied(v ? "secret" : ""))}>
-                {copied === "secret" ? <Check size={14} /> : <Copy size={14} />} 复制
+                {copied === "secret" ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
             <span className="field-hint">请立即保存到外部应用的安全配置中，关闭弹窗后无法再次查看。</span>
           </div>
         ) : null}
 
-        <div className="field-row">
-          <div className="field">
-            <label>应用名称 *</label>
-            <input value={draft.name} autoFocus placeholder="如 Internal MCP Gateway" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          </div>
+        <div className="field">
+          <label>应用名称 *</label>
+          <input value={draft.name} autoFocus placeholder="如 Internal MCP Gateway" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          <span className="field-hint">Client ID 会自动生成，创建后在列表和编辑弹窗里展示。</span>
+        </div>
+
+        {draft.id ? (
           <div className="field">
             <label>Client ID</label>
-            <input value={draft.client_id || ""} placeholder="留空自动生成" disabled={!!draft.id} onChange={(e) => setDraft({ ...draft, client_id: e.target.value })} />
-            <span className="field-hint">{draft.id ? "已创建应用不可修改 Client ID。" : "不填时系统生成 modex_ 前缀 ID。"}</span>
+            <input value={draft.client_id || ""} readOnly style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} />
+            <span className="field-hint">已创建应用不可修改 Client ID。</span>
           </div>
-        </div>
+        ) : null}
 
         <div className="field">
           <label>描述</label>
@@ -307,12 +310,13 @@ export default function AdminConnectedAppsPage() {
 
         <div className="field">
           <label>Scopes</label>
-          <textarea
-            value={draft.scope_text}
-            style={{ minHeight: 76, fontFamily: "ui-monospace, monospace", fontSize: 13 }}
-            onChange={(e) => setDraft({ ...draft, scope_text: e.target.value })}
+          <Combobox
+            options={SCOPE_OPTIONS}
+            value={draft.scopes}
+            onChange={(scopes) => setDraft({ ...draft, scopes })}
+            placeholder="选择授权范围…"
           />
-          <span className="field-hint">每行一个 scope。MCP 集成建议至少包含 modex:mcp:read。</span>
+          <span className="field-hint">MCP 集成建议至少包含 modex:mcp:read。</span>
         </div>
 
         <div className="field-row">
