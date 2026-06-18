@@ -2,12 +2,49 @@ package search
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"modex/backend/internal/embedding"
 	"modex/backend/internal/store"
 )
+
+func TestRerankUsesAdminSettings(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/rerank" {
+			t.Fatalf("path = %q, want /v1/rerank", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer secret" {
+			t.Fatalf("authorization = %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{
+			map[string]any{"index": 1, "relevance_score": 0.9},
+			map[string]any{"index": 0, "relevance_score": 0.2},
+		}})
+	}))
+	defer server.Close()
+
+	st := store.New()
+	st.SaveAISettings(store.AISettings{
+		RerankBaseURL: server.URL + "/v1",
+		RerankModel:   "rerank-v1",
+		RerankAPIKey:  "secret",
+		RerankTopK:    2,
+	})
+	results, err := (Service{Store: st}).rerank(context.Background(), "query", []Result{
+		{DocID: "first", Title: "First"},
+		{DocID: "second", Title: "Second"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].DocID != "second" || results[0].Score != 0.9 {
+		t.Fatalf("results = %#v", results)
+	}
+}
 
 type fakeVectorStore struct {
 	vectors  map[string][]float32

@@ -1,11 +1,16 @@
 package search
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"math"
+	"net/http"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"modex/backend/internal/embedding"
 	"modex/backend/internal/store"
@@ -201,6 +206,11 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		})
 	}
 	sort.Slice(scored, func(i, j int) bool { return scored[i].Score > scored[j].Score })
+	var err error
+	scored, err = s.rerank(ctx, req.Query, scored)
+	if err != nil {
+		return Response{}, err
+	}
 	total := len(scored)
 	start := (req.Page - 1) * req.PageSize
 	if start > len(scored) {
@@ -211,6 +221,73 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		end = len(scored)
 	}
 	return Response{Query: req.Query, Mode: req.Mode, Page: req.Page, PageSize: req.PageSize, Total: total, Results: scored[start:end], Facets: facets(pages)}, nil
+}
+
+func (s Service) rerank(ctx context.Context, query string, results []Result) ([]Result, error) {
+	ai := s.Store.Settings().AI
+	if strings.TrimSpace(query) == "" || ai.RerankBaseURL == "" || ai.RerankModel == "" || len(results) < 2 {
+		return results, nil
+	}
+	topK := ai.RerankTopK
+	if topK <= 0 || topK > len(results) {
+		topK = len(results)
+	}
+	documents := make([]string, topK)
+	for i := 0; i < topK; i++ {
+		documents[i] = results[i].Title + "\n" + results[i].Snippet
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"model": ai.RerankModel, "query": query, "documents": documents, "top_n": topK,
+	})
+	endpoint := strings.TrimRight(ai.RerankBaseURL, "/")
+	if !strings.HasSuffix(endpoint, "/rerank") {
+		endpoint += "/rerank"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if ai.RerankAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+ai.RerankAPIKey)
+	}
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("rerank http status %d", resp.StatusCode)
+	}
+	var decoded struct {
+		Results []struct {
+			Index          int     `json:"index"`
+			RelevanceScore float64 `json:"relevance_score"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return nil, err
+	}
+	if len(decoded.Results) == 0 {
+		return nil, fmt.Errorf("rerank provider returned no results")
+	}
+	reranked := make([]Result, 0, len(results))
+	seen := make(map[int]bool, topK)
+	for _, item := range decoded.Results {
+		if item.Index < 0 || item.Index >= topK || seen[item.Index] {
+			continue
+		}
+		result := results[item.Index]
+		result.Score = item.RelevanceScore
+		reranked = append(reranked, result)
+		seen[item.Index] = true
+	}
+	for i := 0; i < topK; i++ {
+		if !seen[i] {
+			reranked = append(reranked, results[i])
+		}
+	}
+	return append(reranked, results[topK:]...), nil
 }
 
 func defaultVersionForModule(m store.Module) string {

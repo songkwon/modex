@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -44,7 +45,15 @@ func New(st *store.Store) *Server {
 }
 
 func NewWithVectorStore(st *store.Store, vectors search.VectorStore) *Server {
-	provider := embedding.FromEnv()
+	provider := embedding.SettingsProvider{Load: func() embedding.Settings {
+		ai := st.Settings().AI
+		return embedding.Settings{
+			BaseURL: ai.EmbeddingBaseURL,
+			Model:   ai.EmbeddingModel,
+			APIKey:  ai.EmbeddingAPIKey,
+			Dim:     ai.EmbeddingDim,
+		}
+	}}
 	authSvc := auth.NewService(auth.FromEnv())
 	s := &Server{
 		store: st,
@@ -1052,32 +1061,24 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Deploy auth (GitLab CI / docsctl integration)
-	// - Global token via DOCS_DEPLOY_TOKEN env (for simple setups)
-	// - Per-module DeployToken (recommended for GitLab对接)
+	// Deploy auth (GitLab CI / docsctl integration). Each document source owns
+	// an independent token; the artifact module key selects the token to verify.
 	// Token can be sent as X-Modex-Deploy-Token header or Authorization: Bearer <token>
 	moduleKey := artifact.Metadata.ModuleKey
-	globalToken := os.Getenv("DOCS_DEPLOY_TOKEN")
 	provided := r.Header.Get("X-Modex-Deploy-Token")
 	if provided == "" {
 		provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-
-	allowed := false
-	if globalToken != "" && provided == globalToken {
-		allowed = true
+	m, moduleErr := s.store.Module(moduleKey)
+	if moduleErr != nil {
+		writeError(w, http.StatusNotFound, "module_not_found", "document source not found")
+		return
 	}
-	if m, merr := s.store.Module(moduleKey); merr == nil && m.DeployToken != "" {
-		if provided == m.DeployToken {
-			allowed = true
-		}
+	if m.DeployToken == "" {
+		writeError(w, http.StatusForbidden, "deploy_token_not_configured", "generate a deploy token for this document source first")
+		return
 	}
-	// If no tokens are configured at all (dev), allow. Otherwise require match.
-	hasAnyToken := globalToken != ""
-	if m, merr := s.store.Module(moduleKey); merr == nil && m.DeployToken != "" {
-		hasAnyToken = true
-	}
-	if hasAnyToken && !allowed {
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(m.DeployToken)) != 1 {
 		writeError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid for this module")
 		return
 	}

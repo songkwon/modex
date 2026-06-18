@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
+	"strings"
 	"time"
 )
 
@@ -52,37 +52,56 @@ func (p MockProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float
 	return out, nil
 }
 
-type HTTPProvider struct {
-	URL    string
-	APIKey string
+// Settings is the admin-managed embedding configuration needed by Provider.
+type Settings struct {
+	BaseURL string
+	Model   string
+	APIKey  string
+	Dim     int
+}
+
+// SettingsProvider resolves configuration for every request, so model changes
+// made in the admin page take effect without restarting the backend.
+type SettingsProvider struct {
+	Load   func() Settings
 	Client *http.Client
 }
 
-func (p HTTPProvider) Name() string { return "http" }
+func (p SettingsProvider) Name() string {
+	if cfg := p.settings(); cfg.BaseURL != "" && cfg.Model != "" {
+		return "admin"
+	}
+	return "mock"
+}
 
-func (p HTTPProvider) EmbedText(ctx context.Context, text string) ([]float32, error) {
-	batch, err := p.EmbedBatch(ctx, []string{text})
+func (p SettingsProvider) EmbedText(ctx context.Context, text string) ([]float32, error) {
+	vectors, err := p.EmbedBatch(ctx, []string{text})
 	if err != nil {
 		return nil, err
 	}
-	if len(batch) == 0 {
+	if len(vectors) == 0 {
 		return nil, errors.New("embedding provider returned no vectors")
 	}
-	return batch[0], nil
+	return vectors[0], nil
 }
 
-func (p HTTPProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	if p.URL == "" {
-		return nil, errors.New("EMBEDDING_HTTP_URL is empty")
+func (p SettingsProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	cfg := p.settings()
+	if cfg.BaseURL == "" || cfg.Model == "" {
+		return MockProvider{Dim: cfg.Dim}.EmbedBatch(ctx, texts)
 	}
-	body, _ := json.Marshal(map[string]any{"texts": texts})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.URL, bytes.NewReader(body))
+	endpoint := strings.TrimRight(cfg.BaseURL, "/")
+	if !strings.HasSuffix(endpoint, "/embeddings") {
+		endpoint += "/embeddings"
+	}
+	body, _ := json.Marshal(map[string]any{"model": cfg.Model, "input": texts})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if p.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	}
 	client := p.Client
 	if client == nil {
@@ -97,26 +116,32 @@ func (p HTTPProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float
 		return nil, fmt.Errorf("embedding http status %d", resp.StatusCode)
 	}
 	var decoded struct {
-		Embeddings [][]float32 `json:"embeddings"`
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+			Index     int       `json:"index"`
+		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, err
 	}
-	return decoded.Embeddings, nil
+	out := make([][]float32, len(decoded.Data))
+	for i, item := range decoded.Data {
+		idx := item.Index
+		if idx < 0 || idx >= len(out) {
+			idx = i
+		}
+		out[idx] = item.Embedding
+	}
+	return out, nil
 }
 
-func FromEnv() Provider {
-	dim := envInt("EMBEDDING_DIM", 384)
-	if os.Getenv("EMBEDDING_PROVIDER") == "http" {
-		return HTTPProvider{URL: os.Getenv("EMBEDDING_HTTP_URL"), APIKey: os.Getenv("EMBEDDING_HTTP_API_KEY")}
+func (p SettingsProvider) settings() Settings {
+	if p.Load == nil {
+		return Settings{Dim: 384}
 	}
-	return MockProvider{Dim: dim}
-}
-
-func envInt(key string, fallback int) int {
-	var v int
-	if _, err := fmt.Sscanf(os.Getenv(key), "%d", &v); err == nil && v > 0 {
-		return v
+	cfg := p.Load()
+	if cfg.Dim <= 0 {
+		cfg.Dim = 384
 	}
-	return fallback
+	return cfg
 }
