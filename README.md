@@ -4,7 +4,7 @@ Modex is an internal Module Documentation Experience platform MVP.
 
 ## Structure
 
-- `backend/`: Go REST API with mock registry data, search, embedding provider abstraction, analytics placeholders.
+- `backend/`: Go REST API with mock registry data, search, model/retrieval settings, analytics placeholders.
 - `frontend/`: Next.js portal with home, module cards, info drawer, search, docs reading pages, and admin placeholders.
 - `tools/docsctl/`: Go CLI for `validate`, `build`, `package`, and `deploy`.
 - `mcp/`: stdio MCP server that calls the backend API.
@@ -23,6 +23,7 @@ Open:
 
 - Frontend: <http://localhost:3456>
 - Backend health: <http://localhost:8671/healthz>
+- Redis: `localhost:6379`
 - MinIO console: <http://localhost:9001>
 - Meilisearch: <http://localhost:7700>
 
@@ -82,7 +83,7 @@ We follow a pragmatic split:
 - **Environment variables** — for infrastructure, secrets, and deployment-specific wiring:
   - `AUTH_MODE`, `KEYCLOAK_*`, all `OIDC_*` endpoint / client / redirect settings
   - `COOKIE_*`, `SUPER_ADMIN_USERS`
-  - Database, MinIO, Meilisearch, embedding provider URLs and keys
+  - Database, Redis, MinIO, Meilisearch/vector-store, embedding/rerank provider URLs and keys
   - `PORT`, `DATA_DIR`, CORS origins, etc.
 
 - **Application config file (YAML)** — for higher-level, semantic configuration that describes *how the app should interpret data from external systems*. These are good to keep in a version-controlled file (with comments) so changes are reviewable.
@@ -230,9 +231,10 @@ external LLM (`ASK_HTTP_URL`) or returns an extractive answer with cited sources
 - Public domains and ports: `APP_BASE_URL`, `FRONTEND_BASE_URL`, `BACKEND_PORT`, `FRONTEND_PORT`, `CORS_ALLOW_ORIGINS`
 - Frontend API routing: `NEXT_PUBLIC_API_BASE_URL` is used by browser-side requests; `INTERNAL_API_BASE_URL` is used by Next.js server rendering inside Docker. In Compose, keep it as `http://backend:8671` unless you change `BACKEND_PORT`.
 - PostgreSQL: `DATABASE_URL`, `POSTGRES_*`
+- Redis: `REDIS_URL`, `REDIS_PORT`
 - MinIO: `MINIO_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT`, `MINIO_*`
 - Meilisearch: `MEILISEARCH_URL`, `MEILISEARCH_PUBLIC_URL`, `MEILI_*`
-- Embedding: `EMBEDDING_PROVIDER`, `EMBEDDING_HTTP_URL`, `EMBEDDING_HTTP_API_KEY`, `EMBEDDING_DIM`
+- Retrieval models: `EMBEDDING_PROVIDER`, `EMBEDDING_HTTP_URL`, `EMBEDDING_HTTP_API_KEY`, `EMBEDDING_DIM`, plus rerank settings from the admin model page
 - MCP: `MCP_ENABLED`, `MCP_TOKEN`
 
 ## docsctl Examples
@@ -275,26 +277,64 @@ VuePress, Fumadocs, static HTML, and Markdown projects, and can create
 `docs.yaml` in place when `DOCS_DISCOVER_WRITE=true` is set. Use
 `DOCS_DISCOVER_DEPTH` to control traversal depth.
 
-## MCP
+## AI Tool Access
 
-Modex ships an MCP server so AI clients (Claude Code, Cursor, …) can search and
-read your docs. Three ways to run it:
+Modex ships a user-facing MCP server and Skill package so AI clients (Claude Code,
+Cursor, Windsurf, …) can search and read your docs. These packages are for Modex
+users, not Modex platform developers.
 
-### 1. npx (recommended for developers)
+### 1. MCP via npx
 
-The `mcp/npx` package (`modex-docs-mcp`) is a zero-dependency stdio server. Add it
-to your client pointed at a Modex deployment:
+The `mcp/npx` package (`modex-mcp`) is a zero-dependency stdio server. Add it
+to your client pointed at a Modex deployment; use the shorter client name
+`modex`:
 
 ```bash
-claude mcp add modex-docs \
+claude mcp add modex \
   --env MODEX_API_BASE_URL=https://modex.example.com \
   --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-docs-mcp
+  -- npx -y modex-mcp
 ```
 
 See [mcp/npx/README.md](mcp/npx/README.md) for Cursor/Windsurf config.
 
-### 2. Docker (builds with the stack)
+### 2. MCP from a Modex release
+
+The MCP package is also bundled into Modex releases and served by the backend for
+intranet users:
+
+```bash
+claude mcp add modex \
+  --env MODEX_API_BASE_URL=https://modex.example.com \
+  --env MODEX_MCP_TOKEN=your-token \
+  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
+```
+
+If your deployment keeps MCP in an installable Git package, `npx` can install it
+directly:
+
+```bash
+npx -y git+https://github.com/your-org/modex-mcp.git
+```
+
+### 3. Skill package
+
+For clients that support skills, install the Modex Skill with:
+
+```bash
+npx skills add https://modex.example.com
+```
+
+If the Skill is maintained in Git:
+
+```bash
+npx skills add https://github.com/your-org/modex/tree/main/mcp/skill
+```
+
+The Skill carries client-side guidance; MCP is still the runtime channel that
+reads Modex data.
+
+### 4. Docker / source for platform operators
 
 The Go MCP server builds alongside the compose stack and runs on demand (stdio,
 not a served port):
@@ -303,11 +343,11 @@ not a served port):
 cd deploy && docker compose --profile mcp run --rm mcp
 ```
 
-### 3. From source
+Local source run:
 
 ```bash
 cd mcp
-DOCS_API_BASE_URL=http://localhost:8671 MCP_TOKEN=dev-token go run ./cmd/docs-mcp-server
+MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=dev-token go run ./cmd/modex-mcp-server
 ```
 
 Send JSON-RPC lines on stdin:
@@ -377,9 +417,11 @@ management, analytics, admin CRUD, real search/embedding reindexing, and durable
 snapshot persistence are all implemented.
 
 The next infrastructure iteration replaces the snapshot store with managed
-services: PostgreSQL (source of truth), MinIO (artifact/site bytes), Meilisearch
-(keyword index), and pgvector (embeddings). Configuration, the `001_init.sql`
-migration, and the provider seams are already in place for that work.
+services: PostgreSQL as the registry/source of truth, Redis for sessions/cache/hot
+counters and transient jobs, MinIO for document artifacts/site bytes, Meilisearch
+for keyword index, and a vector database for embeddings. PostgreSQL + pgvector is
+the preferred first vector store; if scale or operations require it, Chroma or
+Milvus can be plugged in behind the same vector-store interface.
 
 ## GitLab 集成（参考 Mintlify）
 

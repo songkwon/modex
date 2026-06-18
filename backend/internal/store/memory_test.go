@@ -1,7 +1,9 @@
 package store
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,8 +30,13 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	if _, err := loaded.UserByID(""); err == nil {
 		t.Fatal("expected lookup of empty id to fail")
 	}
-	if loaded.EmbeddingCount() != 1 {
-		t.Fatalf("embeddings after reload = %d, want 1", loaded.EmbeddingCount())
+	if loaded.EmbeddingCount() != 0 {
+		t.Fatalf("embeddings after reload = %d, want 0; vectors must not be snapshotted", loaded.EmbeddingCount())
+	}
+	for _, suffix := range []string{".pages.json", ".html.json", ".site_files.json"} {
+		if _, err := os.Stat(strings.TrimSuffix(path, ".json") + suffix); err != nil {
+			t.Fatalf("expected split snapshot %s: %v", suffix, err)
+		}
 	}
 	stats := loaded.PageAnalytics()
 	var pv int
@@ -48,6 +55,79 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 	if created.ID == "" {
 		t.Fatal("expected generated module ID after reload")
+	}
+}
+
+func TestLoadWithoutEmbeddingsSkipsLegacySidecar(t *testing.T) {
+	s := NewSeeded()
+	path := filepath.Join(t.TempDir(), "snap.json")
+	if err := s.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	sidecar := strings.TrimSuffix(path, ".json") + ".embeddings.json"
+	if err := os.WriteFile(sidecar, []byte(`{"DemoModule:latest:guide":[0.1,0.2,0.3]}`), 0o644); err != nil {
+		t.Fatalf("write legacy embeddings: %v", err)
+	}
+	loaded, err := LoadWithoutEmbeddings(path)
+	if err != nil {
+		t.Fatalf("LoadWithoutEmbeddings: %v", err)
+	}
+	if loaded.EmbeddingCount() != 0 {
+		t.Fatalf("embeddings after skipped load = %d, want 0", loaded.EmbeddingCount())
+	}
+}
+
+func TestSnapshotPersistsModuleDeployToken(t *testing.T) {
+	s := NewSeeded()
+	created, err := s.CreateModule(Module{ModuleKey: "TokenModule"})
+	if err != nil {
+		t.Fatalf("CreateModule: %v", err)
+	}
+	if created.DeployToken == "" {
+		t.Fatal("expected generated deploy token")
+	}
+
+	path := filepath.Join(t.TempDir(), "snap.json")
+	if err := s.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	mod, err := loaded.Module("TokenModule")
+	if err != nil {
+		t.Fatalf("Module: %v", err)
+	}
+	if mod.DeployToken != created.DeployToken {
+		t.Fatalf("deploy token after reload = %q, want %q", mod.DeployToken, created.DeployToken)
+	}
+	if !mod.DeployTokenSet {
+		t.Fatal("expected DeployTokenSet after reload")
+	}
+}
+
+func TestSiteObjectsUseCanonicalModuleKey(t *testing.T) {
+	s := New()
+	_, err := s.IngestArtifact(DeployArtifact{
+		ModuleKey:   "RuntimeDocs",
+		DocsVersion: "latest",
+		Entries:     []DeployEntry{{Key: "guide", Title: "Guide"}},
+		Documents:   []DeployDocument{{DocID: "RuntimeDocs:latest:guide", EntryKey: "guide", Title: "Guide", Content: "body"}},
+		SiteHTML:    map[string]string{"site/guide/index.html": "<h1>Guide</h1>"},
+		SiteFiles:   map[string][]byte{"site/guide/assets/app.css": []byte("body{}")},
+	})
+	if err != nil {
+		t.Fatalf("IngestArtifact: %v", err)
+	}
+	objects := s.SiteObjects()
+	for _, key := range []string{
+		"modules/RuntimeDocs/latest/site/guide/index.html",
+		"modules/RuntimeDocs/latest/site/guide/assets/app.css",
+	} {
+		if _, ok := objects[key]; !ok {
+			t.Fatalf("missing MinIO object %q in %#v", key, objects)
+		}
 	}
 }
 

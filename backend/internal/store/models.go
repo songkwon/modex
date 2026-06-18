@@ -20,7 +20,7 @@ type User struct {
 	// It is combined with SUPER_ADMIN_USERS env (see auth service) so that
 	// super admin status can be granted either statically (env, for bootstrap)
 	// or dynamically via the admin UI.
-	SuperAdmin  bool      `json:"is_super_admin,omitempty"`
+	SuperAdmin bool `json:"is_super_admin,omitempty"`
 	// MCPToken is the user's personal bearer token for the MCP server, so MCP
 	// calls can be attributed to them. Never serialized (revealed via /api/me/mcp-token).
 	MCPToken    string    `json:"-"`
@@ -132,6 +132,9 @@ type Module struct {
 	LastSyncedCommit string    `json:"last_synced_commit,omitempty"`
 	LastSyncedAt     time.Time `json:"last_synced_at,omitempty"`
 
+	// Read-only flag for admins (the actual token is secret and exposed only via /deploy-token).
+	DeployTokenSet bool `json:"deploy_token_set,omitempty"`
+
 	AvailableVers []Version `json:"available_versions,omitempty"`
 	UpdatedAt     time.Time `json:"updated_at"`
 	Reads7d       int       `json:"reads_7d"`
@@ -220,24 +223,42 @@ type Page struct {
 // admin UI can pre-fill the editor and offer a "reset to default" action.
 const DefaultAskSystemPrompt = "你是企业研发文档助手。只依据提供的【文档片段】回答用户问题，使用简洁中文；若片段中没有答案，明确说明未在文档中找到，不要编造。回答末尾不要重复罗列来源。"
 
-// AISettings holds the admin-configured large-model connection used to power
-// AI answers (RAG). It targets any OpenAI-compatible /chat/completions endpoint
-// (OpenAI, DeepSeek, Qwen/DashScope-compat, local vLLM/Ollama, …).
+// AISettings holds the admin-configured model and retrieval settings used to
+// power AI answers (RAG), semantic search, reranking, and recall evaluation.
 type AISettings struct {
 	// AskProtocol selects the API format of the chat endpoint:
 	// "openai-chat" (default), "openai-responses", "anthropic", or "gemini".
-	AskProtocol     string    `json:"ask_protocol"`
-	AskBaseURL      string    `json:"ask_base_url"`      // e.g. https://api.openai.com/v1
-	AskModel        string    `json:"ask_model"`         // fetched from the endpoint
-	AskAPIKey       string    `json:"ask_api_key"`       // secret; masked when read back
-	AskSystemPrompt string    `json:"ask_system_prompt"` // optional override
+	AskProtocol     string `json:"ask_protocol"`
+	AskBaseURL      string `json:"ask_base_url"`      // e.g. https://api.openai.com/v1
+	AskModel        string `json:"ask_model"`         // fetched from the endpoint
+	AskAPIKey       string `json:"ask_api_key"`       // secret; masked when read back
+	AskSystemPrompt string `json:"ask_system_prompt"` // optional override
 	// AskMaxTokens caps the answer length. 0 means "use the engine default".
 	// (Required by Anthropic; optional for the others.)
 	AskMaxTokens int `json:"ask_max_tokens,omitempty"`
 	// AskTemperature controls sampling. nil means "use the engine default"
 	// (so an explicit 0 for deterministic output is still distinguishable).
-	AskTemperature *float64  `json:"ask_temperature,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	AskTemperature *float64 `json:"ask_temperature,omitempty"`
+
+	EmbeddingBaseURL string `json:"embedding_base_url,omitempty"`
+	EmbeddingModel   string `json:"embedding_model,omitempty"`
+	EmbeddingAPIKey  string `json:"embedding_api_key,omitempty"` // secret; masked when read back
+	EmbeddingDim     int    `json:"embedding_dim,omitempty"`
+
+	RerankBaseURL string `json:"rerank_base_url,omitempty"`
+	RerankModel   string `json:"rerank_model,omitempty"`
+	RerankAPIKey  string `json:"rerank_api_key,omitempty"` // secret; masked when read back
+	RerankTopK    int    `json:"rerank_top_k,omitempty"`
+
+	ChunkStrategy string `json:"chunk_strategy,omitempty"` // fixed, heading, markdown, semantic
+	ChunkSize     int    `json:"chunk_size,omitempty"`
+	ChunkOverlap  int    `json:"chunk_overlap,omitempty"`
+
+	RecallTestQuery  string `json:"recall_test_query,omitempty"`
+	RecallTestTopK   int    `json:"recall_test_top_k,omitempty"`
+	RecallTestDocIDs string `json:"recall_test_doc_ids,omitempty"` // newline/comma separated expected doc ids
+
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Settings is the persisted, admin-editable platform configuration.
@@ -342,6 +363,19 @@ type MCPLog struct {
 	InputJSON   string    `json:"input_json"`
 	ResultCount int       `json:"result_count"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type DocFeedback struct {
+	ID        string    `json:"id"`
+	DocID     string    `json:"doc_id"`
+	PageID    string    `json:"page_id"`
+	ModuleKey string    `json:"module_key"`
+	Title     string    `json:"title"`
+	Rating    string    `json:"rating"`
+	Comment   string    `json:"comment"`
+	UserID    string    `json:"user_id"`
+	SessionID string    `json:"session_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type PageView struct {

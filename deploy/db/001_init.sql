@@ -234,6 +234,8 @@ CREATE TABLE IF NOT EXISTS docs_embedding (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_docs_embedding_doc_id ON docs_embedding(doc_id);
+
 CREATE TABLE IF NOT EXISTS docs_mcp_log (
   id BIGSERIAL PRIMARY KEY,
   tool_name TEXT,

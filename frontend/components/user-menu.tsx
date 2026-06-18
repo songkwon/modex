@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Terminal, Shield, LogOut, LogIn, ChevronDown } from "lucide-react";
+import { Terminal, Shield, LogOut, LogIn, ChevronDown, BookOpen } from "lucide-react";
 import { getAuthConfig, getMe, logout, mockLogin } from "@/lib/api";
 import { identify } from "@/lib/analytics";
 import type { AuthConfig, User } from "@/types/modex";
@@ -106,6 +106,7 @@ export function UserMenu() {
           </div>
           <div className="user-dropdown-list">
             <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />MCP 使用</Link>
+            <Link className="user-dropdown-item" href="/me/docs-example" onClick={() => setOpen(false)}><BookOpen size={16} />示例文档</Link>
             {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />管理控制台</Link> : null}
           </div>
           <div className="user-dropdown-foot">

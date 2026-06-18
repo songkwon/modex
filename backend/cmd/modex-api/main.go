@@ -12,6 +12,7 @@ import (
 
 	"modex/backend/internal/api"
 	"modex/backend/internal/store"
+	"modex/backend/internal/vectorstore"
 )
 
 func analyticsSource() string {
@@ -24,8 +25,21 @@ func analyticsSource() string {
 func main() {
 	addr := ":" + env("PORT", "8671")
 
-	st, snapshotPath := loadStore()
-	srv := api.New(st)
+	databaseURL := os.Getenv("DATABASE_URL")
+	st, snapshotPath := loadStore(databaseURL != "")
+	var vectors *vectorstore.Postgres
+	if databaseURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		var err error
+		vectors, err = vectorstore.Open(ctx, databaseURL)
+		cancel()
+		if err != nil {
+			log.Fatalf("open PostgreSQL vector store: %v", err)
+		}
+		defer vectors.Close()
+		log.Printf("embedding store: PostgreSQL/pgvector")
+	}
+	srv := api.NewWithVectorStore(st, vectors)
 
 	log.Printf("analytics source: %s", analyticsSource())
 
@@ -67,14 +81,18 @@ func main() {
 // loadStore returns the store and the snapshot path (empty when persistence is
 // disabled). When DATA_DIR is set it loads an existing snapshot or falls back to
 // seeded data.
-func loadStore() (*store.Store, string) {
+func loadStore(skipEmbeddings bool) (*store.Store, string) {
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		log.Printf("DATA_DIR not set; starting with empty store (no demo data)")
 		return store.New(), ""
 	}
 	path := filepath.Join(dataDir, "modex-store.json")
-	if st, err := store.Load(path); err == nil {
+	load := store.Load
+	if skipEmbeddings {
+		load = store.LoadWithoutEmbeddings
+	}
+	if st, err := load(path); err == nil {
 		log.Printf("loaded store snapshot from %s", path)
 		return st, path
 	} else {

@@ -35,6 +35,7 @@ export type ModuleInfo = {
   gitlab_path?: string;      // subdir in repo, e.g. "docs/standard"
   last_synced_commit?: string;
   last_synced_at?: string;
+  deploy_token_set?: boolean;
 
   updated_at: string;
   reads_7d: number;

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 func Build(root, outDir string) error {
@@ -28,16 +29,18 @@ func Build(root, outDir string) error {
 	}
 	var nav []NavItem
 	var records []DocumentRecord
+	var manifestEntries []Entry
 	var full strings.Builder
 	for _, entry := range cfg.Entries {
 		switch entry.Type {
 		case "markdown":
-			rec, navItem, text, err := buildMarkdown(root, outDir, md, entry)
+			recs, navItems, entries, text, err := buildMarkdown(root, outDir, md, entry)
 			if err != nil {
 				return err
 			}
-			records = append(records, rec)
-			nav = append(nav, navItem)
+			records = append(records, recs...)
+			nav = append(nav, navItems...)
+			manifestEntries = append(manifestEntries, entries...)
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
 		case "static":
 			rec, navItem, text, err := buildStatic(root, outDir, md, entry)
@@ -46,6 +49,7 @@ func Build(root, outDir string) error {
 			}
 			records = append(records, rec)
 			nav = append(nav, navItem)
+			manifestEntries = append(manifestEntries, entry)
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
 		case "vitepress", "vuepress", "fumadocs":
 			if _, err := buildCommandEntry(root, outDir, md, entry); err != nil {
@@ -69,12 +73,13 @@ func Build(root, outDir string) error {
 			}
 			records = append(records, pageRecs...)
 			nav = append(nav, NavItem{Title: entry.Title, Path: "/" + entry.Key})
+			manifestEntries = append(manifestEntries, entry)
 			full.WriteString("# " + entry.Title + "\n\n" + fullText + "\n\n")
 		default:
 			return fmt.Errorf("unsupported entry type %q", entry.Type)
 		}
 	}
-	if err := writeJSON(filepath.Join(outDir, "manifest.json"), Manifest{SchemaVersion: "modex.docs/v1", GeneratedBy: "docsctl", Entries: cfg.Entries}); err != nil {
+	if err := writeJSON(filepath.Join(outDir, "manifest.json"), Manifest{SchemaVersion: "modex.docs/v1", GeneratedBy: "docsctl", Entries: manifestEntries}); err != nil {
 		return err
 	}
 	if err := writeJSON(filepath.Join(outDir, "metadata.json"), md); err != nil {
@@ -224,54 +229,164 @@ func Package(buildDir, artifact string) error {
 	})
 }
 
-func buildMarkdown(root, outDir string, md Metadata, entry Entry) (DocumentRecord, NavItem, string, error) {
+func buildMarkdown(root, outDir string, md Metadata, entry Entry) ([]DocumentRecord, []NavItem, []Entry, string, error) {
 	src := filepath.Join(root, entry.Source)
 	if fi, err := os.Stat(src); err == nil && fi.IsDir() {
-		// better support for pure MD subdirectories: copy the dir and generate index from .md files
-		entryDir := filepath.Join(outDir, "site", entry.Key)
-		if err := copyDir(src, entryDir); err != nil {
-			return DocumentRecord{}, NavItem{}, "", err
-		}
-		text := extractMDFilesSummary(src)
-		rec := recordFor(md, entry, text)
-		return rec, NavItem{Title: entry.Title, Path: "/" + entry.Key}, text, nil
+		return buildMarkdownDirectory(root, outDir, md, entry, src)
 	}
 	b, err := os.ReadFile(src)
 	if err != nil {
-		return DocumentRecord{}, NavItem{}, "", err
+		return nil, nil, nil, "", err
 	}
 	text := string(b)
-	body := markdownToHTML(text)
-	page := "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + html.EscapeString(entry.Title) + "</title></head><body><main>" + body + "</main></body></html>"
 	entryDir := filepath.Join(outDir, "site", entry.Key)
 	if err := os.MkdirAll(entryDir, 0o755); err != nil {
-		return DocumentRecord{}, NavItem{}, "", err
+		return nil, nil, nil, "", err
 	}
+	// Bundle local resources referenced by the Markdown: copy them next to the
+	// entry's site files and rewrite the (often Windows-style) relative paths to
+	// the URL Modex serves them from, so images and attachments render instead
+	// of 404ing.
+	base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, entry.Key)
+	text = bundleMarkdownResources(text, src, entryDir, base)
+	body := markdownToHTML(text)
+	page := "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + html.EscapeString(entry.Title) + "</title></head><body><main>" + body + "</main></body></html>"
 	if err := os.WriteFile(filepath.Join(entryDir, "index.html"), []byte(page), 0o644); err != nil {
-		return DocumentRecord{}, NavItem{}, "", err
+		return nil, nil, nil, "", err
 	}
 	rec := recordFor(md, entry, stripMarkdown(text))
 	rec.ContentMD = strings.TrimSpace(stripFrontmatter(text))
-	return rec, NavItem{Title: entry.Title, Path: "/" + entry.Key, Children: headings(text)}, stripMarkdown(text), nil
+	return []DocumentRecord{rec}, []NavItem{{Title: entry.Title, Path: "/" + entry.Key, Children: headings(text)}}, []Entry{entry}, stripMarkdown(text), nil
 }
 
-func extractMDFilesSummary(dir string) string {
-	var out strings.Builder
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".md") {
+func buildMarkdownDirectory(root, outDir string, md Metadata, baseEntry Entry, src string) ([]DocumentRecord, []NavItem, []Entry, string, error) {
+	var records []DocumentRecord
+	var nav []NavItem
+	var entries []Entry
+	var full strings.Builder
+	usedKeys := map[string]int{}
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".git" || name == "node_modules" || name == ".vitepress" || name == ".vuepress" {
+				return filepath.SkipDir
+			}
 			return nil
 		}
-		b, err := os.ReadFile(path)
-		if err == nil {
-			out.WriteString(stripMarkdown(string(b)))
-			out.WriteString("\n\n")
+		lower := strings.ToLower(info.Name())
+		if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".mdx") {
+			return nil
 		}
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		text := string(raw)
+		title := markdownFileTitle(rel)
+		key := markdownEntryKey(baseEntry.Key, filepath.ToSlash(rel), usedKeys)
+		sourceRel, _ := filepath.Rel(root, path)
+		pageEntry := Entry{Key: key, Title: title, Type: "markdown", Source: filepath.ToSlash(sourceRel)}
+		entryDir := filepath.Join(outDir, "site", key)
+		if err := os.MkdirAll(entryDir, 0o755); err != nil {
+			return err
+		}
+		base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, key)
+		renderText := bundleMarkdownResources(text, path, entryDir, base)
+		body := markdownToHTML(renderText)
+		page := "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + html.EscapeString(title) + "</title></head><body><main>" + body + "</main></body></html>"
+		if err := os.WriteFile(filepath.Join(entryDir, "index.html"), []byte(page), 0o644); err != nil {
+			return err
+		}
+		rec := recordFor(md, pageEntry, stripMarkdown(renderText))
+		rec.ContentMD = strings.TrimSpace(stripFrontmatter(renderText))
+		records = append(records, rec)
+		insertMarkdownNav(&nav, filepath.ToSlash(rel), title, "/"+key, headings(renderText))
+		entries = append(entries, pageEntry)
+		full.WriteString("# " + title + "\n\n" + stripMarkdown(renderText) + "\n\n")
 		return nil
 	})
-	if out.Len() == 0 {
-		return "Markdown documentation directory"
+	if err != nil {
+		return nil, nil, nil, "", err
 	}
-	return strings.Join(strings.Fields(out.String())[:min(50, len(strings.Fields(out.String())))], " ") + "..."
+	if len(records) == 0 {
+		return nil, nil, nil, "", fmt.Errorf("no markdown files found under %s", src)
+	}
+	return records, nav, entries, strings.TrimSpace(full.String()), nil
+}
+
+func markdownEntryKey(prefix, rel string, used map[string]int) string {
+	rel = strings.TrimSuffix(filepath.ToSlash(rel), filepath.Ext(rel))
+	rel = strings.TrimSuffix(rel, "/index")
+	rel = strings.TrimSuffix(rel, "/README")
+	rel = strings.TrimSuffix(rel, "/readme")
+	if rel == "" || strings.EqualFold(rel, "README") || strings.EqualFold(rel, "index") {
+		rel = prefix
+	} else {
+		rel = prefix + "-" + rel
+	}
+	key := slugKey(rel)
+	used[key]++
+	if used[key] > 1 {
+		key = fmt.Sprintf("%s-%d", key, used[key])
+	}
+	return key
+}
+
+func slugKey(s string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "guide"
+	}
+	return out
+}
+
+func markdownFileTitle(rel string) string {
+	base := filepath.Base(filepath.ToSlash(rel))
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+func insertMarkdownNav(nav *[]NavItem, rel, title, pagePath string, children []NavItem) {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) == 0 {
+		return
+	}
+	insertNavParts(nav, parts, title, pagePath, children)
+}
+
+func insertNavParts(items *[]NavItem, parts []string, title, pagePath string, children []NavItem) {
+	if len(parts) == 1 {
+		*items = append(*items, NavItem{Title: title, Path: pagePath, Children: children})
+		return
+	}
+	folder := parts[0]
+	for i := range *items {
+		if (*items)[i].Path == "" && (*items)[i].Title == folder {
+			insertNavParts(&(*items)[i].Children, parts[1:], title, pagePath, children)
+			return
+		}
+	}
+	*items = append(*items, NavItem{Title: folder})
+	insertNavParts(&(*items)[len(*items)-1].Children, parts[1:], title, pagePath, children)
 }
 
 func buildStatic(root, outDir string, md Metadata, entry Entry) (DocumentRecord, NavItem, string, error) {
@@ -511,6 +626,110 @@ func copyAssets(root, outDir string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(assetsDir, ".keep"), []byte(""), 0o644)
+}
+
+var (
+	mdResourceRe       = regexp.MustCompile(`(!?\[[^\]]*\]\()([^)]+)(\))`)
+	htmlResourceAttrRe = regexp.MustCompile(`(?i)\b(src|href)\s*=\s*(["'])([^"']+)(["'])`)
+)
+
+// bundleMarkdownResources copies each locally-referenced resource into the
+// entry's site directory and rewrites its Markdown/HTML path to Modex's served
+// URL. Remote, absolute, anchor-only, and markdown-page links are left intact.
+func bundleMarkdownResources(text, srcFile, entryDir, base string) string {
+	rewrite := func(raw string) (string, bool) {
+		return bundleLocalResource(raw, srcFile, entryDir, base)
+	}
+	text = mdResourceRe.ReplaceAllStringFunc(text, func(m string) string {
+		sub := mdResourceRe.FindStringSubmatch(m)
+		if len(sub) < 4 {
+			return m
+		}
+		next, ok := rewrite(strings.TrimSpace(sub[2]))
+		if !ok {
+			return m
+		}
+		return sub[1] + next + sub[3]
+	})
+	return htmlResourceAttrRe.ReplaceAllStringFunc(text, func(m string) string {
+		sub := htmlResourceAttrRe.FindStringSubmatch(m)
+		if len(sub) < 5 {
+			return m
+		}
+		next, ok := rewrite(strings.TrimSpace(sub[3]))
+		if !ok {
+			return m
+		}
+		return sub[1] + "=" + sub[2] + next + sub[4]
+	})
+}
+
+func bundleLocalResource(raw, srcFile, entryDir, base string) (string, bool) {
+	pathPart, suffix := splitResourceSuffix(raw)
+	if !isBundleableLocalResource(pathPart) {
+		return raw, false
+	}
+	rel := strings.TrimPrefix(strings.ReplaceAll(pathPart, "\\", "/"), "./")
+	src := filepath.Clean(filepath.Join(filepath.Dir(srcFile), filepath.FromSlash(rel)))
+	if fi, err := os.Stat(src); err != nil || fi.IsDir() {
+		return raw, false
+	}
+	destRel := outputResourcePath(rel)
+	if err := copyFile(src, filepath.Join(entryDir, filepath.FromSlash(destRel))); err != nil {
+		return raw, false
+	}
+	return base + destRel + suffix, true
+}
+
+func splitResourceSuffix(raw string) (string, string) {
+	cut := len(raw)
+	if idx := strings.IndexAny(raw, "?#"); idx >= 0 {
+		cut = idx
+	}
+	return raw[:cut], raw[cut:]
+}
+
+func isBundleableLocalResource(path string) bool {
+	if path == "" || strings.HasPrefix(path, "#") || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return false
+	}
+	low := strings.ToLower(path)
+	if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") || strings.HasPrefix(low, "data:") ||
+		strings.HasPrefix(low, "mailto:") || strings.HasPrefix(low, "tel:") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext != ".md" && ext != ".mdx"
+}
+
+func outputResourcePath(rel string) string {
+	clean := filepath.ToSlash(filepath.Clean(rel))
+	for strings.HasPrefix(clean, "../") {
+		clean = strings.TrimPrefix(clean, "../")
+	}
+	clean = strings.TrimPrefix(clean, "/")
+	if clean == "." || clean == "" {
+		return "asset"
+	}
+	return clean
+}
+
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 func copyDir(src, dst string) error {

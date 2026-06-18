@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, KeyRound, RefreshCw, Check } from "lucide-react";
+import { Copy, RefreshCw, Check } from "lucide-react";
 import { getMCPToken, rotateMCPToken } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://modex.example.com";
@@ -12,6 +12,7 @@ export default function McpUsagePage() {
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedOffline, setCopiedOffline] = useState(false);
+  const [copiedSkill, setCopiedSkill] = useState(false);
 
   useEffect(() => {
     getMCPToken()
@@ -22,22 +23,27 @@ export default function McpUsagePage() {
 
   const displayToken = token || "<你的 token>";
 
-  const claudeCmd = `claude mcp add modex-docs \\
+  const claudeCmd = `claude mcp add modex \\
   --env MODEX_API_BASE_URL=${API_BASE} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
-  -- npx -y modex-docs-mcp`;
+  -- npx -y modex-mcp`;
 
-  const tarballUrl = `${API_BASE}/api/mcp/dist/modex-docs-mcp.tgz`;
-  const offlineCmd = `claude mcp add modex-docs \\
+  const tarballUrl = `${API_BASE}/api/mcp/dist/modex-mcp.tgz`;
+  const offlineCmd = `claude mcp add modex \\
   --env MODEX_API_BASE_URL=${API_BASE} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y ${tarballUrl}`;
+  const gitCmd = `claude mcp add modex \\
+  --env MODEX_API_BASE_URL=${API_BASE} \\
+  --env MODEX_MCP_TOKEN=${displayToken} \\
+  -- npx -y git+https://github.com/your-org/modex-mcp.git`;
+  const skillCmd = `npx skills add ${API_BASE}`;
 
   const cursorJson = `{
   "mcpServers": {
-    "modex-docs": {
+    "modex": {
       "command": "npx",
-      "args": ["-y", "modex-docs-mcp"],
+      "args": ["-y", "modex-mcp"],
       "env": {
         "MODEX_API_BASE_URL": "${API_BASE}",
         "MODEX_MCP_TOKEN": "${displayToken}"
@@ -66,10 +72,10 @@ export default function McpUsagePage() {
     <main className="main">
       <section className="grid" style={{ maxWidth: 860, margin: "0 auto" }}>
         <header className="hero-panel">
-          <div className="page-kicker">MCP · AI 接入</div>
-          <h1 className="page-title">把 Modex 文档接入你的 AI</h1>
+          <div className="page-kicker">AI 工具接入</div>
+          <h1 className="page-title">把 Modex 接入你的 AI 工作台</h1>
           <p className="hero-copy">
-            一行命令即可让 Claude Code / Cursor 等工具检索并阅读本平台文档。无需自己启动服务 —— MCP 工具通过
+            这里的 MCP 和 Skill 面向 Modex 使用者。配置后，Claude Code / Cursor 等工具可以检索并阅读本平台文档。MCP 工具通过
             <code className="code-chip" style={{ margin: "0 4px" }}>npx</code> 在本地按需拉起，连接到平台后端 API。
           </p>
         </header>
@@ -82,7 +88,7 @@ export default function McpUsagePage() {
             </button>
           </div>
           <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-            每个用户拥有独立的 token，服务端可在 MCP 日志中追踪调用来源。
+            每个用户拥有独立 token，服务端可在 MCP 日志中追踪调用来源。
           </p>
           <div className="mcp-code" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -136,7 +142,7 @@ export default function McpUsagePage() {
         <section className="card">
           <h2 style={{ fontSize: 16, fontWeight: 720 }}>离线 / 内网安装（无需公网 npm）</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            直接从本平台后端拉取 MCP 工具产物。适合内网环境，无需访问 npmjs.com：
+            MCP 包会随 Modex release 一起发布，也会由本平台后端提供下载。适合内网环境，无需访问 npmjs.com：
           </p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{offlineCmd}</pre>
@@ -150,11 +156,36 @@ export default function McpUsagePage() {
             </button>
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            如果你们把 MCP 包拆到独立 Git 仓库，也可以让 <code className="code-chip">npx</code> 直接从 Git 安装：
+          </p>
+          <pre className="mcp-code" style={{ marginTop: 8 }}>{gitCmd}</pre>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
             或直接下载工具产物：
-            <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-docs-mcp.tgz</a>
+            <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-mcp.tgz</a>
             （也可下载
             <a href={`${API_BASE}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
             用 <code className="code-chip">node index.mjs</code> 直接运行）。
+          </p>
+        </section>
+
+        <section className="card">
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>安装 Modex Skill</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            Skill 用于给支持 skills 的 AI 客户端补充 Modex 使用规范、检索偏好和回答约束；MCP 负责真正读取平台文档。
+          </p>
+          <div style={{ position: "relative" }}>
+            <pre className="mcp-code">{skillCmd}</pre>
+            <button
+              className="icon-btn"
+              style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
+              onClick={() => copyText(skillCmd, setCopiedSkill)}
+              aria-label="复制命令"
+            >
+              {copiedSkill ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            如果 Skill 在 Git 仓库维护，也可以使用 <code className="code-chip">npx skills add https://github.com/your-org/modex/tree/main/mcp/skill</code>。
           </p>
         </section>
 
@@ -179,7 +210,7 @@ export default function McpUsagePage() {
             </li>
           </ul>
           <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-            说明：MCP 与平台搜索共用同一套检索能力。安装后 AI 客户端会自动发现这些工具并在需要时调用，无需额外配置 Skill。
+            说明：MCP 与平台搜索共用同一套检索能力。Skill 只提供客户端侧使用规范，不保存平台数据。
           </p>
         </section>
       </section>

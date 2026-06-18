@@ -38,6 +38,7 @@ export const getDeployToken = (moduleKey: string) => api<{ deploy_token: string;
 export const rotateDeployToken = (moduleKey: string) => api<{ deploy_token: string; deploy_url: string; module_key: string }>(`/api/admin/modules/${moduleKey}/deploy-token`, { method: "POST", body: "{}" });
 export const getModule = (moduleKey: string) => api<ModuleInfo>(`/api/modules/${moduleKey}/info`);
 export const getEntries = (moduleKey: string, version: string) => api<any[]>(`/api/modules/${moduleKey}/versions/${version}/entries`);
+export const getModuleVersions = (moduleKey: string) => api<{ docs_version: string; display_name?: string; is_default?: boolean }[]>(`/api/modules/${moduleKey}/versions`);
 export const getNav = (moduleKey: string, version: string, entry: string) => api<{ title: string; path: string; children?: { title: string; path: string }[] }[]>(`/api/docs/${moduleKey}/${version}/${entry}/nav`);
 export const getPage = (moduleKey: string, version: string, entry: string) => api<any>(`/api/docs/${moduleKey}/${version}/${entry}`);
 export const searchDocs = (body: unknown) => api<SearchResponse>("/api/search", { method: "POST", body: JSON.stringify(body) });
@@ -49,6 +50,9 @@ export const recordPageView = (body: { doc_id: string; session_id: string; durat
 
 export const recordReadProgress = (body: { doc_id: string; session_id: string; duration_seconds: number; scroll_depth: number }) =>
   api<{ status: string }>("/api/analytics/read-progress", { method: "POST", body: JSON.stringify(body) });
+
+export const recordDocFeedback = (body: { doc_id: string; rating: "good" | "bad"; session_id: string; comment?: string }) =>
+  api<{ status: string }>("/api/analytics/feedback", { method: "POST", body: JSON.stringify(body) });
 
 export const getPageAnalytics = () => api<AnalyticsPages>("/api/admin/analytics/pages");
 
@@ -98,9 +102,29 @@ export type AISettings = {
   ask_system_prompt?: string;
   ask_max_tokens?: number;
   ask_temperature?: number;
+  embedding_base_url?: string;
+  embedding_model?: string;
+  embedding_api_key?: string;
+  embedding_dim?: number;
+  rerank_base_url?: string;
+  rerank_model?: string;
+  rerank_api_key?: string;
+  rerank_top_k?: number;
+  chunk_strategy?: string;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  recall_test_query?: string;
+  recall_test_top_k?: number;
+  recall_test_doc_ids?: string;
   updated_at?: string;
 };
-export type PlatformSettings = { ai: AISettings; ask_api_key_set: boolean; ask_system_prompt_default: string };
+export type PlatformSettings = {
+  ai: AISettings;
+  ask_api_key_set: boolean;
+  embedding_api_key_set?: boolean;
+  rerank_api_key_set?: boolean;
+  ask_system_prompt_default: string;
+};
 export const getSettings = () => api<PlatformSettings>("/api/admin/settings");
 export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify(ai) });
 export const fetchModels = (base_url: string, api_key?: string, protocol?: string) =>
@@ -130,6 +154,19 @@ export const createConnectedApp = (body: ConnectedAppDraft) =>
 export const updateConnectedApp = (id: string, body: ConnectedAppDraft) =>
   api<ConnectedApp>(`/api/admin/connected-apps/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const deleteConnectedApp = (id: string) => api<{ status: string }>(`/api/admin/connected-apps/${id}`, { method: "DELETE" });
+
+export type RecallTestResult = {
+  query: string;
+  top_k: number;
+  expected_doc_ids: string[];
+  actual_doc_ids: string[];
+  recall_at_k: number;
+  mrr: number;
+  ndcg: number;
+  note?: string;
+  results?: { doc_id: string; title: string; score: number; path: string }[];
+};
+export const runRecallTest = () => api<RecallTestResult>("/api/admin/settings/recall-test", { method: "POST", body: "{}" });
 
 // Doc-engine plugin registry (built-in, admin-managed). Effective enabled+config
 // is also served (un-gated) on /api/config so the renderer can read it.
