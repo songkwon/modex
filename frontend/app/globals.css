@@ -2274,6 +2274,22 @@ tr:hover .row-actions { opacity: 1; }
 .field { display: grid; gap: 7px; }
 .field > label { font-size: 13px; font-weight: 620; color: hsl(var(--foreground)); }
 .field .field-hint { font-size: 12px; color: hsl(var(--muted)); }
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--panel));
+  color: hsl(var(--foreground));
+  line-height: 1.6;
+  resize: vertical;
+  box-shadow: 0 1px 0 hsl(var(--shadow-color) / 0.03);
+}
+.field textarea:focus {
+  outline: none;
+  border-color: hsl(var(--accent));
+  box-shadow: 0 0 0 4px hsl(var(--accent) / 0.14);
+}
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 560px) { .field-row { grid-template-columns: 1fr; } }
 
