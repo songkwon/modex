@@ -96,6 +96,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/callback", s.handleCallback)
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)
+	mux.HandleFunc("/.well-known/oauth-authorization-server", s.handleOAuthMetadata)
+	mux.HandleFunc("/oauth/authorize", s.handleOAuthAuthorize)
+	mux.HandleFunc("/oauth/token", s.handleOAuthToken)
+	mux.HandleFunc("/oauth/revoke", s.handleOAuthRevoke)
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/categories/tree", s.handleCategories)
 	mux.HandleFunc("/api/modules", s.handleModules)
@@ -126,6 +130,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/plugins/import", s.handleAdminPluginImport)
 	mux.HandleFunc("/api/admin/plugins/import/", s.handleAdminPluginImport)
 	mux.HandleFunc("/api/admin/snippets", s.handleAdminSnippets)
+	mux.HandleFunc("/api/admin/connected-apps", s.handleAdminConnectedApps)
+	mux.HandleFunc("/api/admin/connected-apps/", s.handleAdminConnectedAppByID)
 	mux.HandleFunc("/api/docs/snippets", s.handleDocsSnippets)
 	mux.HandleFunc("/api/docs/plugins", s.handleDocsPlugins)
 	mux.HandleFunc("/api/admin/categories", s.handleAdminCategories)
@@ -1144,7 +1150,15 @@ func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
 // a real, cookie-backed action in both mock and OIDC modes, so there is no
 // silent impersonation; anonymous callers simply get ok == false.
 func (s *Server) currentUser(r *http.Request) (store.User, bool) {
-	return s.auth.CurrentUser(r)
+	if user, ok := s.auth.CurrentUser(r); ok {
+		return user, true
+	}
+	if tok := bearerToken(r); tok != "" {
+		if user, _, _, err := s.store.UserByOAuthAccessToken(tok); err == nil {
+			return user, true
+		}
+	}
+	return store.User{}, false
 }
 
 func isAdmin(u store.User) bool {
@@ -1309,7 +1323,7 @@ func (s *Server) isTeamAdmin(u store.User) bool {
 // requireConsole gates console-scoped reads (logs, releases, module list). Super
 // admins and team members pass; everyone else gets 403.
 func (s *Server) requireConsole(w http.ResponseWriter, r *http.Request) (store.User, bool) {
-	user, ok := s.currentUser(r)
+	user, ok := s.auth.CurrentUser(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "login required")
 		return store.User{}, false
@@ -1376,7 +1390,7 @@ func categoriesIntersect(ids []string, set map[string]bool) bool {
 
 // requireUser writes 401 and returns false when no valid session is present.
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (store.User, bool) {
-	user, ok := s.currentUser(r)
+	user, ok := s.auth.CurrentUser(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "login required")
 		return store.User{}, false

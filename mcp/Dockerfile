@@ -6,8 +6,8 @@ ENV GOPROXY=${GOPROXY}
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
-RUN go build -o /out/docs-mcp-server ./cmd/docs-mcp-server
+RUN go build -o /out/modex-mcp-server ./cmd/modex-mcp-server
 
 FROM alpine:3.20
-COPY --from=build /out/docs-mcp-server /usr/local/bin/docs-mcp-server
-CMD ["docs-mcp-server"]
+COPY --from=build /out/modex-mcp-server /usr/local/bin/modex-mcp-server
+CMD ["modex-mcp-server"]
