@@ -58,7 +58,7 @@ func DefaultEntry(root, kind string) Entry {
 	case "static":
 		return Entry{Key: "legacy", Title: "静态文档", Type: "static", Source: firstExistingDir(root, "dist", "public")}
 	default:
-		return Entry{Key: "guide", Title: "Markdown 文档", Type: "markdown", Source: firstExistingFile(root, "docs/README.md", "README.md")}
+		return Entry{Key: "guide", Title: "Markdown 文档", Type: "markdown", Source: firstMarkdownSourceRoot(root)}
 	}
 }
 
@@ -105,6 +105,42 @@ func firstExistingFile(root string, candidates ...string) string {
 		}
 	}
 	return candidates[len(candidates)-1]
+}
+
+func firstMarkdownSourceRoot(root string) string {
+	if hasMarkdownFiles(filepath.Join(root, "docs")) {
+		return "docs"
+	}
+	if hasMarkdownFiles(root) {
+		return "."
+	}
+	return firstExistingFile(root, "docs/README.md", "README.md", "docs/index.md", "index.md")
+}
+
+func hasMarkdownFiles(root string) bool {
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	found := false
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == ".git" || name == "node_modules" || name == ".vitepress" || name == ".vuepress" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := strings.ToLower(d.Name())
+		if strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".mdx") {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 func firstOutput(candidates ...string) string {

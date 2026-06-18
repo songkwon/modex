@@ -68,9 +68,10 @@
 - Go
 - REST API
 - PostgreSQL
+- Redis
 - MinIO
 - Meilisearch
-- pgvector 可选，如果实现方便则使用 PostgreSQL + pgvector 存储 embedding
+- 向量数据库：优先 PostgreSQL + pgvector；如果规模、性能或运维要求不适合，再切 Chroma / Milvus
 - OIDC SSO 预留，MVP 可以先实现 mock login
 - PostHog 预留
 - MCP Server，Go 实现
@@ -129,6 +130,7 @@ GitLab 项目
       └─ docsctl validate/build/package/deploy
           └─ docs-deploy-api
               ├─ PostgreSQL: Docs Registry
+              ├─ Redis: Session / Cache / Hot Counter / Async Job State
               ├─ MinIO: HTML / 静态资源 / 文档包
               ├─ Meilisearch: 关键词搜索 / Facet
               ├─ Vector Store: 语义搜索
@@ -588,8 +590,21 @@ MVP 必须支持：
 Vector Store 可选实现：
 
 1. PostgreSQL + pgvector，推荐。
-2. 如果 pgvector 接入复杂，可以先用 PostgreSQL JSONB 存向量 + 简单 cosine 计算作为 MVP。
-3. 不要把向量搜索逻辑写死，抽象为 `EmbeddingStore` 接口。
+2. 如果 pgvector 在部署、维度扩展或查询性能上不合适，再切换 Chroma / Milvus。
+3. PostgreSQL JSONB 存向量只能用于开发或临时降级，不作为正式检索方案。
+4. 不要把向量搜索逻辑写死，抽象为 `VectorStore` / `EmbeddingStore` 接口。
+
+### 13.1.1 存储分层
+
+不要把正式环境长期放在内存 Store 中。不同数据按访问模式拆分：
+
+1. PostgreSQL：Docs Registry、用户/团队/权限、发布记录、配置、日志索引、业务事实源。
+2. Redis：Session、短期缓存、限流计数、热榜计数、异步任务状态、临时锁。
+3. MinIO：文档包、构建后的 `site/`、图片/附件/静态资源、可下载 release artifact。
+4. Meilisearch：关键词索引、Facet、过滤。
+5. Vector Store：embedding 向量、chunk 元数据、向量相似度查询。
+
+内存 Store 只用于本地开发、单元测试、演示和无外部依赖的 MVP 启动。
 
 ### 13.2 Embedding Provider
 
@@ -615,6 +630,23 @@ EMBEDDING_HTTP_URL=
 EMBEDDING_HTTP_API_KEY=
 EMBEDDING_DIM=384
 ```
+
+### 13.2.1 Model Settings
+
+后台模型配置页必须支持：
+
+1. 对话模型：协议、Base URL、模型、API Key、系统提示词、最大 tokens、temperature。
+2. 嵌入模型：Base URL、模型、API Key、向量维度。
+3. 重排序模型：Base URL、模型、API Key、rerank topK。
+4. 分段策略：策略类型、chunk size、chunk overlap。
+5. 召回测试：测试 query、topK、期望命中文档 doc_id 列表。
+
+后续召回测试指标至少预留：
+
+- Recall@K
+- MRR
+- nDCG
+- rerank 前后对比
 
 ### 13.3 搜索模式
 
@@ -715,9 +747,11 @@ HYBRID_SEMANTIC_WEIGHT=0.4
 
 第一阶段必须实现 MCP Server。
 
-MCP Server 用于让 AI 工具安全读取文档平台内容。
+MCP Server 用于让 Modex 使用者把 AI 工具安全接入文档平台内容，不是给 Modex 开发者内部调试专用。
 
 MCP Server 不能直接读 MinIO 或 HTML 文件，必须通过平台 API / Registry / Search Service。
+
+MCP 客户端配置名称建议使用 `modex`，npm/npx 包名使用 `modex-mcp`。
 
 ### 14.1 MCP 工具
 
@@ -818,6 +852,31 @@ MCP_TOKEN=dev-token
 ### 14.3 MCP 与搜索共用能力
 
 MCP 的 `search_docs` 必须调用同一个 Search Service，不能单独实现另一套搜索逻辑。
+
+### 14.4 Skill 安装
+
+Modex 可以提供一个可选 Skill 包，给支持 skills 的客户端提供使用规范、检索偏好和回答约束。Skill 只描述客户端侧行为，真实数据读取仍通过 MCP。
+
+安装方式：
+
+```bash
+npx skills add https://modex.example.com
+```
+
+如果 Skill 独立维护在 Git 仓库：
+
+```bash
+npx skills add https://github.com/your-org/modex/tree/main/mcp/skill
+```
+
+MCP 包随 Modex release 发布，也可以通过 npx 指定 release tarball 或 Git 包安装：
+
+```bash
+claude mcp add modex \
+  --env MODEX_API_BASE_URL=https://modex.example.com \
+  --env MODEX_MCP_TOKEN=your-token \
+  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
+```
 
 ---
 
@@ -1101,7 +1160,7 @@ created_at
 updated_at
 ```
 
-如果不用 pgvector，先用 JSONB 存 embedding：
+如果不用 pgvector，开发环境可以临时用 JSONB 存 embedding；正式环境应切换到 pgvector / Chroma / Milvus 等向量库：
 
 ```text
 embedding_json
@@ -1223,19 +1282,19 @@ GET /api/admin/analytics/mcp
 
 ## 19. MCP Server API
 
-MCP Server 需要以单独进程或 backend 子命令方式运行。
+MCP Server 需要以 stdio 方式被 AI 客户端按需拉起。面向使用者的推荐方式是 `npx -y modex-mcp` 或 release tarball；Go 二进制 / Docker 主要给平台部署和排障使用。
 
 实现：
 
 ```bash
-docs-mcp-server
+modex-mcp-server
 ```
 
 配置：
 
 ```env
-DOCS_API_BASE_URL=http://backend:8080
-MCP_TOKEN=dev-token
+MODEX_API_BASE_URL=http://backend:8080
+MODEX_MCP_TOKEN=dev-token
 ```
 
 MCP Server 通过 HTTP 调用后端 API。
@@ -1436,8 +1495,8 @@ docsctl deploy
 1. Monorepo 项目结构。
 2. Go 后端服务。
 3. Next.js 前端。
-4. docker-compose，包含 PostgreSQL、MinIO、Meilisearch。
-5. pgvector 可选，如果方便则加入。
+4. docker-compose，包含 PostgreSQL、Redis、MinIO、Meilisearch。
+5. 向量存储抽象，优先接 PostgreSQL + pgvector；Chroma / Milvus 作为可替换实现。
 6. 数据库迁移。
 7. Mock 登录。
 8. 分类树 API 和页面。
@@ -1490,7 +1549,7 @@ docsctl deploy
 
 第一轮交付时，请确保以下内容可以运行：
 
-1. `docker-compose up` 可以启动 PostgreSQL、MinIO、Meilisearch、backend、frontend。
+1. `docker-compose up` 可以启动 PostgreSQL、Redis、MinIO、Meilisearch、backend、frontend。
 2. 打开前端首页可以看到分类树、模块卡片、Info 抽屉。
 3. 可以 mock 登录。
 4. 可以访问搜索页，并切换 keyword / semantic / hybrid。

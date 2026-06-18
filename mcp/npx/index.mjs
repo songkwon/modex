@@ -21,7 +21,7 @@ const BASE_URL = (
 ).replace(/\/+$/, "");
 const TOKEN = process.env.MODEX_MCP_TOKEN || process.env.MCP_TOKEN || "";
 
-const log = (...a) => console.error("[modex-docs-mcp]", ...a);
+const log = (...a) => console.error("[modex-mcp]", ...a);
 
 const TOOLS = [
   {
@@ -147,7 +147,7 @@ async function handle(req) {
     case "initialize":
       return {
         protocolVersion: "2024-11-05",
-        serverInfo: { name: "modex-docs-mcp", version: "0.1.0" },
+        serverInfo: { name: "modex-mcp", version: "0.1.0" },
         capabilities: { tools: {} },
       };
     case "tools/list":

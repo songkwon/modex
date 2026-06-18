@@ -4,7 +4,7 @@ import { Tabs, Tab } from "./tabs";
 import { Accordion, AccordionGroup, Expandable } from "./accordion";
 import { Steps, Step } from "./steps";
 import { Pre, CodeGroup } from "./code";
-import { Frame, Panel, Update, Banner, Snippet } from "./blocks";
+import { Frame, Panel, Update, Banner, Snippet, MarkdownExample } from "./blocks";
 import { ParamField, ResponseField, Field, Response } from "./fields";
 import { Tooltip, Badge, Color, IconTag } from "./inline";
 import { Tree, Folder, File } from "./tree";
@@ -40,6 +40,7 @@ export const mdxComponents = {
   // changelog / banners
   Update,
   Banner,
+  MarkdownExample,
   // reusable content
   Snippet,
   // api fields

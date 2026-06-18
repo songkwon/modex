@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Boxes, FolderTree, History, Link2, MessageSquareText, Search, Settings, Users, UsersRound } from "lucide-react";
+import { ArrowRight, Boxes, FolderTree, History, Link2, MessageCircleQuestion, MessageSquareText, Search, Settings, Users, UsersRound } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { ReindexControls } from "@/components/reindex-controls";
 
@@ -11,6 +11,7 @@ const links = [
   ["/admin/settings", "模型设置", "对接对话 / 向量 / 重排序模型，启用 AI 问答", Settings],
   ["/admin/connected-apps", "应用链接", "注册外部应用，通过 OAuth 授权访问 Modex API 与 MCP", Link2],
   ["/admin/releases", "发布记录", "追踪每次文档发布的来源、构建与状态", History],
+  ["/admin/feedback", "文档反馈", "查看读者提交的有帮助 / 需改进反馈", MessageCircleQuestion],
   ["/admin/search-logs", "搜索日志", "分析查询词、命中数与点击", Search],
   ["/admin/mcp-logs", "MCP 日志", "查看 AI 工具读取文档的记录", MessageSquareText],
 ] as const;

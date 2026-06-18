@@ -1,5 +1,5 @@
 import "katex/dist/katex.min.css";
-import type { ReactElement } from "react";
+import type { ImgHTMLAttributes, ReactElement } from "react";
 import { compileMDX } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -7,6 +7,25 @@ import rehypeSlug from "rehype-slug";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
+import bash from "highlight.js/lib/languages/bash";
+import c from "highlight.js/lib/languages/c";
+import cpp from "highlight.js/lib/languages/cpp";
+import csharp from "highlight.js/lib/languages/csharp";
+import css from "highlight.js/lib/languages/css";
+import delphi from "highlight.js/lib/languages/delphi";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import go from "highlight.js/lib/languages/go";
+import java from "highlight.js/lib/languages/java";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import shell from "highlight.js/lib/languages/shell";
+import sql from "highlight.js/lib/languages/sql";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
 import { mdxComponents } from "./index";
 import { remarkCodeMeta, remarkGithubAlerts, rehypeToc } from "./remark-plugins";
 import { MdxConfigProvider, UploadedFencesProvider } from "./mdx-config";
@@ -49,7 +68,16 @@ async function loadUploadedPlugins(): Promise<UploadedPlugin[]> {
 
 const on = (cfg: PluginConfig, key: string) => !(key in cfg) || cfg[key].enabled;
 
-export async function MdxContent({ source }: { source: string }) {
+export async function MdxContent({ source, assetBase }: { source: string; assetBase?: string }) {
+  // Drop a leading Confluence-style [TOC]/[[toc]] macro (and stray leading
+  // <br/>) — the right-rail "本页目录" replaces an inline table of contents.
+  source = source
+    .replace(/^﻿/, "")
+    .replace(/^\s+/, "")
+    .replace(/^(?:<br\s*\/?>\s*)+/i, "")
+    .replace(/^\[\[?toc\]?\]\s*/i, "");
+  source = rewriteMarkdownAssetURLs(source, assetBase);
+
   const plugins = await loadPluginConfig();
   if (on(plugins, "snippets")) {
     const { snippets, vars } = await loadSnippets();
@@ -81,13 +109,51 @@ export async function MdxContent({ source }: { source: string }) {
     rehypeSlug,
     ...(on(plugins, "toc") ? [rehypeToc] : []),
     ...(on(plugins, "math") ? [rehypeKatex] : []),
-    [rehypeHighlight, { ignoreMissing: true, detect: true }]
+    [
+      rehypeHighlight,
+      {
+        ignoreMissing: true,
+        detect: true,
+        languages: {
+          bash,
+          c,
+          cpp,
+          csharp,
+          css,
+          delphi,
+          dockerfile,
+          go,
+          java,
+          javascript,
+          js: javascript,
+          json,
+          markdown,
+          md: markdown,
+          mdx: markdown,
+          pascal: delphi,
+          python,
+          py: python,
+          rust,
+          rs: rust,
+          shell,
+          sh: shell,
+          sql,
+          typescript,
+          ts: typescript,
+          tsx: typescript,
+          xml,
+          html: xml,
+          yaml,
+          yml: yaml
+        }
+      }
+    ]
   ];
 
   const compile = (format: "mdx" | "md") =>
     compileMDX({
       source,
-      components: { ...mdxComponents, ...dynamicComponents },
+      components: { ...mdxComponents, ...dynamicComponents, img: imageComponent(assetBase) },
       options: {
         parseFrontmatter: true,
         // Mintlify-style components rely on JSX expression props (cols={2}) and
@@ -131,4 +197,41 @@ export async function MdxContent({ source }: { source: string }) {
       </UploadedFencesProvider>
     </MdxConfigProvider>
   );
+}
+
+const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
+
+function imageComponent(assetBase?: string) {
+  return function Image(props: ImgHTMLAttributes<HTMLImageElement>) {
+    const src = typeof props.src === "string" ? resolveAssetURL(props.src, assetBase) : props.src;
+    return <img {...props} src={src} />;
+  };
+}
+
+function rewriteMarkdownAssetURLs(source: string, assetBase?: string) {
+  return source
+    .replace(/(!\[[^\]]*\]\()([^)]+)(\))/g, (_m, open: string, raw: string, close: string) => {
+      return `${open}${resolveAssetURL(raw.trim(), assetBase)}${close}`;
+    })
+    .replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi, (_m, open: string, raw: string, close: string) => {
+      return `${open}${resolveAssetURL(raw.trim(), assetBase)}${close}`;
+    });
+}
+
+function resolveAssetURL(src: string, assetBase?: string) {
+  const lower = src.toLowerCase();
+  if (!src || lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("data:") || src.startsWith("//")) {
+    return src;
+  }
+  if (src.startsWith("/api/docs/")) {
+    return `${PUBLIC_API_BASE}${src}`;
+  }
+  if (src.startsWith("/")) {
+    return src;
+  }
+  if (!assetBase) {
+    return src;
+  }
+  const base = assetBase.endsWith("/") ? assetBase : `${assetBase}/`;
+  return new URL(src.replace(/^\.\/+/, ""), base).toString();
 }

@@ -10,6 +10,19 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-modex} -d ${POSTGRES_DB:-modex}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
 
   minio:
     image: minio/minio:RELEASE.2024-06-29T01-20-47Z
@@ -48,6 +61,7 @@ services:
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3456}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3456}
       DATABASE_URL: ${DATABASE_URL:-postgres://modex:modex@postgres:5432/modex?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-modex}
@@ -86,6 +100,7 @@ services:
       # Directory the backend serves the MCP npx package from (intranet download).
       # The package is bind-mounted read-only below.
       MCP_DIST_DIR: ${MCP_DIST_DIR:-/app/mcp-dist}
+      MODEX_SKILL_DIST_DIR: ${MODEX_SKILL_DIST_DIR:-/app/modex-skill}
       POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
       POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
       POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
@@ -98,6 +113,7 @@ services:
       - backend-data:/data
       # MCP npx package served for intranet download (GET /api/mcp/dist/*).
       - ../mcp/npx:/app/mcp-dist:ro
+      - ../mcp/skill:/app/modex-skill:ro
       # === Optional Application Config (config.yaml) ===
       # This is the recommended way to configure things like OIDC claim mappings
       # (unique_id_claim, avatar_claim, display_name_claim, secondary_info_claim).
@@ -121,9 +137,14 @@ services:
       timeout: 3s
       retries: 6
     depends_on:
-      - postgres
-      - minio
-      - meilisearch
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      meilisearch:
+        condition: service_started
 
   frontend:
     build:
@@ -156,7 +177,7 @@ services:
   #
   #   docker compose --profile mcp run --rm mcp
   #
-  # Most developers instead use the npx package (mcp/npx, `npx modex-docs-mcp`)
+  # Most developers instead use the npx package (mcp/npx, `npx modex-mcp`)
   # pointed at this deployment's backend URL + MCP_TOKEN.
   mcp:
     build:
@@ -165,8 +186,8 @@ services:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     profiles: ["mcp"]
     environment:
-      DOCS_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:8671}
-      MCP_TOKEN: ${MCP_TOKEN:-dev-token}
+      MODEX_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:8671}
+      MODEX_MCP_TOKEN: ${MCP_TOKEN:-dev-token}
     stdin_open: true
     tty: true
     depends_on:
@@ -190,6 +211,7 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:
   minio-data:
   meili-data:
   backend-data:

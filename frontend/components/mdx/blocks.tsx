@@ -39,3 +39,33 @@ export function Banner({ children }: { children: ReactNode }) {
 export function Snippet(_: { name?: string; children?: ReactNode }) {
   return null;
 }
+
+// Shows the authoring source next to the rendered result. This is intentionally
+// simple so the docs example page can teach every supported Markdown/MDX shape.
+export function MarkdownExample({
+  title,
+  source,
+  children,
+}: {
+  title?: string;
+  source: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mdx-example">
+      {title ? <div className="mdx-example__title">{title}</div> : null}
+      <div className="mdx-example__grid">
+        <div className="mdx-example__pane">
+          <div className="mdx-example__label">源码</div>
+          <pre className="mdx-example__source">
+            <code>{source.trim()}</code>
+          </pre>
+        </div>
+        <div className="mdx-example__pane">
+          <div className="mdx-example__label">呈现效果</div>
+          <div className="mdx-example__preview">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}

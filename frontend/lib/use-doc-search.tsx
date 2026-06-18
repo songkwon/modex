@@ -25,7 +25,9 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
     clearTimeout(debounce.current);
     if (!query.trim()) {
       setResults([]);
+      setLoading(false);
       setActive(0);
+      setAnswer(null);
       return;
     }
     setLoading(true);

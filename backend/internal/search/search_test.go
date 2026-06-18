@@ -2,11 +2,57 @@ package search
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"modex/backend/internal/embedding"
 	"modex/backend/internal/store"
 )
+
+type fakeVectorStore struct {
+	vectors  map[string][]float32
+	simCalls int
+}
+
+func (f *fakeVectorStore) Existing(_ context.Context, docIDs []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, id := range docIDs {
+		if _, ok := f.vectors[id]; ok {
+			out[id] = true
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeVectorStore) Similarities(_ context.Context, query []float32, docIDs []string, _ int) (map[string]float64, error) {
+	f.simCalls++
+	out := map[string]float64{}
+	for _, id := range docIDs {
+		out[id] = cosine(query, f.vectors[id])
+	}
+	return out, nil
+}
+
+func (f *fakeVectorStore) Upsert(_ context.Context, docID string, vector []float32) error {
+	f.vectors[docID] = append([]float32(nil), vector...)
+	return nil
+}
+
+func (f *fakeVectorStore) Clear(context.Context) error {
+	f.vectors = map[string][]float32{}
+	return nil
+}
+
+func (f *fakeVectorStore) DeletePrefix(_ context.Context, prefix string) error {
+	for id := range f.vectors {
+		if strings.HasPrefix(id, prefix) {
+			delete(f.vectors, id)
+		}
+	}
+	return nil
+}
+
+func (f *fakeVectorStore) Count(context.Context) (int, error) { return len(f.vectors), nil }
 
 func newService() Service {
 	return Service{
@@ -54,6 +100,24 @@ func TestSemanticSearchReturnsRankedResults(t *testing.T) {
 	}
 }
 
+func TestSemanticSearchUsesExternalVectorStoreWithoutMemoryCache(t *testing.T) {
+	s := newService()
+	vectors := &fakeVectorStore{vectors: map[string][]float32{}}
+	s.Vectors = vectors
+	if _, err := s.Reindex(context.Background()); err != nil {
+		t.Fatalf("Reindex: %v", err)
+	}
+	if s.Store.EmbeddingCount() != 0 {
+		t.Fatalf("in-memory embeddings = %d, want 0", s.Store.EmbeddingCount())
+	}
+	if _, err := s.Search(context.Background(), Request{Query: "构建缓存", Mode: ModeSemantic}); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if vectors.simCalls != 1 {
+		t.Fatalf("similarity queries = %d, want one pgvector query", vectors.simCalls)
+	}
+}
+
 func TestKeywordModeSkipsEmbeddingButStillMatches(t *testing.T) {
 	s := newService()
 	resp, err := s.Search(context.Background(), Request{Query: "构建缓存", Mode: ModeKeyword, PageSize: 5})
@@ -66,6 +130,50 @@ func TestKeywordModeSkipsEmbeddingButStillMatches(t *testing.T) {
 	// Keyword mode must not have triggered embedding caching.
 	if s.Store.EmbeddingCount() != 0 {
 		t.Fatalf("keyword search should not populate embedding cache, got %d", s.Store.EmbeddingCount())
+	}
+}
+
+func TestDefaultVersionsOnlyFiltersDuplicateOldVersions(t *testing.T) {
+	st := store.New()
+	ingest := func(version, body string) {
+		t.Helper()
+		_, err := st.IngestArtifact(store.DeployArtifact{
+			ModuleKey:   "Threadpool",
+			ModuleName:  "Threadpool",
+			DocsVersion: version,
+			Entries:     []store.DeployEntry{{Key: "guide", Title: "Guide", Type: "markdown"}},
+			Documents: []store.DeployDocument{{
+				DocID:       "Threadpool:" + version + ":guide",
+				EntryKey:    "guide",
+				EntryType:   "markdown",
+				Title:       "线程池配置",
+				Description: "线程池配置",
+				Content:     body,
+				Status:      "active",
+			}},
+		})
+		if err != nil {
+			t.Fatalf("IngestArtifact(%s): %v", version, err)
+		}
+	}
+	ingest("v1.0.0", "线程池配置 max_workers legacy")
+	ingest("v2.0.0", "线程池配置 max_workers current")
+
+	s := Service{Store: st, Embedder: embedding.MockProvider{Dim: 256}}
+	resp, err := s.Search(context.Background(), Request{Query: "max_workers", Mode: ModeKeyword, PageSize: 10, DefaultVersionsOnly: true})
+	if err != nil {
+		t.Fatalf("Search default versions: %v", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].DocsVersion != "v2.0.0" {
+		t.Fatalf("default-version results = %#v, want only v2.0.0", resp.Results)
+	}
+
+	resp, err = s.Search(context.Background(), Request{Query: "max_workers", Mode: ModeKeyword, PageSize: 10, Filters: Filters{DocsVersions: []string{"v1.0.0"}}, DefaultVersionsOnly: true})
+	if err != nil {
+		t.Fatalf("Search explicit version: %v", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].DocsVersion != "v1.0.0" {
+		t.Fatalf("explicit-version results = %#v, want v1.0.0", resp.Results)
 	}
 }
 

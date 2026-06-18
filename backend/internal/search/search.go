@@ -35,6 +35,9 @@ type Request struct {
 	Filters  Filters `json:"filters"`
 	Page     int     `json:"page"`
 	PageSize int     `json:"page_size"`
+	// DefaultVersionsOnly limits results to each module's configured default
+	// docs version when the caller has not explicitly requested versions.
+	DefaultVersionsOnly bool `json:"default_versions_only"`
 	// Log marks an explicit, user-committed search (Enter / search button /
 	// result click) that should be persisted to the search log. Live
 	// as-you-type queries leave this false so the log isn't flooded.
@@ -75,6 +78,7 @@ type Response struct {
 type Service struct {
 	Store          *store.Store
 	Embedder       embedding.Provider
+	Vectors        VectorStore
 	KeywordWeight  float64
 	SemanticWeight float64
 }
@@ -100,8 +104,22 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	pages := s.Store.Pages()
 	// Resolve module -> category breadcrumb once so each result carries a path.
 	breadcrumbs := map[string]string{}
+	defaultVersions := map[string]string{}
 	for _, m := range s.Store.Modules("", "") {
 		breadcrumbs[m.ModuleKey] = m.CategoryPath
+		defaultVersions[m.ModuleKey] = defaultVersionForModule(m)
+	}
+	candidates := make([]store.Page, 0, len(pages))
+	for _, p := range pages {
+		if !matchFilters(p, req.Filters) {
+			continue
+		}
+		if req.DefaultVersionsOnly && len(req.Filters.DocsVersions) == 0 {
+			if def := defaultVersions[p.ModuleKey]; def != "" && p.DocsVersion != def {
+				continue
+			}
+		}
+		candidates = append(candidates, p)
 	}
 	terms := matchTerms(req.Query)
 	// Semantic and hybrid modes need a query embedding; keyword mode skips it to
@@ -116,15 +134,40 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	// are mock we score hybrid by keyword only. Explicit semantic mode still uses
 	// the vectors — that's the caller asking for vector ranking specifically.
 	mockEmbed := s.Embedder.Name() == "mock"
-	var scored []Result
-	for _, p := range pages {
-		if !matchFilters(p, req.Filters) {
-			continue
+	vectors := map[string][]float32{}
+	semanticScores := map[string]float64{}
+	if len(queryVec) > 0 {
+		docIDs := make([]string, 0, len(candidates))
+		for _, p := range candidates {
+			docIDs = append(docIDs, p.DocID)
 		}
+		if s.Vectors != nil {
+			if err := s.ensureExternalEmbeddings(ctx, candidates, docIDs); err != nil {
+				return Response{}, err
+			}
+			var err error
+			semanticScores, err = s.Vectors.Similarities(ctx, queryVec, docIDs, len(docIDs))
+			if err != nil {
+				return Response{}, err
+			}
+		} else {
+			vectors, _ = s.embeddingBatch(docIDs)
+		}
+	}
+	var scored []Result
+	for _, p := range candidates {
 		kScore := keywordScore(req.Query, p)
 		var sScore float64
 		if len(queryVec) > 0 {
-			sScore = cosine(queryVec, s.pageVector(ctx, p))
+			if s.Vectors != nil {
+				sScore = semanticScores[p.DocID]
+			} else {
+				pageVec, err := s.pageVector(ctx, p, vectors)
+				if err != nil {
+					return Response{}, err
+				}
+				sScore = cosine(queryVec, pageVec)
+			}
 		}
 		var final float64
 		switch req.Mode {
@@ -170,6 +213,23 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	return Response{Query: req.Query, Mode: req.Mode, Page: req.Page, PageSize: req.PageSize, Total: total, Results: scored[start:end], Facets: facets(pages)}, nil
 }
 
+func defaultVersionForModule(m store.Module) string {
+	for _, v := range m.AvailableVers {
+		if v.IsDefault && v.Status != "archived" {
+			return v.DocsVersion
+		}
+	}
+	if strings.TrimSpace(m.DefaultVersion) != "" {
+		return m.DefaultVersion
+	}
+	for _, v := range m.AvailableVers {
+		if v.Status != "archived" {
+			return v.DocsVersion
+		}
+	}
+	return ""
+}
+
 func matchFilters(p store.Page, f Filters) bool {
 	return inAny(p.CategoryIDs, f.CategoryIDs) &&
 		inValue(p.ModuleKey, f.Modules) &&
@@ -187,7 +247,22 @@ func matchFilters(p store.Page, f Filters) bool {
 var queryTokenRe = regexp.MustCompile(`[a-z0-9]+|\p{Han}+`)
 
 func queryTokens(query string) []string {
-	return queryTokenRe.FindAllString(strings.ToLower(query), -1)
+	var out []string
+	for _, tok := range queryTokenRe.FindAllString(strings.ToLower(query), -1) {
+		r := []rune(tok)
+		// ASCII alnum run: keep whole (e.g. "eventbus").
+		if r[0] < 128 || len(r) == 1 {
+			out = append(out, tok)
+			continue
+		}
+		// CJK run: emit 2-char shingles so a query like "如何下载插件" matches docs
+		// containing "下载"/"插件" without a full word segmenter. Single chars would
+		// over-match; whole runs (the previous behaviour) under-match.
+		for i := 0; i+1 < len(r); i++ {
+			out = append(out, string(r[i:i+2]))
+		}
+	}
+	return out
 }
 
 func keywordScore(query string, p store.Page) float64 {
@@ -218,7 +293,9 @@ func keywordScore(query string, p store.Page) float64 {
 // configured provider. It powers POST /api/embeddings/reindex and pre-warms the
 // cache so semantic search does not pay an embedding call on the hot path.
 func (s Service) Reindex(ctx context.Context) (int, error) {
-	s.Store.ClearEmbeddings()
+	if err := s.clearEmbeddings(ctx); err != nil {
+		return 0, err
+	}
 	pages := s.Store.Pages()
 	count := 0
 	for _, p := range pages {
@@ -230,7 +307,9 @@ func (s Service) Reindex(ctx context.Context) (int, error) {
 		if err != nil {
 			return count, err
 		}
-		s.Store.SetEmbedding(p.DocID, vec)
+		if err := s.upsertEmbedding(ctx, p.DocID, vec); err != nil {
+			return count, err
+		}
 		count++
 	}
 	return count, nil
@@ -238,20 +317,88 @@ func (s Service) Reindex(ctx context.Context) (int, error) {
 
 // pageVector returns the page's embedding from cache, computing and caching it
 // on demand the first time it is needed.
-func (s Service) pageVector(ctx context.Context, p store.Page) []float32 {
-	if vec, ok := s.Store.Embedding(p.DocID); ok {
-		return vec
+func (s Service) pageVector(ctx context.Context, p store.Page, vectors map[string][]float32) ([]float32, error) {
+	if vec, ok := vectors[p.DocID]; ok {
+		return vec, nil
 	}
 	text := embedText(p)
 	if text == "" {
-		return nil
+		return nil, nil
 	}
 	vec, err := s.Embedder.EmbedText(ctx, text)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	s.Store.SetEmbedding(p.DocID, vec)
-	return vec
+	if err := s.upsertEmbedding(ctx, p.DocID, vec); err != nil {
+		return nil, err
+	}
+	vectors[p.DocID] = vec
+	return vec, nil
+}
+
+func (s Service) embeddingBatch(docIDs []string) (map[string][]float32, error) {
+	out := make(map[string][]float32, len(docIDs))
+	for _, docID := range docIDs {
+		if vector, ok := s.Store.Embedding(docID); ok {
+			out[docID] = vector
+		}
+	}
+	return out, nil
+}
+
+func (s Service) ensureExternalEmbeddings(ctx context.Context, pages []store.Page, docIDs []string) error {
+	existing, err := s.Vectors.Existing(ctx, docIDs)
+	if err != nil {
+		return err
+	}
+	for _, page := range pages {
+		if existing[page.DocID] {
+			continue
+		}
+		text := embedText(page)
+		if text == "" {
+			continue
+		}
+		vector, err := s.Embedder.EmbedText(ctx, text)
+		if err != nil {
+			return err
+		}
+		if err := s.Vectors.Upsert(ctx, page.DocID, vector); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s Service) upsertEmbedding(ctx context.Context, docID string, vector []float32) error {
+	if s.Vectors != nil {
+		return s.Vectors.Upsert(ctx, docID, vector)
+	}
+	s.Store.SetEmbedding(docID, vector)
+	return nil
+}
+
+func (s Service) clearEmbeddings(ctx context.Context) error {
+	if s.Vectors != nil {
+		return s.Vectors.Clear(ctx)
+	}
+	s.Store.ClearEmbeddings()
+	return nil
+}
+
+func (s Service) EmbeddingCount(ctx context.Context) (int, error) {
+	if s.Vectors != nil {
+		return s.Vectors.Count(ctx)
+	}
+	return s.Store.EmbeddingCount(), nil
+}
+
+func (s Service) DeleteModuleVersionEmbeddings(ctx context.Context, moduleKey, docsVersion string) error {
+	prefix := moduleKey + ":" + docsVersion + ":"
+	if s.Vectors != nil {
+		return s.Vectors.DeletePrefix(ctx, prefix)
+	}
+	return nil
 }
 
 func embedText(p store.Page) string {

@@ -2,35 +2,52 @@
 
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
-import { getModule, updateModule } from "@/lib/api";
+import { getModule, rotateDeployToken } from "@/lib/api";
 import type { ModuleInfo } from "@/types/modex";
 
 export default function AdminModuleDetail({ params }: { params: Promise<{ moduleKey: string }> }) {
   const [moduleKey, setModuleKey] = useState("");
   const [module, setModule] = useState<ModuleInfo | null>(null);
   const [shownToken, setShownToken] = useState<string>("");
+  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function load(key: string) {
-    const m = await getModule(key);
-    setModule(m);
-    setLoading(false);
+    setError(null);
+    try {
+      const m = await getModule(key);
+      setModule(m);
+    } catch (e) {
+      setError("加载模块信息失败: " + (e instanceof Error ? e.message : String(e)));
+      setModule(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
     let cancelled = false;
-    params.then(({ moduleKey }) => {
+    params.then(({ moduleKey: key }) => {
       if (cancelled) return;
-      setModuleKey(moduleKey);
-      load(moduleKey);
+      setModuleKey(key);
+      load(key);
     });
     return () => {
       cancelled = true;
     };
   }, [params]);
 
-  if (loading || !module) {
+  if (loading) {
     return <AdminShell title="加载中..." kicker="Module Detail"><div className="panel">加载模块信息...</div></AdminShell>;
+  }
+
+  if (error || !module) {
+    return (
+      <AdminShell title="出错了" kicker="Module Detail">
+        <div className="panel text-red-600">{error || "未找到模块"}</div>
+      </AdminShell>
+    );
   }
 
   const rows = [
@@ -56,23 +73,29 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
     ["Last Synced", module.last_synced_at || "-"],
   ];
 
-  async function generateDeployToken() {
+  async function handleRotateDeployToken() {
     if (!module) return;
-    const newToken = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, "0")).join("");
+    if (!confirm("确定要生成新的 Deploy Token 吗？旧 token 将立即失效。")) return;
     try {
-      await updateModule(module.module_key, { deploy_token: newToken } as any);
-      setShownToken(newToken);
+      const res = await rotateDeployToken(module.module_key);
+      setShownToken(res.deploy_token);
+      setCopied(false);
       alert("新 Deploy Token 已生成并保存！请立即复制到 GitLab CI Secret (DOCS_DEPLOY_TOKEN)，此页面不会永久显示完整 token。");
-      await load(moduleKey);
+      await load(module.module_key);
     } catch (e) {
-      alert("生成失败: " + e);
+      alert("生成失败: " + (e instanceof Error ? e.message : String(e)));
     }
   }
 
-  async function rotateDeployToken() {
-    if (!confirm("确定要轮换 Deploy Token 吗？旧 token 将失效。")) return;
-    await generateDeployToken();
+  async function copyToken() {
+    if (!shownToken) return;
+    try {
+      await navigator.clipboard.writeText(shownToken);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert("复制失败，请手动选中下方 token 复制");
+    }
   }
 
   return (
@@ -131,20 +154,32 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
         <div className="mt-6">
           <h3 className="font-medium mb-2">Deploy Token（用于 GitLab CI 安全部署）</h3>
           <div className="flex items-center gap-2">
-            <button className="button button-primary" onClick={generateDeployToken}>
-              生成新 Token
-            </button>
-            <button className="button" onClick={rotateDeployToken}>
-              轮换 Token
+            <button className="button button-primary" onClick={handleRotateDeployToken}>
+              生成 / 轮换 Token
             </button>
           </div>
           {shownToken && (
-            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
-              <strong>新 Token（仅此显示一次，请立即复制到 GitLab CI 变量 DOCS_DEPLOY_TOKEN）:</strong>
-              <pre className="mt-1 p-2 bg-panel font-mono text-xs break-all">{shownToken}</pre>
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <strong>新 Token（仅此显示一次，请立即复制到 GitLab CI 变量 DOCS_DEPLOY_TOKEN）:</strong>
+                </div>
+                <button
+                  className="shrink-0 px-2 py-1 text-xs rounded border border-yellow-300 bg-white hover:bg-yellow-100 transition"
+                  onClick={copyToken}
+                >
+                  {copied ? "已复制" : "复制"}
+                </button>
+              </div>
+              <pre className="mt-2 p-2 bg-panel font-mono text-xs break-all select-all">{shownToken}</pre>
             </div>
           )}
-          <p className="text-xs muted mt-1">Token 已设置在模块配置中。CI 中使用 X-Modex-Deploy-Token 头或 Authorization Bearer 发送。</p>
+          <p className="text-xs muted mt-2">
+            CI 中使用 X-Modex-Deploy-Token 头或 Authorization Bearer 发送。
+            {module?.deploy_token_set
+              ? " 当前已设置 Deploy Token（出于安全不再显示明文）。"
+              : " 当前尚未设置 Deploy Token。"}
+          </p>
         </div>
 
         <div className="mt-6">

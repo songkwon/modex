@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, KeyRound, ListChecks, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Combobox } from "@/components/ui/combobox";
-import { fetchModels, getSettings, saveSettings, type AISettings } from "@/lib/api";
+import { fetchModels, getSettings, runRecallTest, saveSettings, type AISettings, type RecallTestResult } from "@/lib/api";
 
 // Supported chat API formats. "openai-chat" covers OpenAI and every
 // OpenAI-compatible vendor (DeepSeek, Qwen, GLM, Moonshot, Ollama, vLLM, …);
@@ -32,16 +32,26 @@ const PRESETS: { label: string; base: string; protocol: string }[] = [
 ];
 
 const DEFAULT_AI: AISettings = { ask_protocol: "openai-chat", ask_base_url: "", ask_model: "", ask_api_key: "", ask_system_prompt: "" };
+const CHUNK_STRATEGIES = [
+  { value: "markdown", label: "Markdown 标题优先" },
+  { value: "heading", label: "标题层级" },
+  { value: "fixed", label: "固定长度" },
+  { value: "semantic", label: "语义分段" },
+];
 
 export default function AdminSettingsPage() {
   const [ai, setAI] = useState<AISettings>(DEFAULT_AI);
   const [keySet, setKeySet] = useState(false);
+  const [embeddingKeySet, setEmbeddingKeySet] = useState(false);
+  const [rerankKeySet, setRerankKeySet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [promptDefault, setPromptDefault] = useState("");
+  const [recallLoading, setRecallLoading] = useState(false);
+  const [recallResult, setRecallResult] = useState<RecallTestResult | null>(null);
 
   const protocol = ai.ask_protocol || "openai-chat";
 
@@ -73,6 +83,8 @@ export default function AdminSettingsPage() {
           ask_system_prompt: s.ai?.ask_system_prompt || s.ask_system_prompt_default || "",
         });
         setKeySet(s.ask_api_key_set);
+        setEmbeddingKeySet(Boolean(s.embedding_api_key_set));
+        setRerankKeySet(Boolean(s.rerank_api_key_set));
       })
       .catch((e) => setError(String(e)));
   }, []);
@@ -84,9 +96,13 @@ export default function AdminSettingsPage() {
     try {
       const payload: AISettings = { ...ai };
       if (!payload.ask_api_key) delete payload.ask_api_key; // keep existing key
+      if (!payload.embedding_api_key) delete payload.embedding_api_key;
+      if (!payload.rerank_api_key) delete payload.rerank_api_key;
       const s = await saveSettings(payload);
       setAI({ ...DEFAULT_AI, ...s.ai, ask_api_key: "" });
       setKeySet(s.ask_api_key_set);
+      setEmbeddingKeySet(Boolean(s.embedding_api_key_set));
+      setRerankKeySet(Boolean(s.rerank_api_key_set));
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -96,8 +112,27 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function handleRecallTest() {
+    setRecallLoading(true);
+    setError("");
+    setRecallResult(null);
+    try {
+      const payload: AISettings = { ...ai };
+      if (!payload.ask_api_key) delete payload.ask_api_key;
+      if (!payload.embedding_api_key) delete payload.embedding_api_key;
+      if (!payload.rerank_api_key) delete payload.rerank_api_key;
+      await saveSettings(payload);
+      const r = await runRecallTest();
+      setRecallResult(r);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRecallLoading(false);
+    }
+  }
+
   return (
-    <AdminShell title="模型设置" kicker="AI Model" description="对接对话模型用于全站 AI 问答（RAG）。支持 OpenAI、Anthropic、Gemini 等主流 API 格式与任意兼容端点；未配置时回退到基于检索的摘要式回答。">
+    <AdminShell title="模型设置" kicker="AI Model" description="配置对话、嵌入、重排序模型，以及 RAG 召回测试和文档分段策略。">
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <section className="card" style={{ display: "grid", gap: 18 }}>
@@ -216,6 +251,190 @@ export default function AdminSettingsPage() {
           <span className="field-hint">已预填内置默认提示词，可在此基础上修改；点「重置为默认」可还原。留空保存则回退到内置版本。</span>
         </div>
 
+        <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>嵌入模型</h2>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Embedding Base URL</label>
+              <input
+                value={ai.embedding_base_url || ""}
+                placeholder="https://api.example.com/v1"
+                onChange={(e) => setAI({ ...ai, embedding_base_url: e.target.value })}
+              />
+              <span className="field-hint">用于语义检索和混合检索的向量生成接口。</span>
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Embedding 模型</label>
+              <input
+                value={ai.embedding_model || ""}
+                placeholder="text-embedding-3-large / bge-m3"
+                onChange={(e) => setAI({ ...ai, embedding_model: e.target.value })}
+              />
+              <span className="field-hint">模型名按供应商接口填写。</span>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Embedding API Key</label>
+              <input
+                type="password"
+                value={ai.embedding_api_key || ""}
+                placeholder={embeddingKeySet ? "已配置（留空则保持不变）" : "sk-…"}
+                onChange={(e) => setAI({ ...ai, embedding_api_key: e.target.value })}
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>向量维度</label>
+              <input
+                type="number"
+                min={1}
+                value={ai.embedding_dim ?? ""}
+                placeholder="384 / 768 / 1024 / 1536"
+                onChange={(e) => setAI({ ...ai, embedding_dim: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>重排序与召回测试</h2>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Rerank Base URL</label>
+              <input
+                value={ai.rerank_base_url || ""}
+                placeholder="https://api.example.com/v1"
+                onChange={(e) => setAI({ ...ai, rerank_base_url: e.target.value })}
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Rerank 模型</label>
+              <input
+                value={ai.rerank_model || ""}
+                placeholder="bge-reranker-v2-m3"
+                onChange={(e) => setAI({ ...ai, rerank_model: e.target.value })}
+              />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Rerank API Key</label>
+              <input
+                type="password"
+                value={ai.rerank_api_key || ""}
+                placeholder={rerankKeySet ? "已配置（留空则保持不变）" : "sk-…"}
+                onChange={(e) => setAI({ ...ai, rerank_api_key: e.target.value })}
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>重排 TopK</label>
+              <input
+                type="number"
+                min={1}
+                value={ai.rerank_top_k ?? ""}
+                placeholder="20"
+                onChange={(e) => setAI({ ...ai, rerank_top_k: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
+              />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>召回测试 Query</label>
+              <input
+                value={ai.recall_test_query || ""}
+                placeholder="构建缓存怎么清理"
+                onChange={(e) => setAI({ ...ai, recall_test_query: e.target.value })}
+              />
+              <span className="field-hint">保存一条基准问题，后续用于对比不同分段、向量和重排配置。</span>
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>召回测试 TopK</label>
+              <input
+                type="number"
+                min={1}
+                value={ai.recall_test_top_k ?? ""}
+                placeholder="10"
+                onChange={(e) => setAI({ ...ai, recall_test_top_k: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>期望命中文档 ID</label>
+            <textarea
+              style={{ minHeight: 78, padding: "10px 12px", lineHeight: 1.6 }}
+              value={ai.recall_test_doc_ids || ""}
+              placeholder="DemoModule:latest:guide"
+              onChange={(e) => setAI({ ...ai, recall_test_doc_ids: e.target.value })}
+            />
+            <span className="field-hint">一行一个 doc_id，后续召回测试按命中率、MRR、nDCG 展示效果。</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="button" onClick={handleRecallTest} disabled={recallLoading}>
+              {recallLoading ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 运行召回测试
+            </button>
+            {recallResult ? (
+              <span className="badge badge-success">
+                Recall@{recallResult.top_k}: {(recallResult.recall_at_k * 100).toFixed(1)}%
+              </span>
+            ) : null}
+          </div>
+          {recallResult ? (
+            <div className="panel" style={{ display: "grid", gap: 10, borderRadius: 12, padding: 12 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <span className="tag">MRR {recallResult.mrr.toFixed(3)}</span>
+                <span className="tag">nDCG {recallResult.ndcg.toFixed(3)}</span>
+                <span className="tag">命中 {recallResult.actual_doc_ids.filter((id) => recallResult.expected_doc_ids.includes(id)).length}/{recallResult.expected_doc_ids.length}</span>
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
+                {(recallResult.results || []).slice(0, recallResult.top_k).map((r) => (
+                  <li key={r.doc_id} style={{ fontSize: 13 }}>
+                    <code className="code-chip">{r.doc_id}</code>
+                    <span style={{ marginLeft: 8 }}>{r.title}</span>
+                    <span className="muted" style={{ marginLeft: 8 }}>score {r.score.toFixed(3)}</span>
+                  </li>
+                ))}
+              </ol>
+              {recallResult.note ? <span className="field-hint">{recallResult.note}</span> : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>分段策略</h2>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>策略</label>
+              <Combobox
+                options={CHUNK_STRATEGIES}
+                value={ai.chunk_strategy ? [ai.chunk_strategy] : []}
+                onChange={(v) => setAI({ ...ai, chunk_strategy: v[0] || "" })}
+                multiple={false}
+                placeholder="选择分段策略…"
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>分段长度</label>
+              <input
+                type="number"
+                min={1}
+                value={ai.chunk_size ?? ""}
+                placeholder="800"
+                onChange={(e) => setAI({ ...ai, chunk_size: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>重叠长度</label>
+              <input
+                type="number"
+                min={0}
+                value={ai.chunk_overlap ?? ""}
+                placeholder="120"
+                onChange={(e) => setAI({ ...ai, chunk_overlap: e.target.value === "" ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0) })}
+              />
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button className="button button-primary" onClick={submit} disabled={saving}>
             {saving ? <Loader2 size={16} className="ds-spin" /> : <Sparkles size={16} />} 保存设置
@@ -225,7 +444,7 @@ export default function AdminSettingsPage() {
       </section>
 
       <p className="muted" style={{ fontSize: 12 }}>
-        提示：对话模型在此页配置后立即生效，无需重启。向量 / 重排序模型配置将在后续版本加入。
+        提示：对话模型保存后立即用于 AI 问答；嵌入、重排序、分段和召回测试配置会随平台设置持久化，索引链路接入后直接复用。
       </p>
     </AdminShell>
   );

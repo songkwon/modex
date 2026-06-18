@@ -24,7 +24,7 @@ export function Mermaid({ chart, children }: { chart?: string; children?: React.
       try {
         const mermaid = (await import("mermaid")).default;
         const isDark = document.documentElement.classList.contains("dark") || document.documentElement.getAttribute("data-theme") === "dark";
-        mermaid.initialize({ startOnLoad: false, theme: isDark ? "dark" : "neutral", securityLevel: "strict" });
+        mermaid.initialize({ startOnLoad: false, theme: isDark ? "dark" : "neutral", securityLevel: "loose" });
         const { svg } = await mermaid.render(`mmd-${id}`, code);
         if (!cancelled && ref.current) ref.current.innerHTML = svg;
       } catch (e) {

@@ -35,6 +35,7 @@ type Store struct {
 	pages      []Page
 	searchLogs []SearchLog
 	mcpLogs    []MCPLog
+	feedbacks  []DocFeedback
 	pageViews  []PageView
 	navs       map[string][]NavItem
 	html       map[string]string
@@ -59,6 +60,12 @@ func (s *Store) SaveAISettings(ai AISettings) Settings {
 	if strings.TrimSpace(ai.AskAPIKey) == "" {
 		ai.AskAPIKey = s.settings.AI.AskAPIKey
 	}
+	if strings.TrimSpace(ai.EmbeddingAPIKey) == "" {
+		ai.EmbeddingAPIKey = s.settings.AI.EmbeddingAPIKey
+	}
+	if strings.TrimSpace(ai.RerankAPIKey) == "" {
+		ai.RerankAPIKey = s.settings.AI.RerankAPIKey
+	}
 	ai.UpdatedAt = time.Now().UTC()
 	s.settings.AI = ai
 	return s.settings
@@ -82,6 +89,7 @@ func New() *Store {
 		pages:      []Page{},
 		searchLogs: []SearchLog{},
 		mcpLogs:    []MCPLog{},
+		feedbacks:  []DocFeedback{},
 		pageViews:  []PageView{},
 		navs:       map[string][]NavItem{},
 		html:       map[string]string{},
@@ -148,6 +156,7 @@ func NewSeeded() *Store {
 	s.entries = []Entry{
 		{ID: "e-demo-guide", ModuleKey: "DemoModule", DocsVersion: "latest", EntryKey: "guide", Title: "模块落地指导", EntryType: "markdown", Builder: "markdown", Source: "docs/integration-guide.md", StorageURI: "minio://modex/DemoModule/latest/site/guide/index.html", NavURI: "minio://modex/DemoModule/latest/nav.json", IndexStatus: "indexed", IsPrimary: true, SortOrder: 1, Status: "active", CreatedAt: now},
 		{ID: "e-demo-maintenance", ModuleKey: "DemoModule", DocsVersion: "latest", EntryKey: "maintenance", Title: "模块维护说明", EntryType: "markdown", Builder: "markdown", Source: "docs/maintenance-guide.md", StorageURI: "minio://modex/DemoModule/latest/site/maintenance/index.html", NavURI: "minio://modex/DemoModule/latest/nav.json", IndexStatus: "indexed", SortOrder: 2, Status: "active", CreatedAt: now},
+		{ID: "e-demo-showcase", ModuleKey: "DemoModule", DocsVersion: "latest", EntryKey: "markdown-showcase", Title: "Markdown 示例文档", EntryType: "markdown", Builder: "markdown", Source: "docs/markdown-showcase.md", StorageURI: "minio://modex/DemoModule/latest/site/markdown-showcase/index.html", NavURI: "minio://modex/DemoModule/latest/nav.json", IndexStatus: "indexed", SortOrder: 3, Status: "active", CreatedAt: now},
 		{ID: "e-cbb-build", ModuleKey: "CBB", DocsVersion: "latest", EntryKey: "build-cache", Title: "构建缓存清理", EntryType: "markdown", Builder: "markdown", Source: "docs/build-cache.md", StorageURI: "minio://modex/CBB/latest/site/build-cache/index.html", NavURI: "minio://modex/CBB/latest/nav.json", IndexStatus: "indexed", IsPrimary: true, SortOrder: 1, Status: "active", CreatedAt: now},
 		{ID: "e-vuepress-guide", ModuleKey: "VuePressGuide", DocsVersion: "latest", EntryKey: "guide", Title: "VuePress 文档站接入", EntryType: "vuepress", Builder: "vuepress", Source: "docs", StorageURI: "minio://modex/VuePressGuide/latest/site/guide/index.html", NavURI: "minio://modex/VuePressGuide/latest/nav.json", IndexStatus: "indexed", IsPrimary: true, SortOrder: 1, Status: "active", CreatedAt: now},
 		{ID: "e-fumadocs-guide", ModuleKey: "FumadocsKit", DocsVersion: "latest", EntryKey: "guide", Title: "Fumadocs 文档站接入", EntryType: "fumadocs", Builder: "fumadocs", Source: "content/docs", StorageURI: "minio://modex/FumadocsKit/latest/site/guide/index.html", NavURI: "minio://modex/FumadocsKit/latest/nav.json", IndexStatus: "indexed", IsPrimary: true, SortOrder: 1, Status: "active", CreatedAt: now},
@@ -155,12 +164,34 @@ func NewSeeded() *Store {
 	s.pages = []Page{
 		{ID: "p-demo-guide", DocID: "DemoModule:latest:guide", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "guide", EntryType: "markdown", Title: "模块落地指导", Description: "面向业务开发人员的模块接入、部署、接口和异常处理说明。", Path: "/docs/DemoModule/latest/guide", SourceFile: "docs/integration-guide.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "cad"}, ContentText: "模块落地指导说明如何接入 DemoModule，包括接口设计、部署运行、异常处理、风险影响面和发布检查。", ContentMD: seedDemoGuideMD, UpdatedAt: now},
 		{ID: "p-demo-maintenance", DocID: "DemoModule:latest:maintenance", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "maintenance", EntryType: "markdown", Title: "模块维护说明", Description: "面向维护开发人员的架构、设计、流程和维护说明。", Path: "/docs/DemoModule/latest/maintenance", SourceFile: "docs/maintenance-guide.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "cad", "architecture"}, ContentText: "模块维护说明包含总体架构、设计原则、模块结构、核心流程、时序逻辑、前后端设计和质量可维护性要求。", ContentMD: seedDemoMaintenanceMD, UpdatedAt: now},
+		{ID: "p-demo-showcase", DocID: "DemoModule:latest:markdown-showcase", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "markdown-showcase", EntryType: "markdown", Title: "Markdown 示例文档", Description: "Modex 当前支持的 Markdown、MDX 组件、代码组、图表、公式和插件示例。", Path: "/docs/DemoModule/latest/markdown-showcase", SourceFile: "docs/markdown-showcase.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "markdown", "mdx"}, ContentText: "Markdown 示例文档展示 Modex 支持的 Markdown、MDX 组件、代码组、UML 图、公式和上传插件。", ContentMD: seedMarkdownShowcaseMD, UpdatedAt: now},
 		{ID: "p-cbb-build", DocID: "CBB:latest:build-cache", ModuleKey: "CBB", ModuleName: "CBB 文档", DocsVersion: "latest", PackageVersion: "2.8.0", EntryKey: "build-cache", EntryType: "markdown", Title: "构建缓存清理", Description: "CBB 构建缓存清理和常见构建问题排查。", Path: "/docs/CBB/latest/build-cache", SourceFile: "docs/build-cache.md", DocType: "markdown", Status: "active", OwnerGroup: "engineering", CategoryIDs: []string{"engineering", "engineering.cbb"}, Tags: []string{"cbb", "ci", "build"}, ContentText: "构建缓存清理用于解决依赖缓存、编译缓存和 CI 工作区残留导致的构建异常。可以重新拉取依赖并清理本地缓存。", ContentMD: seedCBBBuildCacheMD, UpdatedAt: now},
 		{ID: "p-vuepress-guide", DocID: "VuePressGuide:latest:guide", ModuleKey: "VuePressGuide", ModuleName: "VuePressGuide", DocsVersion: "latest", PackageVersion: "0.4.0", EntryKey: "guide", EntryType: "vuepress", Title: "VuePress 文档站接入", Description: "VuePress 文档通过 docsctl 执行构建命令并复制 dist 输出目录。", Path: "/docs/VuePressGuide/latest/guide", SourceFile: "docs/README.md", DocType: "vuepress", Status: "active", OwnerGroup: "frontend-platform", CategoryIDs: []string{"frontend", "frontend.docs"}, Tags: []string{"vuepress", "frontend", "markdown"}, ContentText: "VuePress 文档站接入说明如何声明 docs.yaml、执行 npm run docs:build、复制 docs/.vuepress/dist 并生成标准文档包。", UpdatedAt: now.Add(-2 * time.Hour)},
 		{ID: "p-fumadocs-guide", DocID: "FumadocsKit:latest:guide", ModuleKey: "FumadocsKit", ModuleName: "FumadocsKit", DocsVersion: "latest", PackageVersion: "0.2.0", EntryKey: "guide", EntryType: "fumadocs", Title: "Fumadocs 文档站接入", Description: "Fumadocs 文档通过 Next.js 与 MDX 构建，适合现代前端文档站。", Path: "/docs/FumadocsKit/latest/guide", SourceFile: "content/docs/index.mdx", DocType: "fumadocs", Status: "active", OwnerGroup: "frontend-platform", CategoryIDs: []string{"frontend", "frontend.docs"}, Tags: []string{"fumadocs", "nextjs", "mdx", "frontend"}, ContentText: "Fumadocs 文档站接入说明如何维护 MDX 内容、运行 Next.js 构建、输出静态站点并交给 Modex 进行搜索和 MCP 读取。", UpdatedAt: now.Add(-90 * time.Minute)},
 	}
 	s.releases = []Release{{ID: "r-demo-1", ReleaseID: "rel-demo-latest-001", ModuleKey: "DemoModule", DocsVersion: "latest", CommitSHA: "d34db33f", Branch: "main", Publisher: "alice", PipelineURL: "https://gitlab.example.com/cad/demo-module/-/pipelines/1", BuildSystem: "gitlab", BuildID: "1", ArtifactVersion: "20260609.1", PackageVersion: "1.2.3", StorageURI: "minio://modex/DemoModule/latest/docs-artifact.zip", Status: "published", PublishedAt: now, CreatedAt: now}}
 	return s
+}
+
+func (s *Store) ensureMarkdownShowcaseSeed() {
+	hasDemo := false
+	for _, m := range s.modules {
+		if m.ModuleKey == "DemoModule" {
+			hasDemo = true
+			break
+		}
+	}
+	if !hasDemo {
+		return
+	}
+	for _, e := range s.entries {
+		if e.ModuleKey == "DemoModule" && e.DocsVersion == "latest" && e.EntryKey == "markdown-showcase" {
+			return
+		}
+	}
+	now := time.Now().UTC()
+	s.entries = append(s.entries, Entry{ID: "e-demo-showcase", ModuleKey: "DemoModule", DocsVersion: "latest", EntryKey: "markdown-showcase", Title: "Markdown 示例文档", EntryType: "markdown", Builder: "markdown", Source: "docs/markdown-showcase.md", StorageURI: "minio://modex/DemoModule/latest/site/markdown-showcase/index.html", NavURI: "minio://modex/DemoModule/latest/nav.json", IndexStatus: "indexed", SortOrder: 3, Status: "active", CreatedAt: now})
+	s.pages = append(s.pages, Page{ID: "p-demo-showcase", DocID: "DemoModule:latest:markdown-showcase", ModuleKey: "DemoModule", ModuleName: "DemoModule", DocsVersion: "latest", PackageVersion: "1.2.3", EntryKey: "markdown-showcase", EntryType: "markdown", Title: "Markdown 示例文档", Description: "Modex 当前支持的 Markdown、MDX 组件、代码组、图表、公式和插件示例。", Path: "/docs/DemoModule/latest/markdown-showcase", SourceFile: "docs/markdown-showcase.md", DocType: "markdown", Status: "active", OwnerGroup: "cad-team", CategoryIDs: []string{"cad", "cad.demo"}, Tags: []string{"demo", "markdown", "mdx"}, ContentText: "Markdown 示例文档展示 Modex 支持的 Markdown、MDX 组件、代码组、UML 图、公式和上传插件。", ContentMD: seedMarkdownShowcaseMD, UpdatedAt: now})
 }
 
 func (s *Store) CurrentUser() User {
@@ -724,6 +755,7 @@ func (s *Store) Modules(categoryID, keyword string) []Module {
 		}
 		cp := m
 		cp.AvailableVers = s.versionsForLocked(m.ModuleKey)
+		cp.DeployTokenSet = cp.DeployToken != ""
 		out = append(out, cp)
 	}
 	return out
@@ -735,6 +767,7 @@ func (s *Store) Module(moduleKey string) (Module, error) {
 	for _, m := range s.modules {
 		if strings.EqualFold(m.ModuleKey, moduleKey) {
 			m.AvailableVers = s.versionsForLocked(m.ModuleKey)
+			m.DeployTokenSet = m.DeployToken != ""
 			return m, nil
 		}
 	}
@@ -786,6 +819,31 @@ func (s *Store) PageByRoute(moduleKey, docsVersion, entryKey string) (Page, erro
 		if strings.EqualFold(p.ModuleKey, moduleKey) && p.DocsVersion == docsVersion && p.EntryKey == entryKey {
 			return p, nil
 		}
+	}
+	for _, e := range s.entries {
+		if strings.EqualFold(e.ModuleKey, moduleKey) && e.DocsVersion == docsVersion && e.IsPrimary {
+			for _, p := range s.pages {
+				if strings.EqualFold(p.ModuleKey, moduleKey) && p.DocsVersion == docsVersion && p.EntryKey == e.EntryKey {
+					return p, nil
+				}
+			}
+		}
+	}
+	var fallback *Page
+	sortOrder := int(^uint(0) >> 1)
+	for _, p := range s.pages {
+		if !strings.EqualFold(p.ModuleKey, moduleKey) || p.DocsVersion != docsVersion {
+			continue
+		}
+		order := sortOrderForEntryLocked(s.entries, moduleKey, docsVersion, p.EntryKey)
+		if fallback == nil || order < sortOrder {
+			cp := p
+			fallback = &cp
+			sortOrder = order
+		}
+	}
+	if fallback != nil {
+		return *fallback, nil
 	}
 	return Page{}, ErrNotFound
 }
@@ -855,6 +913,48 @@ func (s *Store) ClearEmbeddings() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.embeddings = map[string][]float32{}
+}
+
+// ClearSiteAssets drops cached rendered HTML and static site files from memory.
+// Deployed environments can serve these assets from MinIO instead, which keeps
+// the backend RSS from growing with image-heavy or large documentation sites.
+func (s *Store) ClearSiteAssets() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.html = map[string]string{}
+	s.siteFiles = map[string]SiteFile{}
+}
+
+// SiteObjects returns the currently cached site assets keyed by their MinIO
+// object path. It is used once at startup to migrate legacy snapshot data.
+func (s *Store) SiteObjects() map[string]SiteFile {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]SiteFile, len(s.html)+len(s.siteFiles))
+	moduleNames := make(map[string]string, len(s.modules))
+	for _, module := range s.modules {
+		moduleNames[strings.ToLower(module.ModuleKey)] = module.ModuleKey
+	}
+	for key, html := range s.html {
+		parts := strings.SplitN(key, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		moduleKey := firstNonEmpty(moduleNames[parts[0]], parts[0])
+		name := path.Join("modules", moduleKey, parts[1], "site", parts[2], "index.html")
+		out[name] = SiteFile{Name: name, Content: []byte(html), ContentType: "text/html; charset=utf-8"}
+	}
+	for key, file := range s.siteFiles {
+		parts := strings.SplitN(key, ":", 4)
+		if len(parts) != 4 {
+			continue
+		}
+		moduleKey := firstNonEmpty(moduleNames[parts[0]], parts[0])
+		name := path.Join("modules", moduleKey, parts[1], "site", parts[2], parts[3])
+		file.Name = name
+		out[name] = file
+	}
+	return out
 }
 
 func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
@@ -1109,6 +1209,33 @@ func (s *Store) MCPLogs() []MCPLog {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]MCPLog(nil), s.mcpLogs...)
+}
+
+func (s *Store) AddDocFeedback(f DocFeedback) DocFeedback {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if f.CreatedAt.IsZero() {
+		f.CreatedAt = time.Now().UTC()
+	}
+	if f.ID == "" {
+		f.ID = s.nextIDLocked("df")
+	}
+	for _, p := range s.pages {
+		if p.DocID == f.DocID {
+			f.PageID = p.ID
+			f.ModuleKey = p.ModuleKey
+			f.Title = p.Title
+			break
+		}
+	}
+	s.feedbacks = append(s.feedbacks, f)
+	return f
+}
+
+func (s *Store) DocFeedbacks() []DocFeedback {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]DocFeedback(nil), s.feedbacks...)
 }
 
 // RecordPageView appends a page view and returns the stored record.
@@ -1589,6 +1716,7 @@ func (s *Store) CreateModule(m Module) (Module, error) {
 	}
 	m.UpdatedAt = time.Now().UTC()
 	m.AvailableVers = nil
+	m.DeployTokenSet = m.DeployToken != ""
 	s.modules = append(s.modules, m)
 	return m, nil
 }
@@ -1665,6 +1793,7 @@ func (s *Store) UpdateModule(moduleKey string, patch Module) (Module, error) {
 			m.UpdatedAt = time.Now().UTC()
 			out := *m
 			out.AvailableVers = s.versionsForLocked(m.ModuleKey)
+			out.DeployTokenSet = out.DeployToken != ""
 			return out, nil
 		}
 	}
@@ -1955,6 +2084,15 @@ func cloneNav(xs []NavItem) []NavItem {
 		out[i].Children = cloneNav(x.Children)
 	}
 	return out
+}
+
+func sortOrderForEntryLocked(entries []Entry, moduleKey, docsVersion, entryKey string) int {
+	for _, e := range entries {
+		if strings.EqualFold(e.ModuleKey, moduleKey) && e.DocsVersion == docsVersion && e.EntryKey == entryKey {
+			return e.SortOrder
+		}
+	}
+	return int(^uint(0) >> 1)
 }
 
 func firstNonEmpty(values ...string) string {

@@ -42,7 +42,10 @@ export function SearchResults({ s }: { s: Search }) {
                 >
                   <span className="ds-item-icon"><Icon size={18} /></span>
                   <span className="ds-item-body">
-                    <span className="ds-crumb">{r.breadcrumb}</span>
+                    <span className="ds-crumb">
+                      <span>{r.breadcrumb}</span>
+                      {r.docs_version ? <span className="ds-version">{r.docs_version}</span> : null}
+                    </span>
                     <span className="ds-title">{highlight(r.title, r.match_terms)}</span>
                     <span className="ds-snippet">{highlight(r.snippet, r.match_terms)}</span>
                   </span>

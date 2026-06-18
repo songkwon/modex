@@ -12,6 +12,7 @@ export type AnalyticsEvent =
   | "docs_search"
   | "docs_search_result_click"
   | "docs_version_switch"
+  | "docs_feedback"
   | "docs_source_click"
   | "docs_mcp_search"
   | "docs_mcp_get_page";

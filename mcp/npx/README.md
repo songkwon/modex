@@ -1,4 +1,4 @@
-# modex-docs-mcp
+# modex-mcp
 
 Connect any [MCP](https://modelcontextprotocol.io) client (Claude Code, Cursor, Windsurf, …)
 to your Modex documentation platform. Zero dependencies, runs over stdio via `npx`.
@@ -24,10 +24,10 @@ to your Modex documentation platform. Zero dependencies, runs over stdio via `np
 ### Claude Code
 
 ```bash
-claude mcp add modex-docs \
+claude mcp add modex \
   --env MODEX_API_BASE_URL=https://modex.example.com \
   --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-docs-mcp
+  -- npx -y modex-mcp
 ```
 
 ### Cursor / Windsurf / generic MCP client
@@ -37,9 +37,9 @@ Add to your MCP config (e.g. `~/.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "modex-docs": {
+    "modex": {
       "command": "npx",
-      "args": ["-y", "modex-docs-mcp"],
+      "args": ["-y", "modex-mcp"],
       "env": {
         "MODEX_API_BASE_URL": "https://modex.example.com",
         "MODEX_MCP_TOKEN": "your-token"
@@ -49,10 +49,44 @@ Add to your MCP config (e.g. `~/.cursor/mcp.json`):
 }
 ```
 
+### Modex release tarball
+
+Modex releases can bundle this package and serve it from the platform backend:
+
+```bash
+claude mcp add modex \
+  --env MODEX_API_BASE_URL=https://modex.example.com \
+  --env MODEX_MCP_TOKEN=your-token \
+  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
+```
+
+If your organization keeps the MCP package in an installable Git repository:
+
+```bash
+claude mcp add modex \
+  --env MODEX_API_BASE_URL=https://modex.example.com \
+  --env MODEX_MCP_TOKEN=your-token \
+  -- npx -y git+https://github.com/your-org/modex-mcp.git
+```
+
+### Modex Skill
+
+The optional Modex Skill is installed separately and is intended for Modex users:
+
+```bash
+npx skills add https://modex.example.com
+```
+
+Git-hosted skill package:
+
+```bash
+npx skills add https://github.com/your-org/modex/tree/main/mcp/skill
+```
+
 ### Try it locally
 
 ```bash
-MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=dev-token npx -y modex-docs-mcp
+MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=dev-token npx -y modex-mcp
 ```
 
 Then send a JSON-RPC line on stdin, e.g.:

@@ -10,6 +10,8 @@ var (
 	seedDemoGuideMD string
 	//go:embed seeddata/demo-maintenance.md
 	seedDemoMaintenanceMD string
+	//go:embed seeddata/markdown-showcase.md
+	seedMarkdownShowcaseMD string
 	//go:embed seeddata/cbb-build-cache.md
 	seedCBBBuildCacheMD string
 )

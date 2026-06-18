@@ -1,11 +1,16 @@
 import { GitBranch } from "lucide-react";
-import { getEntries, getModule, getNav, getPage } from "@/lib/api";
+import type { ReactNode } from "react";
+import { getEntries, getModule, getModuleVersions, getNav, getPage } from "@/lib/api";
 import { PageViewTracker } from "@/components/page-view-tracker";
 import { DocScope } from "@/components/doc-scope";
 import { CodeBlockCopy } from "@/components/code-block-copy";
 import { DocReadStats } from "@/components/doc-read-stats";
 import { MdxContent } from "@/components/mdx/mdx-content";
 import { ImmersiveChrome } from "@/components/immersive-chrome";
+import { DocToc } from "@/components/doc-toc";
+import { VersionSwitcher } from "@/components/version-switcher";
+import { DocFooter, FloatingDocFeedback } from "@/components/doc-footer";
+import { DocSourceToggle } from "@/components/doc-source-toggle";
 
 export default async function DocPage({
   params,
@@ -16,20 +21,25 @@ export default async function DocPage({
 }) {
   const { moduleKey, docsVersion, entryKey } = await params;
   const { p: deepLink } = await searchParams;
-  const [module, entries, nav, pagePayload] = await Promise.all([
+  const [module, entries, versions, navTree, pagePayload] = await Promise.all([
     getModule(moduleKey),
     getEntries(moduleKey, docsVersion),
-    getNav(moduleKey, docsVersion, entryKey),
+    getModuleVersions(moduleKey).catch(() => []),
+    getNav(moduleKey, docsVersion, entryKey).catch(() => []),
     getPage(moduleKey, docsVersion, entryKey)
   ]);
   const page = pagePayload.page ?? pagePayload;
   const contentHTML = extractDocumentBody(pagePayload.content_html || "");
   const contentMD = (page.content_md || pagePayload.content_md || "").trim();
   const isMarkdown = page.entry_type === "markdown";
-  // Right-rail TOC: the current page's own heading structure (h2/h3), not the
-  // module's entry list. getNav returns every entry with its headings as
-  // children, so pick the entry matching this page.
-  const headingTree = nav.find((n) => n.path === `/${entryKey}`)?.children ?? [];
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
+  const actualEntryKey = page.entry_key || entryKey;
+  const assetBase = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${actualEntryKey}/site/`;
+  // Prev/next doc cards from the entry order.
+  const idx = entries.findIndex((e) => e.entry_key === actualEntryKey);
+  const toLink = (e: any) => (e ? { title: e.title, href: `/docs/${moduleKey}/${docsVersion}/${e.entry_key}` } : undefined);
+  const prevDoc = idx > 0 ? toLink(entries[idx - 1]) : undefined;
+  const nextDoc = idx >= 0 && idx < entries.length - 1 ? toLink(entries[idx + 1]) : undefined;
 
   // VitePress/VuePress/Fumadocs entries ship a full static site (with their own
   // sidebar, search, theme, mermaid/plantuml). Serve it as-is in an iframe from
@@ -38,18 +48,21 @@ export default async function DocPage({
   // its absolute asset paths resolve against the backend origin the iframe loads
   // from.
   if (!isMarkdown) {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
     // Deep-link into the built site: a search hit passes ?p=<route> (e.g.
     // /posts/cbb/x). Convert it to the built file path (posts/cbb/x.html;
     // dir routes keep their trailing slash to load that dir's index.html).
     let rel = (deepLink || "").replace(/^\/+/, "");
     if (rel && !rel.endsWith("/")) rel += ".html";
-    const siteSrc = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${entryKey}/site/${rel}`;
+    const siteSrc = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${actualEntryKey}/site/${rel}`;
     return (
       <main className="doc-fullscreen">
         <PageViewTracker docId={page.doc_id} />
         <DocScope moduleKey={module.module_key} moduleName={module.name} />
         <ImmersiveChrome />
+        <div className="doc-version-dock">
+          <VersionSwitcher moduleKey={moduleKey} current={docsVersion} entryKey={actualEntryKey} versions={versions} />
+        </div>
+        <FloatingDocFeedback docId={page.doc_id} />
         <iframe
           className="doc-embed-frame"
           src={siteSrc}
@@ -67,11 +80,11 @@ export default async function DocPage({
         <aside className="doc-sidebar">
           <div className="doc-nav-head">
             <a className="doc-nav-back" href="/">{module.name}</a>
-            <span className="doc-nav-version">{docsVersion}</span>
+            <VersionSwitcher moduleKey={moduleKey} current={docsVersion} entryKey={actualEntryKey} versions={versions} />
           </div>
           <nav className="doc-nav">
-            {entries.map((entry) => {
-              const active = entry.entry_key === entryKey;
+            {navTree.length > 0 ? renderDocNavTree(navTree, moduleKey, docsVersion, actualEntryKey) : entries.map((entry) => {
+              const active = entry.entry_key === actualEntryKey;
               return (
                 <a
                   className={`doc-nav-link${active ? " active" : ""}`}
@@ -92,7 +105,9 @@ export default async function DocPage({
             <DocReadStats docId={page.doc_id} />
           </div>
           {contentMD ? (
-            <MdxContent source={contentMD} />
+            <DocSourceToggle source={contentMD}>
+              <MdxContent source={contentMD} assetBase={assetBase} />
+            </DocSourceToggle>
           ) : contentHTML ? (
             <>
               <div className="embedded-doc-html" dangerouslySetInnerHTML={{ __html: contentHTML }} />
@@ -101,28 +116,12 @@ export default async function DocPage({
           ) : (
             <p>{page.content_text}</p>
           )}
+          <DocFooter docId={page.doc_id} prev={prevDoc} next={nextDoc} />
         </article>
 
         <aside className="doc-toc">
           <div className="doc-toc-card">
-            {isMarkdown && headingTree.length > 0 ? (
-              <>
-                <p className="doc-toc-title">本页目录</p>
-                <nav className="doc-toc-tree">
-                  {headingTree.map((item) => (
-                    <a key={item.path} href={item.path} className="doc-toc-link">
-                      {item.title}
-                    </a>
-                  ))}
-                </nav>
-              </>
-            ) : null}
-            <p className={`doc-toc-title${isMarkdown && headingTree.length > 0 ? " mt-5" : ""}`}>元数据</p>
-            <dl className="doc-meta">
-              <div><dt>doc_id</dt><dd className="break-all font-mono text-xs">{page.doc_id}</dd></div>
-              <div><dt>owner</dt><dd>{page.owner_group || "—"}</dd></div>
-              <div><dt>工程版本</dt><dd>{page.package_version || "—"}</dd></div>
-            </dl>
+            {isMarkdown ? <DocToc /> : null}
             {module.repo_url ? (
               <a className="button doc-toc-source" href={module.repo_url}>
                 <GitBranch size={15} />查看源码
@@ -133,6 +132,33 @@ export default async function DocPage({
       </section>
     </main>
   );
+}
+
+type DocNavItem = { title: string; path: string; children?: DocNavItem[] };
+
+function renderDocNavTree(items: DocNavItem[], moduleKey: string, docsVersion: string, activeEntryKey: string, depth = 0): ReactNode {
+  return items.map((item, idx) => {
+    const entryKey = item.path?.startsWith("/") && !item.path.startsWith("#") ? item.path.slice(1) : "";
+    const active = entryKey === activeEntryKey;
+    if (!entryKey) {
+      return (
+        <div className="doc-nav-group" key={`${item.title}-${idx}`}>
+          <div className="doc-nav-folder" style={{ paddingLeft: 10 + depth * 12 }}>{item.title}</div>
+          {item.children?.length ? renderDocNavTree(item.children, moduleKey, docsVersion, activeEntryKey, depth + 1) : null}
+        </div>
+      );
+    }
+    return (
+      <a
+        className={`doc-nav-link${active ? " active" : ""}`}
+        key={`${entryKey}-${idx}`}
+        href={`/docs/${moduleKey}/${docsVersion}/${entryKey}`}
+        style={{ paddingLeft: 10 + depth * 12 }}
+      >
+        {item.title}
+      </a>
+    );
+  });
 }
 
 function extractDocumentBody(html: string) {

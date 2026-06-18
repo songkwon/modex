@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"mime"
 	"net"
 	"net/http"
@@ -39,6 +40,10 @@ type Server struct {
 }
 
 func New(st *store.Store) *Server {
+	return NewWithVectorStore(st, nil)
+}
+
+func NewWithVectorStore(st *store.Store, vectors search.VectorStore) *Server {
 	provider := embedding.FromEnv()
 	authSvc := auth.NewService(auth.FromEnv())
 	s := &Server{
@@ -47,6 +52,7 @@ func New(st *store.Store) *Server {
 		search: search.Service{
 			Store:          st,
 			Embedder:       provider,
+			Vectors:        vectors,
 			KeywordWeight:  envFloat("HYBRID_KEYWORD_WEIGHT", 0.6),
 			SemanticWeight: envFloat("HYBRID_SEMANTIC_WEIGHT", 0.4),
 		},
@@ -75,14 +81,26 @@ func New(st *store.Store) *Server {
 			if s.minioBucket == "" {
 				s.minioBucket = "modex"
 			}
-			ctx := context.Background()
-			exists, _ := client.BucketExists(ctx, s.minioBucket)
-			if !exists {
-				client.MakeBucket(ctx, s.minioBucket, minio.MakeBucketOptions{})
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			exists, bucketErr := client.BucketExists(ctx, s.minioBucket)
+			if bucketErr == nil && !exists {
+				bucketErr = client.MakeBucket(ctx, s.minioBucket, minio.MakeBucketOptions{})
+			}
+			if bucketErr != nil {
+				log.Printf("minio bucket init failed: %v", bucketErr)
+				s.minioClient = nil
 			}
 		} else {
 			log.Printf("minio client init failed: %v", err)
 		}
+	}
+	if s.minioClient != nil && s.migrateSiteAssetsToMinIO() {
+		s.store.ClearSiteAssets()
+	}
+	if vectors != nil {
+		// A legacy snapshot may still contain vectors from an older release.
+		st.ClearEmbeddings()
 	}
 	return s
 }
@@ -115,16 +133,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/deploy", s.handleDeploy)
 	mux.HandleFunc("/api/analytics/page-view", s.handlePageView)
 	mux.HandleFunc("/api/analytics/read-progress", s.handleReadProgress)
+	mux.HandleFunc("/api/analytics/feedback", s.handleDocFeedback)
 	mux.HandleFunc("/api/analytics/doc", s.handleDocAnalytics)
 	mux.HandleFunc("/api/admin/releases", s.handleReleases)
 	mux.HandleFunc("/api/admin/releases/", s.handleReleaseRoutes)
 	mux.HandleFunc("/api/admin/analytics/pages", s.handlePageAnalytics)
+	mux.HandleFunc("/api/admin/analytics/feedback", s.handleDocFeedbackLogs)
 	mux.HandleFunc("/api/admin/analytics/search", s.handleSearchLogs)
 	mux.HandleFunc("/api/admin/analytics/mcp", s.handleMCPLogs)
 	mux.HandleFunc("/api/mcp/log", s.handleMCPLog)
 	mux.HandleFunc("/api/mcp/dist", s.handleMcpDist)
 	mux.HandleFunc("/api/mcp/dist/", s.handleMcpDist)
+	mux.HandleFunc("/.well-known/agent-skills/index.json", s.handleSkillDiscovery)
+	mux.HandleFunc("/.well-known/skills/index.json", s.handleSkillDiscovery)
 	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
+	mux.HandleFunc("/api/admin/settings/recall-test", s.handleAdminRecallTest)
 	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/admin/plugins", s.handleAdminPlugins)
 	mux.HandleFunc("/api/admin/plugins/import", s.handleAdminPluginImport)
@@ -316,7 +339,7 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) >= 3 {
 		if len(parts) >= 4 && parts[3] == "site" {
-			s.handleDocSiteFile(w, module.ModuleKey, parts[1], parts[2], strings.Join(parts[4:], "/"))
+			s.handleDocSiteFile(w, r, module.ModuleKey, parts[1], parts[2], strings.Join(parts[4:], "/"))
 			return
 		}
 		if len(parts) == 4 && parts[3] == "nav" {
@@ -333,21 +356,26 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 			writeResult(w, page, err)
 			return
 		}
-		page.ContentHTML = s.store.PageHTML(module.ModuleKey, parts[1], parts[2])
+		page.ContentHTML, err = s.docPageHTML(r.Context(), module.ModuleKey, parts[1], parts[2])
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "site_read_failed", err.Error())
+			return
+		}
 		writeJSON(w, http.StatusOK, page)
 		return
 	}
 }
 
-func (s *Server) handleDocSiteFile(w http.ResponseWriter, moduleKey, docsVersion, entryKey, name string) {
+func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, moduleKey, docsVersion, entryKey, name string) {
 	if name == "" {
 		name = "index.html"
 	}
 	if s.minioClient != nil {
 		zipName := fmt.Sprintf("site/%s/%s", entryKey, name)
 		key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, zipName)
-		obj, err := s.minioClient.GetObject(context.Background(), s.minioBucket, key, minio.GetObjectOptions{})
+		obj, err := s.minioClient.GetObject(r.Context(), s.minioBucket, key, minio.GetObjectOptions{})
 		if err == nil {
+			defer obj.Close()
 			stat, statErr := obj.Stat()
 			if statErr == nil && stat.Size > 0 {
 				ct := stat.ContentType
@@ -381,8 +409,42 @@ func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 		writeResult(w, page, err)
 		return
 	}
-	page.ContentHTML = s.store.PageHTML(page.ModuleKey, page.DocsVersion, page.EntryKey)
+	page.ContentHTML, err = s.docPageHTML(r.Context(), page.ModuleKey, page.DocsVersion, page.EntryKey)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "site_read_failed", err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) docPageHTML(ctx context.Context, moduleKey, docsVersion, entryKey string) (string, error) {
+	if s.minioClient != nil {
+		key := fmt.Sprintf("modules/%s/%s/site/%s/index.html", moduleKey, docsVersion, entryKey)
+		obj, err := s.minioClient.GetObject(ctx, s.minioBucket, key, minio.GetObjectOptions{})
+		if err == nil {
+			defer obj.Close()
+			stat, statErr := obj.Stat()
+			if statErr == nil && stat.Size > 0 {
+				b, readErr := io.ReadAll(obj)
+				if readErr == nil && len(b) > 0 {
+					return string(b), nil
+				}
+				if readErr != nil {
+					err = readErr
+				}
+			} else if statErr != nil {
+				err = statErr
+			}
+		}
+		if fallback := s.store.PageHTML(moduleKey, docsVersion, entryKey); fallback != "" {
+			return fallback, nil
+		}
+		if err == nil {
+			err = store.ErrNotFound
+		}
+		return "", fmt.Errorf("read MinIO object %s: %w", key, err)
+	}
+	return s.store.PageHTML(moduleKey, docsVersion, entryKey), nil
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -394,6 +456,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
+	}
+	if len(req.Filters.DocsVersions) == 0 {
+		req.DefaultVersionsOnly = true
 	}
 	resp, err := s.search.Search(r.Context(), req)
 	if err != nil {
@@ -442,7 +507,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	if len(req.CategoryIDs) > 0 {
 		filters.CategoryIDs = req.CategoryIDs
 	}
-	resp, err := s.search.Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 5})
+	resp, err := s.search.Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 8, DefaultVersionsOnly: len(filters.DocsVersions) == 0})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "ask_failed", err.Error())
 		return
@@ -494,7 +559,10 @@ func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []s
 func (s *Server) askExternalLLM(ctx context.Context, url, query string, results []search.Result) (string, error) {
 	var ctxBuilder strings.Builder
 	for i, r := range results {
-		ctxBuilder.WriteString(fmt.Sprintf("[%d] %s (%s)\n%s\n\n", i+1, r.Title, r.Breadcrumb, r.Snippet))
+		if i >= 6 {
+			break
+		}
+		ctxBuilder.WriteString(s.askContextForResult(i+1, r))
 	}
 	payload, _ := json.Marshal(map[string]any{"query": query, "context": ctxBuilder.String()})
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(payload)))
@@ -531,7 +599,7 @@ func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, q
 		if i >= 6 {
 			break
 		}
-		ctxBuilder.WriteString(fmt.Sprintf("[%d] %s (%s)\n%s\n\n", i+1, r.Title, r.Breadcrumb, firstNonEmptyStr(r.Snippet, r.Title)))
+		ctxBuilder.WriteString(s.askContextForResult(i+1, r))
 	}
 	system := strings.TrimSpace(ai.AskSystemPrompt)
 	if system == "" {
@@ -540,6 +608,26 @@ func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, q
 	userMsg := fmt.Sprintf("文档片段：\n%s\n问题：%s", ctxBuilder.String(), query)
 	// Dispatch to the configured API format (OpenAI / Anthropic / Gemini / …).
 	return chatComplete(ctx, ai, system, userMsg)
+}
+
+func (s *Server) askContextForResult(i int, r search.Result) string {
+	content := firstNonEmptyStr(r.Snippet, r.Title)
+	if p, err := s.store.Page(r.DocID); err == nil {
+		content = firstNonEmptyStr(p.ContentMD, p.ContentText, p.Description, r.Snippet)
+	}
+	content = truncateRunes(strings.TrimSpace(content), 4200)
+	return fmt.Sprintf("[%d] %s\n路径：%s\n分类：%s\n正文：\n%s\n\n", i, r.Title, r.Path, r.Breadcrumb, content)
+}
+
+func truncateRunes(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	rs := []rune(s)
+	if len(rs) <= max {
+		return s
+	}
+	return string(rs[:max]) + "\n……"
 }
 
 func firstNonEmptyStr(vals ...string) string {
@@ -570,6 +658,60 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
+}
+
+func (s *Server) handleAdminRecallTest(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	ai := s.store.Settings().AI
+	query := strings.TrimSpace(ai.RecallTestQuery)
+	if query == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "recall_test_query is required")
+		return
+	}
+	topK := ai.RecallTestTopK
+	if topK <= 0 {
+		topK = 10
+	}
+	if topK > 100 {
+		topK = 100
+	}
+	expected := parseDocIDList(ai.RecallTestDocIDs)
+	if len(expected) == 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "recall_test_doc_ids is required")
+		return
+	}
+	resp, err := s.search.Search(r.Context(), search.Request{
+		Query:               query,
+		Mode:                search.ModeHybrid,
+		Page:                1,
+		PageSize:            topK,
+		DefaultVersionsOnly: true,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "search_failed", err.Error())
+		return
+	}
+	actual := make([]string, 0, len(resp.Results))
+	for _, r := range resp.Results {
+		actual = append(actual, r.DocID)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"query":            query,
+		"top_k":            topK,
+		"expected_doc_ids": expected,
+		"actual_doc_ids":   actual,
+		"recall_at_k":      recallAtK(expected, actual),
+		"mrr":              reciprocalRank(expected, actual),
+		"ndcg":             ndcg(expected, actual),
+		"results":          resp.Results,
+		"note":             "当前版本评估 hybrid 召回；重排序模型接入后可在此返回 rerank 前后对比。",
+	})
 }
 
 // handleAdminPlugins exposes the built-in doc-engine plugin registry. GET
@@ -726,12 +868,92 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 func maskedSettings(set store.Settings) map[string]any {
 	ai := set.AI
 	keySet := strings.TrimSpace(ai.AskAPIKey) != ""
+	embeddingKeySet := strings.TrimSpace(ai.EmbeddingAPIKey) != ""
+	rerankKeySet := strings.TrimSpace(ai.RerankAPIKey) != ""
 	ai.AskAPIKey = ""
+	ai.EmbeddingAPIKey = ""
+	ai.RerankAPIKey = ""
 	return map[string]any{
 		"ai":                        ai,
 		"ask_api_key_set":           keySet,
+		"embedding_api_key_set":     embeddingKeySet,
+		"rerank_api_key_set":        rerankKeySet,
 		"ask_system_prompt_default": store.DefaultAskSystemPrompt,
 	}
+}
+
+func parseDocIDList(raw string) []string {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == '\n' || r == '\r' || r == '\t' || r == ',' || r == '，' || r == ';' || r == '；'
+	})
+	seen := map[string]bool{}
+	out := []string{}
+	for _, f := range fields {
+		v := strings.TrimSpace(f)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
+}
+
+func expectedSet(expected []string) map[string]bool {
+	set := make(map[string]bool, len(expected))
+	for _, id := range expected {
+		set[id] = true
+	}
+	return set
+}
+
+func recallAtK(expected, actual []string) float64 {
+	if len(expected) == 0 {
+		return 0
+	}
+	set := expectedSet(expected)
+	hits := 0
+	for _, id := range actual {
+		if set[id] {
+			hits++
+		}
+	}
+	return float64(hits) / float64(len(expected))
+}
+
+func reciprocalRank(expected, actual []string) float64 {
+	set := expectedSet(expected)
+	for i, id := range actual {
+		if set[id] {
+			return 1 / float64(i+1)
+		}
+	}
+	return 0
+}
+
+func ndcg(expected, actual []string) float64 {
+	if len(expected) == 0 || len(actual) == 0 {
+		return 0
+	}
+	set := expectedSet(expected)
+	dcg := 0.0
+	for i, id := range actual {
+		if set[id] {
+			dcg += 1 / math.Log2(float64(i+2))
+		}
+	}
+	idealHits := len(expected)
+	if idealHits > len(actual) {
+		idealHits = len(actual)
+	}
+	idcg := 0.0
+	for i := 0; i < idealHits; i++ {
+		idcg += 1 / math.Log2(float64(i+2))
+	}
+	if idcg == 0 {
+		return 0
+	}
+	return dcg / idcg
 }
 
 func (s *Server) handleFacets(w http.ResponseWriter, r *http.Request) {
@@ -781,11 +1003,16 @@ func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadGateway, "embedding_reindex_failed", err.Error())
 		return
 	}
+	storedCount, err := s.search.EmbeddingCount(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "embedding_count_failed", err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":           "reindexed",
 		"provider":         s.search.Embedder.Name(),
 		"embedded_pages":   count,
-		"cached_documents": s.store.EmbeddingCount(),
+		"cached_documents": storedCount,
 	})
 }
 
@@ -856,7 +1083,19 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.minioClient != nil {
-		s.uploadSiteFilesToMinIO(artifact, moduleKey, artifact.Metadata.DocsVersion)
+		if err := s.uploadSiteFilesToMinIO(r.Context(), artifact, moduleKey, artifact.Metadata.DocsVersion); err != nil {
+			writeError(w, http.StatusBadGateway, "site_upload_failed", err.Error())
+			return
+		}
+		// MinIO is the source of truth for static site assets in deployed
+		// environments. Keeping the same bytes in the in-memory fallback can
+		// push the backend into multi-GB RSS for image-heavy documentation.
+		artifact.SiteFiles = nil
+		artifact.SiteHTML = nil
+	}
+	if err := s.search.DeleteModuleVersionEmbeddings(r.Context(), moduleKey, artifact.Metadata.DocsVersion); err != nil {
+		writeError(w, http.StatusBadGateway, "embedding_cleanup_failed", err.Error())
+		return
 	}
 
 	result, err := s.store.IngestArtifact(toStoreArtifact(artifact))
@@ -1004,6 +1243,83 @@ func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
 	}
 	s.store.RecordReadProgress(req.DocID, req.SessionID, req.Duration, req.ScrollDepth)
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded"})
+}
+
+func (s *Server) handleDocFeedback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	var req struct {
+		DocID     string `json:"doc_id"`
+		Rating    string `json:"rating"`
+		Comment   string `json:"comment"`
+		SessionID string `json:"session_id"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	req.DocID = strings.TrimSpace(req.DocID)
+	req.Rating = strings.TrimSpace(req.Rating)
+	req.Comment = strings.TrimSpace(req.Comment)
+	if req.DocID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "doc_id is required")
+		return
+	}
+	if req.Rating != "good" && req.Rating != "bad" {
+		writeError(w, http.StatusBadRequest, "bad_request", "rating must be good or bad")
+		return
+	}
+	user, _ := s.currentUser(r)
+	f := s.store.AddDocFeedback(store.DocFeedback{
+		DocID: req.DocID, Rating: req.Rating, Comment: req.Comment, UserID: user.ID, SessionID: req.SessionID,
+	})
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded", "feedback": f})
+}
+
+func (s *Server) handleDocFeedbackLogs(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireConsole(w, r)
+	if !ok {
+		return
+	}
+	logs := s.store.DocFeedbacks()
+	type out struct {
+		store.DocFeedback
+		DisplayName string `json:"display_name"`
+	}
+	res := make([]out, 0, len(logs))
+	set, all := s.accessibleCategoryIDs(user)
+	for _, log := range logs {
+		if !all && !categoriesIntersect(s.docCategoryIDs(log.DocID), set) {
+			continue
+		}
+		dn := ""
+		if log.UserID != "" {
+			if u, err := s.store.UserByID(log.UserID); err == nil {
+				dn = u.DisplayName
+				if dn == "" {
+					dn = u.Username
+				}
+			}
+		}
+		res = append(res, out{DocFeedback: log, DisplayName: dn})
+	}
+	if kw := keywordOf(r); kw != "" {
+		filtered := res[:0:0]
+		for _, l := range res {
+			if containsFold(l.DocID, kw) || containsFold(l.Title, kw) || containsFold(l.ModuleKey, kw) || containsFold(l.Rating, kw) || containsFold(l.Comment, kw) || containsFold(l.DisplayName, kw) || containsFold(l.UserID, kw) {
+				filtered = append(filtered, l)
+			}
+		}
+		res = filtered
+	}
+	if wantsPage(r) {
+		page, limit := pageParams(r)
+		writeJSON(w, http.StatusOK, paginate(res, page, limit))
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
@@ -2163,11 +2479,10 @@ func toStoreNav(n deploy.NavItem) store.NavItem {
 	return out
 }
 
-func (s *Server) uploadSiteFilesToMinIO(artifact deploy.Artifact, moduleKey, docsVersion string) {
+func (s *Server) uploadSiteFilesToMinIO(ctx context.Context, artifact deploy.Artifact, moduleKey, docsVersion string) error {
 	if s.minioClient == nil {
-		return
+		return nil
 	}
-	ctx := context.Background()
 	for name, content := range artifact.SiteFiles {
 		key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, name)
 		ct := contentTypeForName(name, content)
@@ -2175,9 +2490,28 @@ func (s *Server) uploadSiteFilesToMinIO(artifact deploy.Artifact, moduleKey, doc
 			ContentType: ct,
 		})
 		if err != nil {
-			log.Printf("minio upload failed for %s: %v", key, err)
+			return fmt.Errorf("upload %s: %w", key, err)
 		}
 	}
+	return nil
+}
+
+func (s *Server) migrateSiteAssetsToMinIO() bool {
+	objects := s.store.SiteObjects()
+	if len(objects) == 0 {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	for key, file := range objects {
+		_, err := s.minioClient.PutObject(ctx, s.minioBucket, key, bytes.NewReader(file.Content), int64(len(file.Content)), minio.PutObjectOptions{ContentType: file.ContentType})
+		if err != nil {
+			log.Printf("legacy site asset migration failed for %s: %v", key, err)
+			return false
+		}
+	}
+	log.Printf("migrated %d legacy site assets to MinIO", len(objects))
+	return true
 }
 
 func contentTypeForName(name string, content []byte) string {

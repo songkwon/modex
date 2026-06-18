@@ -1,10 +1,10 @@
 {
-  "name": "modex-docs-mcp",
+  "name": "modex-mcp",
   "version": "0.1.0",
-  "description": "Modex docs MCP server — connect Claude Code, Cursor, and other MCP clients to your Modex documentation platform.",
+  "description": "Modex MCP server — connect Claude Code, Cursor, and other MCP clients to your Modex documentation platform.",
   "type": "module",
   "bin": {
-    "modex-docs-mcp": "./index.mjs"
+    "modex-mcp": "./index.mjs"
   },
   "files": [
     "index.mjs",
