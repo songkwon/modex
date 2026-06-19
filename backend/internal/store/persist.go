@@ -82,6 +82,45 @@ func (s *Store) toSnapshot(includeLarge bool) snapshot {
 	return snap
 }
 
+// toRelationalState takes a consistent in-memory view for one PostgreSQL
+// transaction. It is never serialized as a whole or stored in a snapshot row.
+func (s *Store) toRelationalState() snapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	moduleTokens := map[string]string{}
+	for _, m := range s.modules {
+		if m.DeployToken != "" {
+			moduleTokens[m.ModuleKey] = m.DeployToken
+		}
+	}
+	return snapshot{
+		Version:      2,
+		User:         s.user,
+		Users:        s.users,
+		Groups:       s.groups,
+		Apps:         s.apps,
+		Grants:       s.grants,
+		Teams:        s.teams,
+		Categories:   s.categories,
+		Modules:      s.modules,
+		ModuleTokens: moduleTokens,
+		Versions:     s.versions,
+		Entries:      s.entries,
+		Releases:     s.releases,
+		Pages:        s.pages,
+		SearchLogs:   s.searchLogs,
+		MCPLogs:      s.mcpLogs,
+		Feedbacks:    s.feedbacks,
+		PageViews:    s.pageViews,
+		Navs:         s.navs,
+		HTML:         nil,
+		SiteFiles:    nil,
+		Embeddings:   nil,
+		Settings:     s.settings,
+		Seq:          s.seq,
+	}
+}
+
 func storeFromSnapshot(snap snapshot) *Store {
 	s := &Store{
 		user:       snap.User,

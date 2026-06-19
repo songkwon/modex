@@ -153,6 +153,12 @@ a {
   justify-content: center;
 }
 
+.icon-button.is-active {
+  color: hsl(var(--accent-strong));
+  border-color: hsl(var(--accent-border));
+  background: hsl(var(--accent-soft));
+}
+
 /* Topbar icon buttons must be uniform squares. `.nav a` has higher specificity
    than `.icon-button`, so size them explicitly here. */
 .nav .icon-button,
@@ -502,6 +508,17 @@ select {
   background: hsl(var(--panel));
   outline: none;
   color: hsl(var(--foreground));
+}
+
+.admin-layout input::placeholder,
+.admin-layout textarea::placeholder,
+.admin-layout .combo-control input::placeholder,
+.modal input::placeholder,
+.modal textarea::placeholder,
+.modal .combo-control input::placeholder {
+  color: hsl(var(--muted) / 0.72);
+  font-size: 12.5px;
+  font-weight: 400;
 }
 
 input:focus,
@@ -1354,6 +1371,10 @@ select:focus {
   grid-template-columns: 230px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+.admin-settings-content {
+  padding-bottom: clamp(96px, 12vh, 160px);
 }
 
 .admin-nav {

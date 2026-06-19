@@ -1,10 +1,26 @@
 "use client";
 
-import { ArrowUpRight, BookOpen, Info } from "lucide-react";
+import { ArrowUpRight, BookOpen, Heart, Info } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { isFavoriteModule, setFavoriteModule } from "@/lib/local-docs";
 import type { ModuleInfo } from "@/types/modex";
 
 export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (module: ModuleInfo) => void }) {
+  const [favorite, setFavorite] = useState(false);
+
+  useEffect(() => {
+    setFavorite(isFavoriteModule(module.module_key));
+  }, [module.module_key]);
+
+  function toggleFavorite() {
+    setFavorite((current) => {
+      const next = !current;
+      setFavoriteModule(module.module_key, next);
+      return next;
+    });
+  }
+
   return (
     <article className="package-row">
       <div>
@@ -45,6 +61,9 @@ export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (mo
           <dd>{module.updated_at.slice(0, 10)}</dd>
         </div>
         <div className="flex gap-2 pt-1">
+          <button className={`button icon-button${favorite ? " is-active" : ""}`} aria-label={favorite ? "取消关注" : "关注模块"} onClick={toggleFavorite}>
+            <Heart size={15} fill={favorite ? "currentColor" : "none"} />
+          </button>
           <button className="button icon-button" aria-label="模块信息" onClick={() => onInfo(module)}><Info size={15} /></button>
           <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>打开 <ArrowUpRight size={14} /></Link>
         </div>

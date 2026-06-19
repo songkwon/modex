@@ -2,10 +2,25 @@
 
 import { useEffect, useRef } from "react";
 import { capture } from "@/lib/analytics";
+import { recordRecentDoc } from "@/lib/local-docs";
 
 // Reading statistics are captured by PostHog. When PostHog is not configured,
 // capture() is a no-op and no reading data is collected.
-export function PageViewTracker({ docId }: { docId: string }) {
+export function PageViewTracker({
+  docId,
+  title,
+  moduleKey,
+  moduleName,
+  docsVersion,
+  entryKey,
+}: {
+  docId: string;
+  title?: string;
+  moduleKey?: string;
+  moduleName?: string;
+  docsVersion?: string;
+  entryKey?: string;
+}) {
   const startedAt = useRef(Date.now());
   const maxScroll = useRef(0);
   const readId = useRef("");
@@ -15,6 +30,17 @@ export function PageViewTracker({ docId }: { docId: string }) {
     maxScroll.current = 0;
     readId.current = crypto.randomUUID();
     capture("docs_page_view", { doc_id: docId, read_id: readId.current });
+    if (title && moduleKey && docsVersion && entryKey) {
+      recordRecentDoc({
+        doc_id: docId,
+        title,
+        module_key: moduleKey,
+        module_name: moduleName || moduleKey,
+        docs_version: docsVersion,
+        entry_key: entryKey,
+        href: `/docs/${moduleKey}/${docsVersion}/${entryKey}`,
+      });
+    }
 
     const onScroll = () => {
       const scrollable = document.documentElement.scrollHeight - window.innerHeight;
@@ -40,7 +66,7 @@ export function PageViewTracker({ docId }: { docId: string }) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
     };
-  }, [docId]);
+  }, [docId, docsVersion, entryKey, moduleKey, moduleName, title]);
 
   return null;
 }
