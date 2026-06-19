@@ -40,6 +40,18 @@ func DetectProjectKind(root string) string {
 		exists(filepath.Join(root, "content", "docs")) {
 		return "fumadocs"
 	}
+	if exists(filepath.Join(root, "docusaurus.config.js")) ||
+		exists(filepath.Join(root, "docusaurus.config.ts")) ||
+		exists(filepath.Join(root, "docusaurus.config.mjs")) {
+		return "docusaurus"
+	}
+	if exists(filepath.Join(root, "mkdocs.yml")) ||
+		exists(filepath.Join(root, "mkdocs.yaml")) {
+		return "mkdocs"
+	}
+	if exists(filepath.Join(root, "book.json")) {
+		return "honkit"
+	}
 	if exists(filepath.Join(root, "dist", "index.html")) ||
 		exists(filepath.Join(root, "public", "index.html")) {
 		return "static"
@@ -55,6 +67,12 @@ func DefaultEntry(root, kind string) Entry {
 		return Entry{Key: "guide", Title: "VuePress 文档", Type: "vuepress", Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vuepress/dist", ".vuepress/dist", "dist")}
 	case "fumadocs":
 		return Entry{Key: "guide", Title: "Fumadocs 文档", Type: "fumadocs", Source: firstExistingDir(root, "content/docs", "docs"), Build: detectBuildCommand(root, "build", "docs:build"), Output: firstOutput("out", ".next/server/app", "dist")}
+	case "docusaurus":
+		return Entry{Key: "guide", Title: "Docusaurus 文档", Type: "docusaurus", Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "build"), Output: firstOutput("build", "dist")}
+	case "mkdocs":
+		return Entry{Key: "guide", Title: "MkDocs 文档", Type: "mkdocs", Source: firstExistingDir(root, "docs", "."), Build: firstCommand("mkdocs build"), Output: firstOutput("site")}
+	case "honkit", "gitbook":
+		return Entry{Key: "guide", Title: "GitBook 文档", Type: kind, Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "build", "docs:build"), Output: firstOutput("_book", "book")}
 	case "static":
 		return Entry{Key: "legacy", Title: "静态文档", Type: "static", Source: firstExistingDir(root, "dist", "public")}
 	default:
@@ -144,6 +162,10 @@ func hasMarkdownFiles(root string) bool {
 }
 
 func firstOutput(candidates ...string) string {
+	return candidates[0]
+}
+
+func firstCommand(candidates ...string) string {
 	return candidates[0]
 }
 

@@ -181,9 +181,9 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
         <div className="mt-6">
           <h3 className="font-medium mb-2">推荐对接方式（与 Mintlify 类似）</h3>
           <div className="prose prose-sm max-w-none text-sm">
-            <p>推荐在<strong>文档仓库的 GitLab CI</strong> 中编译构建，然后通过 <code>docsctl</code> 打包 artifact 并部署到 modex。</p>
+            <p>推荐在<strong>文档仓库的 GitLab CI</strong> 中执行 <code>docsctl deploy</code>，自动完成校验、构建、打包和上传。</p>
             <ul>
-              <li>编译在源仓库环境完成（正确 Node 版本、依赖、VitePress/VuePress 插件等）。</li>
+              <li>编译在源仓库环境完成（正确 Node/Python 版本、依赖和文档框架插件）。</li>
               <li>modex 只接收预构建的静态站点 + 结构化元数据（无需在 modex 里实现各种渲染器）。</li>
               <li>一个仓库可以部署多个 Module（不同子目录 → 不同 module_key），分别归属不同“领域”（Category）。</li>
             </ul>
@@ -192,28 +192,18 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
           <div className="mt-4 p-4 bg-slate-50 rounded text-xs font-mono overflow-auto">
             <div className="mb-2 text-slate-500"># .gitlab-ci.yml 示例 (rd-doc 仓库)</div>
             <pre>{`include:
-  - project: 'devops/docs-ci-templates'
-    ref: main
-    file: '/templates/docs-deploy.yml'
+  - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
-  DOCS_MODULE: "rd-standards"          # 或 rd-version-control / rd-workflow 等
+  MODEX_MODULE_KEY: "rd-standards"     # 必须等于 modex 后台文档源 key
   DOCS_VERSION: "latest"
-  DOCS_BUILDER: "vitepress"            # 或 vuepress / markdown
+  DOCS_BUILDER: "vitepress"            # vitepress/vuepress/fumadocs/docusaurus/mkdocs/honkit/gitbook/markdown/static
   DOCS_SOURCE_DIR: "docs/standard"     # rd-doc 的子目录，映射到 modex 指定位置
-  DOCS_DEPLOY_URL: "https://modex.example.com/api/deploy"
-  # DOCS_DEPLOY_TOKEN: 从上方生成并复制到 GitLab CI Secret
+  DOCS_BUILD: "npm ci && npm run docs:build"
+  DOCS_OUTPUT: "docs/.vitepress/dist"
+  MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
 
-# 或者自定义 job
-deploy-to-modex:
-  stage: deploy
-  script:
-    - npm ci && npm run docs:build   # 你的构建命令
-    - docsctl package
-    - docsctl deploy
-  only:
-    - main
-  when: on_success`}</pre>
+# DOCS_DEPLOY_TOKEN: 从上方生成并复制到 GitLab CI Variables（Masked + Protected）`}</pre>
           </div>
 
           <p className="mt-3 text-sm text-slate-600">

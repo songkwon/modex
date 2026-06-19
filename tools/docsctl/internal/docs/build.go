@@ -51,16 +51,26 @@ func Build(root, outDir string) error {
 			nav = append(nav, navItem)
 			manifestEntries = append(manifestEntries, entry)
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
-		case "vitepress", "vuepress", "fumadocs":
+		case "vitepress", "vuepress", "fumadocs", "docusaurus", "mkdocs", "honkit", "gitbook":
 			if _, err := buildCommandEntry(root, outDir, md, entry); err != nil {
 				return err
 			}
-			label := "VuePress"
+			label := entry.Type
 			switch entry.Type {
 			case "fumadocs":
 				label = "Fumadocs"
 			case "vitepress":
 				label = "VitePress"
+			case "vuepress":
+				label = "VuePress"
+			case "docusaurus":
+				label = "Docusaurus"
+			case "mkdocs":
+				label = "MkDocs"
+			case "honkit":
+				label = "HonKit"
+			case "gitbook":
+				label = "GitBook"
 			}
 			// Index from the source markdown (one record per page/route) rather
 			// than the stripped site HTML, which is a single nav-polluted blob.

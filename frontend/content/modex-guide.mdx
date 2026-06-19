@@ -76,32 +76,32 @@ npm run dev
 
 <Steps>
   <Step title="在后台创建文档源">
-    选择文档框架、归属分类和负责团队，然后生成 Deploy Token。
+    到「管理控制台 / 文档源管理」创建文档源，选择框架、归属分类和负责团队，然后复制 Deploy Token。
   </Step>
-  <Step title="在文档仓库构建">
-    VuePress、VitePress、Fumadocs 等框架仍在源仓库自己的 CI 环境中构建。
+  <Step title="在文档仓库配置 CI">
+    把 Deploy Token 保存为 GitLab CI 变量 `MODEX_DEPLOY_TOKEN`，并 include Modex 提供的 CI 模板。
   </Step>
-  <Step title="用 docsctl 打包">
-    `docsctl package` 会生成包含 `metadata.json`、`manifest.json`、`documents.jsonl`、`nav.json` 和 `site/` 的标准 zip。
-  </Step>
-  <Step title="推送到 Modex">
-    `docsctl deploy` 将 artifact 上传到 `/api/deploy`，并携带 `X-Modex-Deploy-Token`。
+  <Step title="推送默认分支">
+    CI 会运行 `docsctl deploy`。这个命令会自动 validate、build、package、upload，用户不需要手动串多个步骤。
   </Step>
   <Step title="自动归档和索引">
     后端解析 artifact，写入模块、版本、条目、页面、导航和静态资源，并清理该版本旧 embedding。
   </Step>
 </Steps>
 
+## docsctl 使用方式
+
+docsctl 的目标是把接入做简单：本地调试时一条命令，生产环境由 GitLab CI 自动执行同一条命令。
+
 <CodeGroup>
 
-```bash docsctl
-DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl validate
-DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl build
-DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl package
-DOCS_DEPLOY_URL=http://localhost:8671/api/deploy \
-DOCS_DEPLOY_TOKEN=your-token \
-DOCS_ARTIFACT=/path/to/docs/.modex/docs-artifact.zip \
-go run ./cmd/docsctl deploy
+```bash 本地调试
+docsctl deploy \
+  --source /path/to/docs \
+  --module rd-doc \
+  --version latest \
+  --deploy-url https://modex.example.com/api/deploy \
+  --token "$MODEX_DEPLOY_TOKEN"
 ```
 
 ```yaml GitLab CI
@@ -114,10 +114,26 @@ variables:
   DOCS_BUILD: "npm ci && npm run docs:build"
   DOCS_OUTPUT: "docs/.vitepress/dist"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
-  # MODEX_DEPLOY_TOKEN: set in CI/CD Variables, masked and protected
+  # MkDocs 等非 Node 构建可覆盖镜像：
+  # MODEX_DOCS_IMAGE: "python:3.12-bookworm"
+
+# MODEX_DEPLOY_TOKEN 在 GitLab Settings > CI/CD > Variables 中配置，设为 Masked + Protected。
 ```
 
 </CodeGroup>
+
+<CardGroup cols={2}>
+  <Card title="直接支持" icon="Package">
+    `markdown`、`vitepress`、`vuepress`、`fumadocs`、`docusaurus`、`mkdocs`、`honkit`、`gitbook`、`static`。
+  </Card>
+  <Card title="通用静态站" icon="Globe">
+    其他框架只要能产出 HTML 静态目录，都可以用 `DOCS_BUILDER=static` 接入。
+  </Card>
+</CardGroup>
+
+<Note>
+部署前必须先在 Modex 后台创建同名文档源。比如命令里 `--module sparklers`，后台文档源的 module key 也必须是 `sparklers`；否则会返回 `module_not_found`。
+</Note>
 
 ## 发布诊断
 
