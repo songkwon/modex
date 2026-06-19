@@ -38,6 +38,8 @@ export function UserMenu() {
   const [user, setUser] = useState<User | null>(null);
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   const [open, setOpen] = useState(false);
+  const [checkedMe, setCheckedMe] = useState(false);
+  const autoLoginStarted = useRef(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,7 +54,8 @@ export function UserMenu() {
           groups: u.groups,
         });
       })
-      .catch(() => setUser(null));
+      .catch(() => setUser(null))
+      .finally(() => setCheckedMe(true));
     getAuthConfig().then(setCfg).catch(() => {});
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -61,7 +64,21 @@ export function UserMenu() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  useEffect(() => {
+    if (!checkedMe || user || !cfg?.auto_login || autoLoginStarted.current) return;
+    if (typeof window !== "undefined" && window.sessionStorage.getItem("modex_manual_logout") === "1") return;
+    autoLoginStarted.current = true;
+    if (cfg.auth_mode === "oidc") {
+      if (cfg.login_url) window.location.href = cfg.login_url;
+      return;
+    }
+    mockLogin()
+      .then((res) => setUser(res.user))
+      .catch(() => {});
+  }, [cfg, checkedMe, user]);
+
   async function login() {
+    if (typeof window !== "undefined") window.sessionStorage.removeItem("modex_manual_logout");
     if (cfg?.auth_mode === "oidc") {
       if (cfg.login_url) window.location.href = cfg.login_url;
       else alert("Keycloak OIDC 未完整配置：请检查 KEYCLOAK_BASE_URL / KEYCLOAK_REALM / OIDC_CLIENT_ID 等环境变量。");
@@ -73,6 +90,7 @@ export function UserMenu() {
 
   async function signOut() {
     await logout();
+    if (typeof window !== "undefined") window.sessionStorage.setItem("modex_manual_logout", "1");
     setUser(null);
     setOpen(false);
   }

@@ -223,11 +223,41 @@ CREATE TABLE IF NOT EXISTS docs_page_view (
   page_id TEXT REFERENCES docs_page(id),
   module_id TEXT REFERENCES docs_module(id),
   version_id TEXT REFERENCES docs_version(id),
+  doc_id TEXT,
+  module_key TEXT,
+  module_name TEXT,
+  docs_version TEXT,
+  entry_key TEXT,
+  title TEXT,
+  path TEXT,
   user_id TEXT REFERENCES users(id),
   session_id TEXT,
+  read_id TEXT,
   duration_seconds INT,
   scroll_depth NUMERIC,
   viewed_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_favorite (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  module_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, module_key)
+);
+
+CREATE TABLE IF NOT EXISTS user_recent_doc (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  doc_id TEXT NOT NULL,
+  title TEXT,
+  module_key TEXT,
+  module_name TEXT,
+  docs_version TEXT,
+  entry_key TEXT,
+  href TEXT,
+  viewed_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, doc_id)
 );
 
 CREATE TABLE IF NOT EXISTS docs_search_log (
@@ -337,6 +367,14 @@ ALTER TABLE docs_page ADD COLUMN IF NOT EXISTS content_md TEXT;
 
 ALTER TABLE docs_page_view ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE docs_page_view ALTER COLUMN id TYPE TEXT USING id::text;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS doc_id TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS module_key TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS module_name TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS docs_version TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS entry_key TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS path TEXT;
+ALTER TABLE docs_page_view ADD COLUMN IF NOT EXISTS read_id TEXT;
 ALTER TABLE docs_search_log ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE docs_search_log ALTER COLUMN id TYPE TEXT USING id::text;
 ALTER TABLE docs_search_log ADD COLUMN IF NOT EXISTS ip_address TEXT;

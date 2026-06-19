@@ -9,14 +9,15 @@ type RangeDays = 7 | 30 | 90;
 
 // DocReadStats renders an "eye" button on a document page. Clicking it opens a
 // popover with the page's reading activity: a daily read trend line chart and a
-// per-reader breakdown. Data comes exclusively from PostHog.
+// per-reader breakdown from PostHog when configured, otherwise the built-in
+// first-party analytics store.
 export function DocReadStats({ docId }: { docId: string }) {
-  const posthogEnabled = Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("trend");
   const [days, setDays] = useState<RangeDays>(30);
   const [data, setData] = useState<Stats | null>(null);
+  const [source, setSource] = useState<"posthog" | "builtin">("builtin");
   const [error, setError] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -27,6 +28,7 @@ export function DocReadStats({ docId }: { docId: string }) {
     getDocAnalytics(docId, days)
       .then((res) => {
         setData(res.stats);
+        setSource(res.source);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -52,8 +54,6 @@ export function DocReadStats({ docId }: { docId: string }) {
     };
   }, [open]);
 
-  if (!posthogEnabled) return null;
-
   return (
     <div className="read-stats" ref={ref}>
       <button
@@ -71,7 +71,7 @@ export function DocReadStats({ docId }: { docId: string }) {
         <div className="read-stats-pop">
           <div className="read-stats-head">
             <strong>阅读情况</strong>
-            <span className="tag">PostHog</span>
+            <span className="tag">{source === "posthog" ? "PostHog" : "内置统计"}</span>
             <select
               className="read-stats-range"
               value={days}

@@ -47,6 +47,10 @@ export const askAI = (query: string, scope?: { module_key?: string; category_ids
 
 export const recordDocFeedback = (body: { doc_id: string; rating: "good" | "bad"; session_id: string; comment?: string }) =>
   api<{ status: string }>("/api/analytics/feedback", { method: "POST", body: JSON.stringify(body) });
+export const recordPageView = (body: { doc_id: string; session_id: string; read_id: string }) =>
+  api<{ status: string }>("/api/analytics/page-view", { method: "POST", body: JSON.stringify(body) });
+export const recordReadProgress = (body: { doc_id: string; session_id: string; read_id: string; duration_seconds: number; scroll_depth: number }) =>
+  api<{ status: string }>("/api/analytics/read-progress", { method: "POST", body: JSON.stringify(body) });
 
 export type DocReadStats = {
   doc_id: string;
@@ -56,9 +60,29 @@ export type DocReadStats = {
   readers: { reader: string; user_id: string; count: number; avg_duration_seconds: number; last_read_at: string }[];
 };
 export const getDocAnalytics = (docId: string, days = 30) =>
-  api<{ source: "posthog"; stats: DocReadStats }>(
+  api<{ source: "posthog" | "builtin"; stats: DocReadStats }>(
     `/api/analytics/doc?doc_id=${encodeURIComponent(docId)}&days=${days}`
   );
+
+export type UserFavorite = { id: string; user_id: string; module_key: string; created_at: string };
+export type RecentDoc = {
+  id?: string;
+  user_id?: string;
+  doc_id: string;
+  title: string;
+  module_key: string;
+  module_name: string;
+  docs_version: string;
+  entry_key: string;
+  href: string;
+  viewed_at?: string;
+};
+export const getMyFavorites = () => api<{ favorites: UserFavorite[] }>("/api/me/favorites");
+export const setMyFavorite = (moduleKey: string, favorite: boolean) =>
+  api<{ favorites: UserFavorite[] }>("/api/me/favorites", { method: "POST", body: JSON.stringify({ module_key: moduleKey, favorite }) });
+export const getMyRecentDocs = () => api<{ recent: RecentDoc[] }>("/api/me/recent");
+export const recordMyRecentDoc = (recent: RecentDoc) =>
+  api<{ recent: RecentDoc }>("/api/me/recent", { method: "POST", body: JSON.stringify(recent) });
 
 export const getUsers = (keyword = "") => api<User[]>(`/api/admin/users${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`);
 export const createUser = (body: Partial<User>) => api<User>("/api/admin/users", { method: "POST", body: JSON.stringify(body) });

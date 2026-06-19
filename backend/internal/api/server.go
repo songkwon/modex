@@ -123,6 +123,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/embeddings/embed-text", s.handleEmbedText)
 	mux.HandleFunc("/api/embeddings/reindex", s.handleEmbeddingReindex)
 	mux.HandleFunc("/api/deploy", s.handleDeploy)
+	mux.HandleFunc("/api/analytics/page-view", s.handlePageView)
+	mux.HandleFunc("/api/analytics/read-progress", s.handleReadProgress)
 	mux.HandleFunc("/api/analytics/feedback", s.handleDocFeedback)
 	mux.HandleFunc("/api/analytics/doc", s.handleDocAnalytics)
 	mux.HandleFunc("/api/admin/releases", s.handleReleases)
@@ -132,6 +134,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/analytics/mcp", s.handleMCPLogs)
 	mux.HandleFunc("/api/admin/analytics/pages", http.NotFound)
 	mux.HandleFunc("/api/mcp/log", s.handleMCPLog)
+	mux.HandleFunc("/api/me/favorites", s.handleMeFavorites)
+	mux.HandleFunc("/api/me/recent", s.handleMeRecent)
 	mux.HandleFunc("/api/mcp/dist", s.handleMcpDist)
 	mux.HandleFunc("/api/mcp/dist/", s.handleMcpDist)
 	mux.HandleFunc("/.well-known/agent-skills/index.json", s.handleSkillDiscovery)
@@ -202,6 +206,7 @@ func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "session_failed", err.Error())
 		return
 	}
+	s.persistStore("mock login")
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
@@ -226,6 +231,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	// Sync the SSO identity (and its groups) into the user directory.
 	s.app.Store().UpsertUser(user)
+	s.persistStore("oidc login")
 	http.Redirect(w, r, frontend, http.StatusFound)
 }
 
@@ -247,6 +253,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"oidc_login_enabled": cfg.LoginReady(),
 		"login_url":          loginURL,
 		"frontend_base_url":  cfg.FrontendBaseURL,
+		"auto_login":         cfg.AutoLogin,
 		// Effective doc-engine plugin state (enabled + non-secret config) so the
 		// renderer can conditionally apply plugins without admin rights.
 		"plugins": s.app.Store().PluginEffective(),
@@ -462,6 +469,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		filters, _ := json.Marshal(req.Filters)
 		user, _ := s.currentUser(r)
 		s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
+		s.persistStore("search log")
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -504,6 +512,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	answer, provider := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
 	user, _ := s.currentUser(r)
 	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
+	s.persistStore("ask log")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"query":    req.Query,
 		"answer":   answer,
@@ -602,7 +611,7 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		saved := s.app.Store().SaveAISettings(body)
-		writeJSON(w, http.StatusOK, maskedSettings(saved))
+		s.writeMutation(w, maskedSettings(saved), http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
@@ -680,7 +689,7 @@ func (s *Server) handleAdminPlugins(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.app.Store().SavePluginSettings(body.Plugins)})
+		s.writeMutation(w, map[string]any{"plugins": s.app.Store().SavePluginSettings(body.Plugins)}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
@@ -705,7 +714,7 @@ func (s *Server) handleAdminPluginImport(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "invalid_plugin", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"plugin": saved, "plugins": s.app.Store().PluginStates()})
+		s.writeMutation(w, map[string]any{"plugin": saved, "plugins": s.app.Store().PluginStates()}, http.StatusOK, nil)
 	case http.MethodDelete:
 		if key == "" {
 			writeError(w, http.StatusBadRequest, "bad_request", "plugin key required")
@@ -715,7 +724,7 @@ func (s *Server) handleAdminPluginImport(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusNotFound, "not_found", "plugin not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "key": key, "plugins": s.app.Store().PluginStates()})
+		s.writeMutation(w, map[string]any{"status": "deleted", "key": key, "plugins": s.app.Store().PluginStates()}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST or DELETE")
 	}
@@ -751,7 +760,7 @@ func (s *Server) handleAdminSnippets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		snips, vars := s.app.Store().SaveSnippetData(body.Snippets, body.Variables)
-		writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
+		s.writeMutation(w, map[string]any{"snippets": snips, "variables": vars}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
@@ -1043,7 +1052,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "deploy_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "published", "result": result})
+	s.writeMutation(w, map[string]any{"status": "published", "result": result}, http.StatusAccepted, nil)
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
@@ -1078,9 +1087,58 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, releases)
 }
 
+func (s *Server) handlePageView(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	var req struct {
+		DocID     string `json:"doc_id"`
+		SessionID string `json:"session_id"`
+		ReadID    string `json:"read_id"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	req.DocID = strings.TrimSpace(req.DocID)
+	if req.DocID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "doc_id is required")
+		return
+	}
+	user, _ := s.currentUser(r)
+	pv := s.app.Store().RecordPageView(store.PageView{DocID: req.DocID, UserID: user.ID, SessionID: req.SessionID, ReadID: req.ReadID})
+	s.writeMutation(w, map[string]any{"status": "recorded", "page_view": pv}, http.StatusAccepted, nil)
+}
+
+func (s *Server) handleReadProgress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	var req struct {
+		DocID           string  `json:"doc_id"`
+		SessionID       string  `json:"session_id"`
+		ReadID          string  `json:"read_id"`
+		DurationSeconds int     `json:"duration_seconds"`
+		ScrollDepth     float64 `json:"scroll_depth"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	req.DocID = strings.TrimSpace(req.DocID)
+	if req.DocID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "doc_id is required")
+		return
+	}
+	pv := s.app.Store().RecordReadProgress(req.DocID, req.SessionID, req.ReadID, req.DurationSeconds, req.ScrollDepth)
+	s.writeMutation(w, map[string]any{"status": "recorded", "page_view": pv}, http.StatusAccepted, nil)
+}
+
 // handleDocAnalytics powers the doc-page "eye" popover: a daily read trend and
-// a per-reader breakdown for one document. Reading statistics are available
-// only when the server-side PostHog query credentials are configured.
+// a per-reader breakdown for one document. PostHog is preferred when configured;
+// otherwise the built-in first-party page-view store returns the same shape.
 func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
 	docID := strings.TrimSpace(r.URL.Query().Get("doc_id"))
 	if docID == "" {
@@ -1096,13 +1154,68 @@ func (s *Server) handleDocAnalytics(w http.ResponseWriter, r *http.Request) {
 	stats, err := posthogDocStats(docID, days)
 	if err != nil {
 		if errors.Is(err, errPosthogNotConfigured) {
-			writeError(w, http.StatusServiceUnavailable, "posthog_not_configured", "reading statistics are unavailable because PostHog is not configured")
+			writeJSON(w, http.StatusOK, map[string]any{"source": "builtin", "stats": s.app.Store().PageReadStats(docID, days)})
 			return
 		}
 		writeError(w, http.StatusBadGateway, "posthog_error", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"source": "posthog", "stats": stats})
+}
+
+func (s *Server) handleMeFavorites(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"favorites": s.app.Store().UserFavorites(user.ID)})
+	case http.MethodPost:
+		var req struct {
+			ModuleKey string `json:"module_key"`
+			Favorite  bool   `json:"favorite"`
+		}
+		if err := decodeBody(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		favorites, err := s.app.Store().SetUserFavorite(user.ID, req.ModuleKey, req.Favorite)
+		s.writeMutation(w, map[string]any{"favorites": favorites}, http.StatusOK, err)
+	case http.MethodDelete:
+		var req struct {
+			ModuleKey string `json:"module_key"`
+		}
+		if err := decodeBody(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		favorites, err := s.app.Store().SetUserFavorite(user.ID, req.ModuleKey, false)
+		s.writeMutation(w, map[string]any{"favorites": favorites}, http.StatusOK, err)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET, POST or DELETE")
+	}
+}
+
+func (s *Server) handleMeRecent(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"recent": s.app.Store().UserRecentDocs(user.ID, 30)})
+	case http.MethodPost:
+		var req store.UserRecentDoc
+		if err := decodeBody(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		recent, err := s.app.Store().RecordUserRecentDoc(user.ID, req)
+		s.writeMutation(w, map[string]any{"recent": recent}, http.StatusAccepted, err)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
+	}
 }
 
 func (s *Server) handleDocFeedback(w http.ResponseWriter, r *http.Request) {
@@ -1135,7 +1248,7 @@ func (s *Server) handleDocFeedback(w http.ResponseWriter, r *http.Request) {
 	f := s.app.Store().AddDocFeedback(store.DocFeedback{
 		DocID: req.DocID, Rating: req.Rating, Comment: req.Comment, UserID: user.ID, SessionID: req.SessionID,
 	})
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded", "feedback": f})
+	s.writeMutation(w, map[string]any{"status": "recorded", "feedback": f}, http.StatusAccepted, nil)
 }
 
 func (s *Server) handleDocFeedbackLogs(w http.ResponseWriter, r *http.Request) {
@@ -1290,7 +1403,7 @@ func (s *Server) handleMCPLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.app.Store().AddMCPLog(store.MCPLog{ID: fmt.Sprintf("ml-%d", time.Now().UnixNano()), ToolName: req.ToolName, UserID: user.ID, Query: req.Query, InputJSON: req.InputJSON, ResultCount: req.ResultCount, CreatedAt: time.Now().UTC()})
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "logged"})
+	s.writeMutation(w, map[string]any{"status": "logged"}, http.StatusAccepted, nil)
 }
 
 func (s *Server) mcpLogUser(r *http.Request) (store.User, bool) {
@@ -1325,7 +1438,7 @@ func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "update_failed", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"mcp_token": updated.MCPToken})
+		s.writeMutation(w, map[string]string{"mcp_token": updated.MCPToken}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 	}
@@ -1646,7 +1759,7 @@ func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created, err := s.app.Store().CreateCategory(c)
-	writeMutation(w, created, http.StatusCreated, err)
+	s.writeMutation(w, created, http.StatusCreated, err)
 }
 
 func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request) {
@@ -1670,7 +1783,7 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		moved, err := s.app.Store().MoveCategory(id, body.ParentID, body.Index)
-		writeMutation(w, moved, http.StatusOK, err)
+		s.writeMutation(w, moved, http.StatusOK, err)
 		return
 	}
 	if _, ok := s.requirePlatform(w, r, []string{id}); !ok {
@@ -1684,13 +1797,13 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		updated, err := s.app.Store().UpdateCategory(id, c)
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
 		if err := s.app.Store().DeleteCategory(id); err != nil {
 			writeResult(w, nil, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": id})
+		s.writeMutation(w, map[string]any{"status": "deleted", "id": id}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use PUT or DELETE")
 	}
@@ -1744,7 +1857,7 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created, err := s.app.Store().CreateModule(m)
-	writeMutation(w, created, http.StatusCreated, err)
+	s.writeMutation(w, created, http.StatusCreated, err)
 }
 
 func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request) {
@@ -1777,6 +1890,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 				writeResult(w, nil, err)
 				return
 			}
+			s.persistStore("deploy token rotation")
 			m.DeployToken = token
 		} else if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
@@ -1813,7 +1927,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		updated, err := s.app.Store().UpdateModule(moduleKey, m)
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	case len(parts) == 2 && parts[1] == "versions" && r.Method == http.MethodPost:
 		var v store.Version
 		if err := decodeBody(r, &v); err != nil {
@@ -1821,7 +1935,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		created, err := s.app.Store().CreateVersion(moduleKey, v)
-		writeMutation(w, created, http.StatusCreated, err)
+		s.writeMutation(w, created, http.StatusCreated, err)
 	case len(parts) == 3 && parts[1] == "versions" && r.Method == http.MethodPut:
 		var v store.Version
 		if err := decodeBody(r, &v); err != nil {
@@ -1829,7 +1943,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		updated, err := s.app.Store().UpdateVersion(moduleKey, parts[2], v)
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	case len(parts) == 4 && parts[1] == "versions" && parts[3] == "entries" && r.Method == http.MethodPost:
 		var e store.Entry
 		if err := decodeBody(r, &e); err != nil {
@@ -1837,7 +1951,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		created, err := s.app.Store().CreateEntry(moduleKey, parts[2], e)
-		writeMutation(w, created, http.StatusCreated, err)
+		s.writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "admin module route not found")
 	}
@@ -1879,7 +1993,7 @@ func (s *Server) handleMigrateModule(w http.ResponseWriter, r *http.Request, mod
 		CategoryPath: strings.Join(names, " / "),
 		OwnerGroup:   req.OwnerGroup,
 	})
-	writeMutation(w, updated, http.StatusOK, err)
+	s.writeMutation(w, updated, http.StatusOK, err)
 }
 
 func (s *Server) handleAdminEntryByID(w http.ResponseWriter, r *http.Request) {
@@ -1899,13 +2013,13 @@ func (s *Server) handleAdminEntryByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updated, err := s.app.Store().UpdateEntry(entryID, e)
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
 		if err := s.app.Store().DeleteEntry(entryID); err != nil {
 			writeResult(w, nil, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": entryID})
+		s.writeMutation(w, map[string]any{"status": "deleted", "id": entryID}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use PUT or DELETE")
 	}
@@ -1933,7 +2047,7 @@ func (s *Server) handleReleaseRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 2 && parts[1] == "rollback" && r.Method == http.MethodPost {
 		rel, err = s.app.Store().RollbackRelease(releaseID)
-		writeResult(w, rel, err)
+		s.writeMutation(w, rel, http.StatusOK, err)
 		return
 	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
@@ -1970,7 +2084,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			created.SuperAdmin = s.app.Auth().IsSuperAdmin(created)
 		}
-		writeMutation(w, created, http.StatusCreated, err)
+		s.writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 	}
@@ -1998,13 +2112,13 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			updated.SuperAdmin = s.app.Auth().IsSuperAdmin(updated)
 		}
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
 		if err := s.app.Store().DeleteUser(id); err != nil {
 			writeResult(w, nil, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": id})
+		s.writeMutation(w, map[string]any{"status": "deleted", "id": id}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET, PUT or DELETE")
 	}
@@ -2024,7 +2138,7 @@ func (s *Server) handleAdminGroups(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		created, err := s.app.Store().CreateGroup(g)
-		writeMutation(w, created, http.StatusCreated, err)
+		s.writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 	}
@@ -2059,7 +2173,7 @@ func (s *Server) handleAdminTeams(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		created, err := s.app.Store().CreateTeam(t)
-		writeMutation(w, created, http.StatusCreated, err)
+		s.writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 	}
@@ -2109,7 +2223,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			updated, err := s.app.Store().UpdateTeam(key, t)
-			writeMutation(w, updated, http.StatusOK, err)
+			s.writeMutation(w, updated, http.StatusOK, err)
 		case http.MethodDelete:
 			if _, ok := s.requireSuperAdmin(w, r); !ok {
 				return
@@ -2118,7 +2232,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 				writeResult(w, nil, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "key": key})
+			s.writeMutation(w, map[string]any{"status": "deleted", "key": key}, http.StatusOK, nil)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET/PUT/DELETE")
 		}
@@ -2144,7 +2258,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updated, err := s.app.Store().AddTeamMember(key, req.Username)
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	case len(parts) == 3 && parts[1] == "members" && r.Method == http.MethodDelete:
 		// Leader or super can remove member.
 		user, ok := s.requireUser(w, r)
@@ -2157,7 +2271,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 		}
 		member := parts[2]
 		updated, err := s.app.Store().RemoveTeamMember(key, member)
-		writeMutation(w, updated, http.StatusOK, err)
+		s.writeMutation(w, updated, http.StatusOK, err)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "team route not found")
 	}
@@ -2171,12 +2285,24 @@ func decodeBody(r *http.Request, v any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(v)
 }
 
-func writeMutation(w http.ResponseWriter, v any, successStatus int, err error) {
+func (s *Server) writeMutation(w http.ResponseWriter, v any, successStatus int, err error) {
 	if err != nil {
 		writeResult(w, nil, err)
 		return
 	}
+	s.persistStore("mutation")
 	writeJSON(w, successStatus, v)
+}
+
+func (s *Server) persistStore(reason string) {
+	if !s.app.HasRepository() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := s.app.Save(ctx); err != nil {
+		log.Printf("persist relational store after %s: %v", reason, err)
+	}
 }
 
 func writeResult(w http.ResponseWriter, v any, err error) {

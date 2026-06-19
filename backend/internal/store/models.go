@@ -383,12 +383,37 @@ type PageView struct {
 	PageID          string    `json:"page_id"`
 	DocID           string    `json:"doc_id"`
 	ModuleKey       string    `json:"module_key"`
+	ModuleName      string    `json:"module_name,omitempty"`
 	DocsVersion     string    `json:"docs_version"`
+	EntryKey        string    `json:"entry_key,omitempty"`
+	Title           string    `json:"title,omitempty"`
+	Path            string    `json:"path,omitempty"`
 	UserID          string    `json:"user_id"`
 	SessionID       string    `json:"session_id"`
+	ReadID          string    `json:"read_id,omitempty"`
 	DurationSeconds int       `json:"duration_seconds"`
 	ScrollDepth     float64   `json:"scroll_depth"`
 	ViewedAt        time.Time `json:"viewed_at"`
+}
+
+type UserFavorite struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	ModuleKey string    `json:"module_key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type UserRecentDoc struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	DocID       string    `json:"doc_id"`
+	Title       string    `json:"title"`
+	ModuleKey   string    `json:"module_key"`
+	ModuleName  string    `json:"module_name"`
+	DocsVersion string    `json:"docs_version"`
+	EntryKey    string    `json:"entry_key"`
+	Href        string    `json:"href"`
+	ViewedAt    time.Time `json:"viewed_at"`
 }
 
 // PageStat is an aggregated reading-statistics row for one document page.

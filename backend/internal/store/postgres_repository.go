@@ -139,7 +139,7 @@ func (p *PostgresRepository) Save(ctx context.Context, s *Store) error {
 	}
 	for _, table := range []string{
 		"oauth_grant", "connected_app", "docs_page_view", "docs_feedback",
-		"docs_search_log", "docs_mcp_log", "docs_page", "docs_release",
+		"user_recent_doc", "user_favorite", "docs_search_log", "docs_mcp_log", "docs_page", "docs_release",
 		"docs_entry", "docs_version", "docs_module_category", "docs_module",
 		"docs_category", "user_groups", "teams", "groups", "users",
 		"docs_nav", "platform_settings", "store_metadata",
@@ -258,7 +258,19 @@ func (p *PostgresRepository) Save(ctx context.Context, s *Store) error {
 		}
 	}
 	for _, v := range state.PageViews {
-		_, err = tx.Exec(ctx, `INSERT INTO docs_page_view(id,page_id,module_id,version_id,user_id,session_id,duration_seconds,scroll_depth,viewed_at) VALUES($1,NULLIF($2,''),NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),$6,$7,$8,NULLIF($9,'')::timestamptz)`, v.ID, v.PageID, moduleIDs[v.ModuleKey], versionIDs[v.ModuleKey+"\x00"+v.DocsVersion], v.UserID, v.SessionID, v.DurationSeconds, v.ScrollDepth, timeText(v.ViewedAt))
+		_, err = tx.Exec(ctx, `INSERT INTO docs_page_view(id,page_id,module_id,version_id,doc_id,module_key,module_name,docs_version,entry_key,title,path,user_id,session_id,read_id,duration_seconds,scroll_depth,viewed_at) VALUES($1,NULLIF($2,''),NULLIF($3,''),NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,NULLIF($12,''),$13,$14,$15,$16,NULLIF($17,'')::timestamptz)`, v.ID, v.PageID, moduleIDs[v.ModuleKey], versionIDs[v.ModuleKey+"\x00"+v.DocsVersion], v.DocID, v.ModuleKey, v.ModuleName, v.DocsVersion, v.EntryKey, v.Title, v.Path, v.UserID, v.SessionID, v.ReadID, v.DurationSeconds, v.ScrollDepth, timeText(v.ViewedAt))
+		if err != nil {
+			return err
+		}
+	}
+	for _, v := range state.Favorites {
+		_, err = tx.Exec(ctx, `INSERT INTO user_favorite(id,user_id,module_key,created_at) VALUES($1,$2,$3,NULLIF($4,'')::timestamptz)`, v.ID, v.UserID, v.ModuleKey, timeText(v.CreatedAt))
+		if err != nil {
+			return err
+		}
+	}
+	for _, v := range state.RecentDocs {
+		_, err = tx.Exec(ctx, `INSERT INTO user_recent_doc(id,user_id,doc_id,title,module_key,module_name,docs_version,entry_key,href,viewed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NULLIF($10,'')::timestamptz)`, v.ID, v.UserID, v.DocID, v.Title, v.ModuleKey, v.ModuleName, v.DocsVersion, v.EntryKey, v.Href, timeText(v.ViewedAt))
 		if err != nil {
 			return err
 		}
@@ -368,7 +380,13 @@ func (p *PostgresRepository) load(ctx context.Context) (*Store, bool, error) {
 	if err := loadQuery(ctx, p.pool, `SELECT to_jsonb(t) FROM docs_feedback t ORDER BY created_at,id`, &snap.Feedbacks); err != nil {
 		return nil, false, err
 	}
-	if err := loadQuery(ctx, p.pool, `SELECT (to_jsonb(pv)-'module_id'-'version_id') || jsonb_build_object('doc_id',COALESCE(p.doc_id,''),'module_key',COALESCE(m.module_key,''),'docs_version',COALESCE(v.docs_version,'')) FROM docs_page_view pv LEFT JOIN docs_page p ON p.id=pv.page_id LEFT JOIN docs_module m ON m.id=pv.module_id LEFT JOIN docs_version v ON v.id=pv.version_id ORDER BY viewed_at,pv.id`, &snap.PageViews); err != nil {
+	if err := loadQuery(ctx, p.pool, `SELECT (to_jsonb(pv)-'module_id'-'version_id') || jsonb_build_object('doc_id',COALESCE(NULLIF(pv.doc_id,''),p.doc_id,''),'module_key',COALESCE(NULLIF(pv.module_key,''),m.module_key,''),'module_name',COALESCE(NULLIF(pv.module_name,''),m.name,''),'docs_version',COALESCE(NULLIF(pv.docs_version,''),v.docs_version,''),'entry_key',COALESCE(NULLIF(pv.entry_key,''),e.entry_key,''),'title',COALESCE(NULLIF(pv.title,''),p.title,''),'path',COALESCE(NULLIF(pv.path,''),p.path,'')) FROM docs_page_view pv LEFT JOIN docs_page p ON p.id=pv.page_id LEFT JOIN docs_module m ON m.id=COALESCE(pv.module_id,p.module_id) LEFT JOIN docs_version v ON v.id=COALESCE(pv.version_id,p.version_id) LEFT JOIN docs_entry e ON e.id=p.entry_id ORDER BY viewed_at,pv.id`, &snap.PageViews); err != nil {
+		return nil, false, err
+	}
+	if err := loadQuery(ctx, p.pool, `SELECT to_jsonb(t) FROM user_favorite t ORDER BY created_at,id`, &snap.Favorites); err != nil {
+		return nil, false, err
+	}
+	if err := loadQuery(ctx, p.pool, `SELECT to_jsonb(t) FROM user_recent_doc t ORDER BY viewed_at,id`, &snap.RecentDocs); err != nil {
 		return nil, false, err
 	}
 	rows, err = p.pool.Query(ctx, `SELECT module_key,deploy_token FROM docs_module WHERE COALESCE(deploy_token,'')<>''`)

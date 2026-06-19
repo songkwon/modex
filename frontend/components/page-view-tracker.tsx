@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { capture } from "@/lib/analytics";
-import { recordRecentDoc } from "@/lib/local-docs";
+import { capture, sessionId } from "@/lib/analytics";
+import { recordPageView, recordReadProgress } from "@/lib/api";
+import { syncRecordRecentDoc } from "@/lib/local-docs";
 
-// Reading statistics are captured by PostHog. When PostHog is not configured,
-// capture() is a no-op and no reading data is collected.
+// Reading statistics are always written to the backend's built-in analytics
+// store. PostHog receives the same browser event shape when it is configured.
 export function PageViewTracker({
   docId,
   title,
@@ -29,9 +30,11 @@ export function PageViewTracker({
     startedAt.current = Date.now();
     maxScroll.current = 0;
     readId.current = crypto.randomUUID();
+    const sid = sessionId();
     capture("docs_page_view", { doc_id: docId, read_id: readId.current });
+    recordPageView({ doc_id: docId, session_id: sid, read_id: readId.current }).catch(() => {});
     if (title && moduleKey && docsVersion && entryKey) {
-      recordRecentDoc({
+      syncRecordRecentDoc({
         doc_id: docId,
         title,
         module_key: moduleKey,
@@ -54,6 +57,13 @@ export function PageViewTracker({
         duration_seconds: Math.max(0, Math.round((Date.now() - startedAt.current) / 1000)),
         scroll_depth: Number(maxScroll.current.toFixed(2)),
       });
+      recordReadProgress({
+        doc_id: docId,
+        session_id: sid,
+        read_id: readId.current,
+        duration_seconds: Math.max(0, Math.round((Date.now() - startedAt.current) / 1000)),
+        scroll_depth: Number(maxScroll.current.toFixed(2)),
+      }).catch(() => {});
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") flush();

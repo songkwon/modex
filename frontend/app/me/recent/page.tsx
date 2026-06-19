@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Clock3, ExternalLink } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { recentDocs, type RecentDoc } from "@/lib/local-docs";
+import { recentDocs, syncedRecentDocs, type RecentDoc } from "@/lib/local-docs";
 
 function formatViewedAt(value: string) {
   if (!value) return "";
@@ -18,6 +18,7 @@ export default function RecentPage() {
 
   useEffect(() => {
     setItems(recentDocs());
+    syncedRecentDocs().then(setItems);
   }, []);
 
   return (

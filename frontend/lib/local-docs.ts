@@ -1,6 +1,7 @@
 "use client";
 
 import type { ModuleInfo } from "@/types/modex";
+import { getMyFavorites, getMyRecentDocs, recordMyRecentDoc, setMyFavorite } from "@/lib/api";
 
 const FAVORITES_KEY = "modex_favorite_modules";
 const RECENTS_KEY = "modex_recent_docs";
@@ -67,4 +68,56 @@ export function recordRecentDoc(doc: Omit<RecentDoc, "viewed_at">) {
   const next: RecentDoc = { ...doc, viewed_at: new Date().toISOString() };
   const deduped = recentDocs().filter((item) => item.doc_id !== doc.doc_id);
   writeJSON(RECENTS_KEY, [next, ...deduped].slice(0, MAX_RECENTS));
+}
+
+export async function syncedFavoriteModuleKeys(): Promise<string[]> {
+  try {
+    const res = await getMyFavorites();
+    const keys = res.favorites.map((item) => item.module_key);
+    writeJSON(FAVORITES_KEY, keys);
+    return keys;
+  } catch {
+    return favoriteModuleKeys();
+  }
+}
+
+export async function syncSetFavoriteModule(moduleKey: string, favorite: boolean): Promise<string[]> {
+  try {
+    const res = await setMyFavorite(moduleKey, favorite);
+    const keys = res.favorites.map((item) => item.module_key);
+    writeJSON(FAVORITES_KEY, keys);
+    window.dispatchEvent(new CustomEvent("modex:favorites-changed", { detail: keys }));
+    return keys;
+  } catch {
+    return setFavoriteModule(moduleKey, favorite);
+  }
+}
+
+export async function syncedRecentDocs(): Promise<RecentDoc[]> {
+  try {
+    const res = await getMyRecentDocs();
+    const items = res.recent.map((item) => ({
+      doc_id: item.doc_id,
+      title: item.title,
+      module_key: item.module_key,
+      module_name: item.module_name,
+      docs_version: item.docs_version,
+      entry_key: item.entry_key,
+      href: item.href,
+      viewed_at: item.viewed_at || "",
+    }));
+    writeJSON(RECENTS_KEY, items);
+    return items;
+  } catch {
+    return recentDocs();
+  }
+}
+
+export async function syncRecordRecentDoc(doc: Omit<RecentDoc, "viewed_at">) {
+  recordRecentDoc(doc);
+  try {
+    await recordMyRecentDoc({ ...doc });
+  } catch {
+    // Anonymous users keep the local recent list; logged-in users sync server-side.
+  }
 }

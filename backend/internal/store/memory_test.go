@@ -239,7 +239,7 @@ func TestPageAnalyticsAggregatesViews(t *testing.T) {
 	s.RecordPageView(PageView{DocID: doc, SessionID: "a", DurationSeconds: 10})
 	s.RecordPageView(PageView{DocID: doc, SessionID: "a"})
 	s.RecordPageView(PageView{DocID: doc, SessionID: "b"})
-	s.RecordReadProgress(doc, "b", 30, 0.9)
+	s.RecordReadProgress(doc, "b", "", 30, 0.9)
 
 	var found bool
 	for _, st := range s.PageAnalytics() {
