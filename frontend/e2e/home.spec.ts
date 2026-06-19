@@ -78,15 +78,17 @@ test.beforeEach(async ({ page }) => {
   await mockBackend(page);
 });
 
-test("home page renders and switches locale", async ({ page }) => {
+test("home page renders and switches locale from the user menu", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "文档中心" })).toBeVisible();
   await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
 
-  await page.getByTestId("locale-select").selectOption("en-US");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: /Dev User/ }).click();
+  await page.getByRole("button", { name: "English" }).click();
   await expect(page.getByRole("heading", { name: "Documentation Hub" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Log in" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Project guide/ })).toBeVisible();
 });
 
 test("mock login exposes the admin console entry", async ({ page }) => {
@@ -95,5 +97,6 @@ test("mock login exposes the admin console entry", async ({ page }) => {
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: /Dev User/ }).click();
 
+  await expect(page.getByRole("link", { name: /项目指南/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /管理控制台/ })).toBeVisible();
 });
