@@ -3,6 +3,7 @@ package docs
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -107,20 +108,39 @@ func requiresBuild(t string) bool {
 func Validate(root string) error {
 	cfg, err := LoadConfig(root)
 	if err != nil {
-		return err
+		return fmt.Errorf("load documentation config from %s: %w", filepath.Join(root, "docs.yaml"), err)
 	}
 	if len(cfg.Entries) == 0 {
-		return errors.New("config must contain entries")
+		return errors.New("documentation config contains no entries; add at least one entry to docs.yaml or set DOCS_BUILDER")
 	}
 	for _, e := range cfg.Entries {
-		if e.Key == "" || e.Title == "" || e.Type == "" || e.Source == "" {
-			return errors.New("each entry requires key/title/type/source")
+		var missing []string
+		if e.Key == "" {
+			missing = append(missing, "key")
 		}
-		if _, err := os.Stat(filepath.Join(root, e.Source)); err != nil {
-			return err
+		if e.Title == "" {
+			missing = append(missing, "title")
 		}
-		if requiresBuild(e.Type) && (e.Build == "" || e.Output == "") {
-			return errors.New(e.Type + " entry requires build and output")
+		if e.Type == "" {
+			missing = append(missing, "type")
+		}
+		if e.Source == "" {
+			missing = append(missing, "source")
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("entry %q is missing required fields: %s", e.Key, strings.Join(missing, ", "))
+		}
+		sourcePath := filepath.Join(root, e.Source)
+		if _, err := os.Stat(sourcePath); err != nil {
+			return fmt.Errorf("entry %q source not found: %s: %w", e.Key, sourcePath, err)
+		}
+		if requiresBuild(e.Type) {
+			if e.Build == "" {
+				return fmt.Errorf("entry %q (%s) has no build command; set build in docs.yaml or DOCS_BUILD", e.Key, e.Type)
+			}
+			if e.Output == "" {
+				return fmt.Errorf("entry %q (%s) has no output directory; set output in docs.yaml or DOCS_OUTPUT", e.Key, e.Type)
+			}
 		}
 	}
 	if _, err := os.Stat(filepath.Join(root, "cbb.toml")); err == nil {

@@ -100,17 +100,17 @@ func main() {
 		}
 		fmt.Printf("docsctl discover ok: %d projects\n", len(found))
 	case "validate":
-		must(docs.Validate(root))
+		mustStage("docsctl validate failed", docs.Validate(root))
 		fmt.Println("docsctl validate ok")
 	case "build":
-		must(docs.Validate(root))
-		must(docs.Build(root, buildDir))
+		mustStage("docsctl build failed during validate", docs.Validate(root))
+		mustStage("docsctl build failed during build", docs.Build(root, buildDir))
 		fmt.Println("docsctl build ok:", buildDir)
 	case "package":
 		if _, err := os.Stat(buildDir); err != nil {
-			must(docs.Build(root, buildDir))
+			mustStage("docsctl package failed during build", docs.Build(root, buildDir))
 		}
-		must(docs.Package(buildDir, artifact))
+		mustStage("docsctl package failed during archive", docs.Package(buildDir, artifact))
 		fmt.Println("docsctl package ok:", artifact)
 	case "deploy":
 		must(deploy(root, buildDir, artifact, opt.deployURL, opt.deployToken))
@@ -158,6 +158,10 @@ entry flags (used when there is no docs.yaml):
   --entry-source <dir>  entry source path         (env DOCS_ENTRY_SOURCE)
   --build <cmd>         build command             (env DOCS_BUILD, e.g. "npm run docs:build")
   --output <dir>        built site dir (rel source) (env DOCS_OUTPUT, e.g. "dist")
+
+build behavior:
+  DOCS_BASE             injected automatically as /api/docs/<module>/<version>/<entry>/site/
+  DOCS_REWRITE_BASE     rewrite existing root-relative asset URLs after build (default true; set 0 to disable)
 
 init/discover flags:
   --force               overwrite existing docs.yaml (env DOCS_INIT_FORCE)
@@ -239,18 +243,18 @@ func deploy(root, buildDir, artifact, url, token string) error {
 		// Auto-build and package when the artifact is missing, so `docsctl deploy`
 		// is the only command users need in CI/local workflows.
 		if err := docs.Validate(root); err != nil {
-			return err
+			return fmt.Errorf("deploy preparation failed during validate: %w", err)
 		}
 		if err := docs.Build(root, buildDir); err != nil {
-			return err
+			return fmt.Errorf("deploy preparation failed during build: %w", err)
 		}
 		if err := docs.Package(buildDir, artifact); err != nil {
-			return err
+			return fmt.Errorf("deploy preparation failed during package: %w", err)
 		}
 	}
 	b, err := os.ReadFile(artifact)
 	if err != nil {
-		return err
+		return fmt.Errorf("read deploy artifact %s: %w", artifact, err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), envDuration("DOCS_DEPLOY_TIMEOUT", 2*time.Minute))
 	defer cancel()
@@ -270,7 +274,7 @@ func deploy(root, buildDir, artifact, url, token string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("deploy failed: %s: %s", resp.Status, formatAPIError(body))
+		return fmt.Errorf("deploy upload failed: %s: %s", resp.Status, formatAPIError(body))
 	}
 	return nil
 }
@@ -345,6 +349,12 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 func must(err error) {
 	if err != nil {
 		fatal(err.Error())
+	}
+}
+
+func mustStage(stage string, err error) {
+	if err != nil {
+		fatal(stage + ": " + err.Error())
 	}
 }
 

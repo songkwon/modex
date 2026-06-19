@@ -203,7 +203,7 @@ export default function AdminModulesPage() {
           <li>推送默认分支，CI 会自动执行 <code>docsctl deploy</code>。</li>
         </ol>
         <div className="docs-source-guide__note">
-          支持 VitePress、VuePress、Fumadocs、Docusaurus、MkDocs、HonKit/GitBook、Markdown；其他 HTML 目录可用 Static 接入。
+          支持 VitePress、VuePress、Fumadocs、Docusaurus、MkDocs、HonKit/GitBook、Markdown；其他 HTML 目录可用 Static 接入。docsctl 会自动注入文档 base，并修正常见的根路径静态资源引用。
         </div>
       </section>
 

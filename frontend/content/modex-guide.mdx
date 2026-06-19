@@ -135,6 +135,38 @@ variables:
 部署前必须先在 Modex 后台创建同名文档源。比如命令里 `--module sparklers`，后台文档源的 module key 也必须是 `sparklers`；否则会返回 `module_not_found`。
 </Note>
 
+### 构建失败怎么排查
+
+docsctl 会把构建日志实时输出，并在失败时汇总以下信息：
+
+- 失败的 entry key 和框架类型；
+- 实际执行的构建命令和工作目录；
+- 进程退出码；
+- 自动注入的 `DOCS_BASE`；
+- 最后一段构建日志和排查建议。
+
+```text
+docsctl build failed during build: documentation build failed
+  entry: guide (vitepress)
+  command: npm ci && npm run docs:build
+  working directory: /workspace/docs
+  exit code: 1
+  base path: DOCS_BASE=/api/docs/rd-doc/latest/guide/site/
+  last output:
+    Error: Cannot find module ...
+```
+
+### 文档 Base 自动处理
+
+编译静态站时，docsctl 会自动注入 `DOCS_BASE`、`MODEX_DOCS_BASE`、`VITEPRESS_BASE` 和 `BASE_URL`。构建完成后，它还会扫描 HTML、CSS 和 Web Manifest/JSON，把确实指向构建目录内文件的根路径引用自动改成 Modex 文档地址，例如：
+
+```text
+/assets/app.js
+→ /api/docs/rd-doc/latest/guide/site/assets/app.js
+```
+
+不存在的文件、站内业务路由和 `//cdn.example.com/...` 不会改写。框架配置仍建议优先读取 `DOCS_BASE`；如项目有特殊路由规则，可设置 `DOCS_REWRITE_BASE=0` 关闭构建后改写。
+
 ## 发布诊断
 
 部署失败时，后端会返回阶段化报告。CI 日志里可以直接看到失败发生在哪一步。

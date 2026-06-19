@@ -4,11 +4,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -114,8 +117,9 @@ func Build(root, outDir string) error {
 
 func buildCommandEntry(root, outDir string, md Metadata, entry Entry) (string, error) {
 	if err := ensureNodeModules(root); err != nil {
-		return "", err
+		return "", fmt.Errorf("entry %q dependency setup failed: %w", entry.Key, err)
 	}
+	base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, entry.Key)
 	if entry.Build != "" {
 		cmd := exec.Command("sh", "-c", entry.Build)
 		cmd.Dir = root
@@ -124,19 +128,253 @@ func buildCommandEntry(root, outDir string, md Metadata, entry Entry) (string, e
 		// (GET /api/docs/{module}/{version}/{entry}/site/...). The doc's
 		// config reads process.env.DOCS_BASE (falling back to its own default
 		// for standalone deploys).
-		base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, entry.Key)
-		cmd.Env = append(os.Environ(), "DOCS_BASE="+base)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Env = append(os.Environ(),
+			"DOCS_BASE="+base,
+			"MODEX_DOCS_BASE="+base,
+			"VITEPRESS_BASE="+base,
+			"BASE_URL="+base,
+		)
+		logs := newTailBuffer(64 * 1024)
+		cmd.Stdout = io.MultiWriter(os.Stdout, logs)
+		cmd.Stderr = io.MultiWriter(os.Stderr, logs)
+		fmt.Printf("docsctl build entry=%s type=%s cwd=%s base=%s command=%q\n", entry.Key, entry.Type, root, base, redactBuildOutput(entry.Build))
 		if err := cmd.Run(); err != nil {
-			return "", err
+			return "", buildCommandError(entry, root, base, err, logs.String())
 		}
 	}
 	siteDir := filepath.Join(outDir, "site", entry.Key)
-	if err := copyDir(filepath.Join(root, entry.Output), siteDir); err != nil {
-		return "", err
+	outputPath := filepath.Join(root, entry.Output)
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		return "", fmt.Errorf("entry %q build output not found: %s; command completed but DOCS_OUTPUT/output points to a missing path (configured output: %q): %w", entry.Key, outputPath, entry.Output, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("entry %q build output is not a directory: %s", entry.Key, outputPath)
+	}
+	if err := copyDir(outputPath, siteDir); err != nil {
+		return "", fmt.Errorf("entry %q copy build output from %s to %s: %w", entry.Key, outputPath, siteDir, err)
+	}
+	if baseRewriteEnabled() {
+		rewritten, err := rewriteStaticSiteBase(siteDir, base)
+		if err != nil {
+			return "", fmt.Errorf("entry %q normalize static-site base %s: %w", entry.Key, base, err)
+		}
+		if rewritten > 0 {
+			fmt.Printf("docsctl build entry=%s normalized %d root-relative asset references to %s\n", entry.Key, rewritten, base)
+		}
 	}
 	return extractSiteText(siteDir), nil
+}
+
+type tailBuffer struct {
+	limit int
+	data  []byte
+}
+
+func newTailBuffer(limit int) *tailBuffer {
+	return &tailBuffer{limit: limit}
+}
+
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	written := len(p)
+	if len(p) >= b.limit {
+		b.data = append(b.data[:0], p[len(p)-b.limit:]...)
+		return written, nil
+	}
+	if overflow := len(b.data) + len(p) - b.limit; overflow > 0 {
+		copy(b.data, b.data[overflow:])
+		b.data = b.data[:len(b.data)-overflow]
+	}
+	b.data = append(b.data, p...)
+	return written, nil
+}
+
+func (b *tailBuffer) String() string {
+	return strings.TrimSpace(string(b.data))
+}
+
+func buildCommandError(entry Entry, root, base string, err error, output string) error {
+	exit := "unknown"
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		exit = fmt.Sprintf("%d", exitErr.ExitCode())
+	}
+	output = redactBuildOutput(output)
+	if output == "" {
+		output = "(the build command produced no output)"
+	}
+	return fmt.Errorf("documentation build failed\n  entry: %s (%s)\n  command: %s\n  working directory: %s\n  exit code: %s\n  base path: DOCS_BASE=%s\n  last output:\n%s\n  hint: run the command above in the working directory; verify dependencies, the configured output directory, and framework base-path settings", entry.Key, entry.Type, redactBuildOutput(entry.Build), root, exit, base, indentLines(output, "    "))
+}
+
+func redactBuildOutput(output string) string {
+	keyValue := regexp.MustCompile(`(?i)(token|api[_-]?key|secret|password)(\s*[:=]\s*)([^\s]+)`)
+	bearer := regexp.MustCompile(`(?i)(authorization\s*:\s*bearer\s+)([^\s]+)`)
+	output = keyValue.ReplaceAllString(output, "$1$2[REDACTED]")
+	output = bearer.ReplaceAllString(output, "$1[REDACTED]")
+	return output
+}
+
+func indentLines(value, prefix string) string {
+	return prefix + strings.ReplaceAll(value, "\n", "\n"+prefix)
+}
+
+func baseRewriteEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("DOCS_REWRITE_BASE")))
+	return v != "0" && v != "false" && v != "off"
+}
+
+var (
+	htmlRootRef = regexp.MustCompile(`(?i)(\b(?:href|src|poster|action)\s*=\s*["'])(/[^"'<>]*)(["'])`)
+	htmlSrcset  = regexp.MustCompile(`(?i)(\bsrcset\s*=\s*["'])([^"'<>]*)(["'])`)
+	cssRootRef  = regexp.MustCompile(`(?i)(url\(\s*["']?)(/[^)'"\s]+)(["']?\s*\))`)
+)
+
+func rewriteStaticSiteBase(siteDir, base string) (int, error) {
+	base = "/" + strings.Trim(strings.TrimSpace(base), "/") + "/"
+	total := 0
+	err := filepath.Walk(siteDir, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || strings.HasSuffix(strings.ToLower(info.Name()), ".map") {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(filePath))
+		if ext != ".html" && ext != ".htm" && ext != ".css" && ext != ".json" && ext != ".webmanifest" {
+			return nil
+		}
+		b, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+		original := string(b)
+		updated := original
+		if ext == ".html" || ext == ".htm" {
+			updated, total = rewriteMatches(updated, htmlRootRef, siteDir, base, total)
+			updated, total = rewriteSrcsetMatches(updated, siteDir, base, total)
+			updated, total = rewriteMatches(updated, cssRootRef, siteDir, base, total)
+		} else if ext == ".css" {
+			updated, total = rewriteMatches(updated, cssRootRef, siteDir, base, total)
+		} else {
+			updated, total = rewriteJSONRootRefs(updated, siteDir, base, total)
+		}
+		if updated != original {
+			return os.WriteFile(filePath, []byte(updated), info.Mode().Perm())
+		}
+		return nil
+	})
+	return total, err
+}
+
+func rewriteSrcsetMatches(input, siteDir, base string, total int) (string, int) {
+	updated := htmlSrcset.ReplaceAllStringFunc(input, func(match string) string {
+		parts := htmlSrcset.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		candidates := strings.Split(parts[2], ",")
+		for i, candidate := range candidates {
+			fields := strings.Fields(strings.TrimSpace(candidate))
+			if len(fields) == 0 {
+				continue
+			}
+			if rewritten, ok := rewriteRootRef(fields[0], siteDir, base); ok {
+				fields[0] = rewritten
+				candidates[i] = strings.Join(fields, " ")
+				total++
+			}
+		}
+		return parts[1] + strings.Join(candidates, ", ") + parts[3]
+	})
+	return updated, total
+}
+
+func rewriteMatches(input string, pattern *regexp.Regexp, siteDir, base string, total int) (string, int) {
+	updated := pattern.ReplaceAllStringFunc(input, func(match string) string {
+		parts := pattern.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		rewritten, ok := rewriteRootRef(parts[2], siteDir, base)
+		if !ok {
+			return match
+		}
+		total++
+		return parts[1] + rewritten + parts[3]
+	})
+	return updated, total
+}
+
+func rewriteJSONRootRefs(input, siteDir, base string, total int) (string, int) {
+	startTotal := total
+	var value any
+	if json.Unmarshal([]byte(input), &value) != nil {
+		return input, total
+	}
+	value, total = walkJSONStrings(value, siteDir, base, total)
+	if total == startTotal {
+		return input, total
+	}
+	b, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return input, total
+	}
+	return string(b) + "\n", total
+}
+
+func walkJSONStrings(value any, siteDir, base string, total int) (any, int) {
+	switch current := value.(type) {
+	case string:
+		if rewritten, ok := rewriteRootRef(current, siteDir, base); ok {
+			return rewritten, total + 1
+		}
+	case []any:
+		for i, item := range current {
+			current[i], total = walkJSONStrings(item, siteDir, base, total)
+		}
+	case map[string]any:
+		for key, item := range current {
+			current[key], total = walkJSONStrings(item, siteDir, base, total)
+		}
+	}
+	return value, total
+}
+
+func rewriteRootRef(raw, siteDir, base string) (string, bool) {
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, base) {
+		return raw, false
+	}
+	pathPart := raw
+	if i := strings.IndexAny(pathPart, "?#"); i >= 0 {
+		pathPart = pathPart[:i]
+	}
+	decoded, err := url.PathUnescape(pathPart)
+	if err != nil {
+		return raw, false
+	}
+	for _, segment := range strings.Split(decoded, "/") {
+		if segment == ".." {
+			return raw, false
+		}
+	}
+	clean := strings.TrimPrefix(pathpkg.Clean(decoded), "/")
+	if clean == "." {
+		clean = ""
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return raw, false
+	}
+	target := filepath.Join(siteDir, filepath.FromSlash(clean))
+	info, err := os.Stat(target)
+	if err != nil {
+		return raw, false
+	}
+	if info.IsDir() {
+		if _, err := os.Stat(filepath.Join(target, "index.html")); err != nil {
+			return raw, false
+		}
+	}
+	return base + strings.TrimPrefix(raw, "/"), true
 }
 
 // extractSiteText walks the generated static site and returns plain text from
@@ -403,9 +641,19 @@ func buildStatic(root, outDir string, md Metadata, entry Entry) (DocumentRecord,
 	src := filepath.Join(root, entry.Source)
 	dst := filepath.Join(outDir, "site", entry.Key)
 	if err := copyDir(src, dst); err != nil {
-		return DocumentRecord{}, NavItem{}, "", err
+		return DocumentRecord{}, NavItem{}, "", fmt.Errorf("entry %q copy static source from %s to %s: %w", entry.Key, src, dst, err)
 	}
-	text := extractHTMLText(src)
+	base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, entry.Key)
+	if baseRewriteEnabled() {
+		rewritten, err := rewriteStaticSiteBase(dst, base)
+		if err != nil {
+			return DocumentRecord{}, NavItem{}, "", fmt.Errorf("entry %q normalize static-site base %s: %w", entry.Key, base, err)
+		}
+		if rewritten > 0 {
+			fmt.Printf("docsctl build entry=%s normalized %d root-relative asset references to %s\n", entry.Key, rewritten, base)
+		}
+	}
+	text := extractHTMLText(dst)
 	if text == "" {
 		text = entry.Title + " static html documentation"
 	}
