@@ -144,6 +144,7 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
         NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
         NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
+        NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL: ${POSTHOG_ENABLE_LOCAL:-false}
         # Diagram-as-code (PlantUML/Graphviz/C4/…) render server. Defaults to the
         # public kroki.io; set to http://localhost:8000 (the `kroki` profile below)
         # to keep diagram source on-prem.
@@ -154,6 +155,7 @@ services:
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8671}
       NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
       NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
+      NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL: ${POSTHOG_ENABLE_LOCAL:-false}
       NEXT_PUBLIC_KROKI_URL: ${NEXT_PUBLIC_KROKI_URL:-https://kroki.io}
     ports:
       - "${FRONTEND_PORT:-3456}:3456"

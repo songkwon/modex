@@ -21,6 +21,36 @@ func TestAdminReleaseRollbackRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestOptionalCurrentUserProbeIsAnonymousWithout401(t *testing.T) {
+	srv := New(store.New())
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me?optional=1", nil)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if strings.TrimSpace(rr.Body.String()) != "null" {
+		t.Fatalf("body = %q, want null", rr.Body.String())
+	}
+}
+
+func TestEmptyPublicModulesUsesJSONArray(t *testing.T) {
+	srv := New(store.New())
+	req := httptest.NewRequest(http.MethodGet, "/api/modules", nil)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if strings.TrimSpace(rr.Body.String()) != "[]" {
+		t.Fatalf("body = %q, want []", rr.Body.String())
+	}
+}
+
 func TestEmbedTextRequiresAdminSession(t *testing.T) {
 	srv := New(store.NewSeeded())
 	req := httptest.NewRequest(http.MethodPost, "/api/embeddings/embed-text", strings.NewReader(`{"text":"hello"}`))

@@ -208,6 +208,10 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		}{User: user, IsSuperAdmin: s.app.Auth().IsSuperAdmin(user), IsTeamAdmin: s.isTeamAdmin(user)})
 		return
 	}
+	if r.URL.Query().Get("optional") == "1" {
+		writeJSON(w, http.StatusOK, nil)
+		return
+	}
 	writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
 }
 

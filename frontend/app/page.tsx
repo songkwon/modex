@@ -26,8 +26,8 @@ export default function HomePage() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      getCategories().then(setCategories).catch(() => setCategories([])),
-      getModules().then(setAllModules).catch(() => setAllModules([])),
+      getCategories().then((items) => setCategories(Array.isArray(items) ? items : [])).catch(() => setCategories([])),
+      getModules().then((items) => setAllModules(Array.isArray(items) ? items : [])).catch(() => setAllModules([])),
     ]).finally(() => setLoading(false));
     clearScope();
     const params = new URLSearchParams(window.location.search);

@@ -727,7 +727,7 @@ func (s *Store) CategoryTree() []Category {
 func (s *Store) Modules(categoryID, keyword string) []Module {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var out []Module
+	out := make([]Module, 0)
 	q := strings.ToLower(keyword)
 	for _, m := range s.modules {
 		if categoryID != "" && !contains(m.CategoryIDs, categoryID) {
