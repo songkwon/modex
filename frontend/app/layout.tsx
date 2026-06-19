@@ -9,7 +9,6 @@ import { TopbarSearchButton } from "@/components/topbar-search";
 import { TopbarChatButton } from "@/components/topbar-chat";
 import { AnalyticsInit } from "@/components/analytics-init";
 import { I18nProvider } from "@/lib/i18n";
-import { LocaleSwitcher } from "@/components/locale-switcher";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
@@ -46,7 +45,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <nav className="nav">
                   <TopbarSearchButton />
                   <TopbarChatButton />
-                  <LocaleSwitcher />
                   <ThemeToggle />
                   <UserMenu />
                 </nav>

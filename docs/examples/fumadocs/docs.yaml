@@ -1,7 +1,0 @@
-entries:
-  - key: guide
-    title: Fumadocs 文档站接入
-    type: fumadocs
-    source: content/docs
-    build: node scripts/build-fumadocs-sample.mjs
-    output: out

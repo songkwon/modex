@@ -227,7 +227,6 @@ func storeFromSnapshot(snap snapshot) *Store {
 	if s.teams == nil {
 		s.teams = []Team{}
 	}
-	s.ensureMarkdownShowcaseSeed()
 	return s
 }
 

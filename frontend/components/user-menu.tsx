@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Terminal, Shield, LogOut, LogIn, ChevronDown, BookOpen } from "lucide-react";
+import { Terminal, Shield, LogOut, LogIn, ChevronDown, FileText } from "lucide-react";
 import { getAuthConfig, getMe, logout, mockLogin } from "@/lib/api";
 import { identify } from "@/lib/analytics";
 import { useI18n } from "@/lib/i18n";
@@ -36,7 +36,7 @@ function UserAvatar({ user }: { user: { display_name?: string; username?: string
 }
 
 export function UserMenu() {
-  const { t } = useI18n();
+  const { locale, locales, localeLabel, setLocale, t } = useI18n();
   const [user, setUser] = useState<User | null>(null);
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   const [open, setOpen] = useState(false);
@@ -123,10 +123,25 @@ export function UserMenu() {
             <div className="font-semibold">{user.display_name || user.username}</div>
             <div className="muted text-xs">{user.email || user.username}{user.department ? ` · ${user.department}` : ""}</div>
             {user.is_super_admin ? <span className="tag mt-2">{t("user.superAdmin")}</span> : null}
+            <div className="user-locale-row" aria-label={t("nav.language")}>
+              <span>{t("nav.language")}</span>
+              <span className="user-locale-options">
+                {locales.map((item) => (
+                  <button
+                    key={item}
+                    className={item === locale ? "active" : ""}
+                    onClick={() => setLocale(item)}
+                    type="button"
+                  >
+                    {localeLabel(item)}
+                  </button>
+                ))}
+              </span>
+            </div>
           </div>
           <div className="user-dropdown-list">
+            <Link className="user-dropdown-item" href="/me/guide" onClick={() => setOpen(false)}><FileText size={16} />{t("user.projectGuide")}</Link>
             <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />{t("user.mcp")}</Link>
-            <Link className="user-dropdown-item" href="/me/docs-example" onClick={() => setOpen(false)}><BookOpen size={16} />{t("user.docsExample")}</Link>
             {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />{t("user.admin")}</Link> : null}
           </div>
           <div className="user-dropdown-foot">

@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start -H 0.0.0.0 -p 3456",
     "lint": "next typegen && tsc --noEmit",
+    "i18n:extract": "node scripts/extract-i18n.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {

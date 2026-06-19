@@ -1,8 +1,0 @@
-[package]
-name = "FumadocsKit"
-version = "0.2.0"
-channel = "docs"
-description = "Fumadocs 文档站示例"
-authors = ["frontend-docs"]
-edition = "2025"
-keywords = ["fumadocs", "nextjs", "mdx", "frontend"]

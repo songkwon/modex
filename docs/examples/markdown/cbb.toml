@@ -1,7 +1,0 @@
-[package]
-name = "DemoModule"
-version = "1.2.3"
-description = "示例模块"
-authors = ["alice"]
-edition = "2025"
-keywords = ["demo", "cad"]

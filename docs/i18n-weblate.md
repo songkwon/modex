@@ -43,7 +43,8 @@ The frontend wraps the app in `I18nProvider` from `frontend/lib/i18n.tsx`.
 
 - Default locale: browser language when supported, otherwise `zh-CN`.
 - User choice is stored in `localStorage` as `modex_locale`.
-- The top bar language selector switches locale without changing routes.
+- The language switcher lives in the signed-in user menu and switches locale
+  without changing routes.
 
 This keeps the current URL model stable while still allowing Weblate-managed
 catalogs. If route-prefixed locales are needed later, the catalog format can stay
@@ -63,6 +64,7 @@ Before importing into Weblate, make sure every locale has the same key set:
 
 ```bash
 cd frontend
+npm run i18n:extract
 npm run lint
 ```
 
@@ -81,5 +83,11 @@ the frontend checks.
 ## Current Migration Scope
 
 The shell, home page, top-bar search/AI controls, global search palette, main
-document search box, and user menu are migrated. Admin pages still contain some
-inline Chinese copy and can be migrated incrementally as those screens stabilize.
+document search box, and user menu are migrated.
+
+The catalogs also include an `unmigrated.*` section generated from the current
+frontend source. These keys are a translation backlog: they make every existing
+Chinese UI string visible to Weblate even before each screen has been converted
+to semantic `useI18n().t(...)` calls. When a screen is migrated, replace the
+matching `unmigrated.*` value with a stable semantic key such as
+`admin.modules.emptyTitle`, then remove the obsolete `unmigrated.*` entry.

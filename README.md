@@ -83,9 +83,9 @@ npm run dev
 
 ```bash
 cd tools/docsctl
-DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl validate
-DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl build
-DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl package
+DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl validate
+DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl build
+DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl package
 ```
 
 发布到 Modex：
@@ -93,7 +93,7 @@ DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl package
 ```bash
 DOCS_DEPLOY_URL=http://localhost:8671/api/deploy \
 DOCS_DEPLOY_TOKEN=your-token \
-DOCS_ARTIFACT=../../docs/examples/markdown/.modex/docs-artifact.zip \
+DOCS_ARTIFACT=/path/to/docs/.modex/docs-artifact.zip \
 go run ./cmd/docsctl deploy
 ```
 
@@ -171,12 +171,11 @@ npm run e2e
 
 ### 更多文档
 
+- [项目指南（MDX）](frontend/content/modex-guide.mdx)
 - [测试指南](docs/testing.md)
 - [国际化与 Weblate](docs/i18n-weblate.md)
 - [VuePress 迁移指南](docs/vuepress-migration.md)
-- [文档同步设计](docs/design/domain-doc-sync.md)
 - [GitLab CI 模板](deploy/ci/modex-docs.gitlab-ci.yml)
-- [文档仓库 CI 示例](docs/pipeline/docs-deploy.example.yml)
 
 ### 许可协议
 
@@ -253,9 +252,9 @@ Build and package the Markdown example:
 
 ```bash
 cd tools/docsctl
-DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl validate
-DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl build
-DOCS_SOURCE_DIR=../../docs/examples/markdown go run ./cmd/docsctl package
+DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl validate
+DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl build
+DOCS_SOURCE_DIR=/path/to/docs go run ./cmd/docsctl package
 ```
 
 Deploy it to Modex:
@@ -263,7 +262,7 @@ Deploy it to Modex:
 ```bash
 DOCS_DEPLOY_URL=http://localhost:8671/api/deploy \
 DOCS_DEPLOY_TOKEN=your-token \
-DOCS_ARTIFACT=../../docs/examples/markdown/.modex/docs-artifact.zip \
+DOCS_ARTIFACT=/path/to/docs/.modex/docs-artifact.zip \
 go run ./cmd/docsctl deploy
 ```
 
@@ -341,12 +340,11 @@ Frontend catalogs:
 
 ### More Documentation
 
+- [Project Guide (MDX)](frontend/content/modex-guide.mdx)
 - [Testing Guide](docs/testing.md)
 - [Internationalization and Weblate](docs/i18n-weblate.md)
 - [VuePress Migration](docs/vuepress-migration.md)
-- [Domain Documentation Sync Design](docs/design/domain-doc-sync.md)
 - [GitLab CI Template](deploy/ci/modex-docs.gitlab-ci.yml)
-- [Documentation Repository CI Example](docs/pipeline/docs-deploy.example.yml)
 
 ### License
 
