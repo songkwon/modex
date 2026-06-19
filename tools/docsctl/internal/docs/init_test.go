@@ -32,3 +32,26 @@ func TestDefaultMarkdownEntryPrefersDocsDirectory(t *testing.T) {
 		t.Fatalf("source = %q, want docs", entry.Source)
 	}
 }
+
+func TestDetectProjectKindSupportsCommonStaticSiteGenerators(t *testing.T) {
+	cases := []struct {
+		name string
+		file string
+		want string
+	}{
+		{name: "docusaurus", file: "docusaurus.config.js", want: "docusaurus"},
+		{name: "mkdocs", file: "mkdocs.yml", want: "mkdocs"},
+		{name: "honkit", file: "book.json", want: "honkit"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, tc.file), []byte("{}\n"), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			if got := DetectProjectKind(root); got != tc.want {
+				t.Fatalf("DetectProjectKind = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

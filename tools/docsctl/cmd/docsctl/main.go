@@ -152,7 +152,7 @@ metadata flags (override cbb.toml / env):
   --commit <sha>        source commit sha         (env DOCS_COMMIT_SHA)
 
 entry flags (used when there is no docs.yaml):
-  --builder <type>      markdown|vitepress|vuepress|fumadocs|static (env DOCS_BUILDER)
+  --builder <type>      markdown|vitepress|vuepress|fumadocs|docusaurus|mkdocs|honkit|gitbook|static (env DOCS_BUILDER)
   --entry-key <key>     entry key                 (env DOCS_ENTRY_KEY)
   --entry-title <text>  entry title               (env DOCS_ENTRY_TITLE)
   --entry-source <dir>  entry source path         (env DOCS_ENTRY_SOURCE)
@@ -186,7 +186,7 @@ func parseFlags(cmd string, args []string) options {
 	fs.StringVar(&o.branch, "branch", env("DOCS_BRANCH", ""), "source branch")
 	fs.StringVar(&o.commitSHA, "commit", env("DOCS_COMMIT_SHA", ""), "source commit sha")
 
-	fs.StringVar(&o.builder, "builder", env("DOCS_BUILDER", ""), "doc builder type (markdown|vitepress|vuepress|fumadocs|static)")
+	fs.StringVar(&o.builder, "builder", env("DOCS_BUILDER", ""), "doc builder type (markdown|vitepress|vuepress|fumadocs|docusaurus|mkdocs|honkit|gitbook|static)")
 	fs.StringVar(&o.entryKey, "entry-key", env("DOCS_ENTRY_KEY", ""), "entry key (no docs.yaml)")
 	fs.StringVar(&o.entryTitle, "entry-title", env("DOCS_ENTRY_TITLE", ""), "entry title (no docs.yaml)")
 	fs.StringVar(&o.entrySource, "entry-source", env("DOCS_ENTRY_SOURCE", ""), "entry source path (no docs.yaml)")

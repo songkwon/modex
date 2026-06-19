@@ -97,7 +97,7 @@ func SynthesizeConfig(root string) Config {
 
 func requiresBuild(t string) bool {
 	switch t {
-	case "vitepress", "vuepress", "fumadocs":
+	case "vitepress", "vuepress", "fumadocs", "docusaurus", "mkdocs", "honkit", "gitbook":
 		return true
 	default:
 		return false

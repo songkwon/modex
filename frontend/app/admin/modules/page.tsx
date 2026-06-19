@@ -17,9 +17,13 @@ const DOC_TYPES = [
   { value: "vitepress", label: "VitePress", hint: "编译型 · 静态站" },
   { value: "vuepress", label: "VuePress", hint: "编译型" },
   { value: "fumadocs", label: "Fumadocs", hint: "编译型 · Next/MDX" },
+  { value: "docusaurus", label: "Docusaurus", hint: "编译型 · 静态站" },
+  { value: "mkdocs", label: "MkDocs", hint: "编译型 · Python" },
+  { value: "honkit", label: "HonKit / GitBook", hint: "编译型 · 静态站" },
   { value: "markdown", label: "Markdown", hint: "modex 渲染" },
+  { value: "static", label: "Static", hint: "通用静态站" },
 ];
-const COMPILED = new Set(["vitepress", "vuepress", "fumadocs"]);
+const COMPILED = new Set(["vitepress", "vuepress", "fumadocs", "docusaurus", "mkdocs", "honkit", "gitbook", "static"]);
 
 type Draft = {
   module_key?: string;
@@ -44,6 +48,45 @@ function maskToken(t: string) {
 
 function flatten(cats: Category[], depth = 0): ComboOption[] {
   return cats.flatMap((c) => [{ value: c.id, label: c.name, hint: c.key, depth }, ...flatten(c.children || [], depth + 1)]);
+}
+
+function localDeployCommand(moduleKey: string, deployUrl?: string) {
+  return [
+    "docsctl deploy \\",
+    "  --source /path/to/docs \\",
+    `  --module ${moduleKey || "<module_key>"} \\`,
+    "  --version latest \\",
+    `  --deploy-url ${deployUrl || "https://modex.example.com/api/deploy"} \\`,
+    "  --token $MODEX_DEPLOY_TOKEN",
+  ].join("\n");
+}
+
+function gitlabSnippet(moduleKey: string, deployUrl?: string, builder = "vitepress") {
+  const output = builder === "vuepress"
+    ? "docs/.vuepress/dist"
+    : builder === "fumadocs"
+      ? "out"
+      : builder === "docusaurus"
+        ? "build"
+        : builder === "mkdocs"
+          ? "site"
+          : builder === "honkit" || builder === "gitbook"
+            ? "_book"
+            : builder === "static"
+              ? "dist"
+              : "docs/.vitepress/dist";
+  const build = builder === "static" || builder === "markdown" ? "" : builder === "mkdocs" ? "mkdocs build" : "npm ci && npm run docs:build";
+  return `include:
+  - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
+
+variables:
+  MODEX_MODULE_KEY: "${moduleKey || "<module_key>"}"
+  DOCS_BUILDER: "${builder}"
+${build ? `  DOCS_BUILD: "${build}"\n` : ""}  DOCS_OUTPUT: "${output}"
+  MODEX_DEPLOY_URL: "${deployUrl || "https://modex.example.com/api/deploy"}"
+
+# 在 GitLab Settings > CI/CD > Variables 中添加：
+# MODEX_DEPLOY_TOKEN = 从 Modex 文档源复制的 Deploy Token（Masked + Protected）`;
 }
 
 export default function AdminModulesPage() {
@@ -144,6 +187,26 @@ export default function AdminModulesPage() {
         </div>
       </div>
 
+      <section className="docs-source-guide">
+        <div>
+          <p className="docs-source-guide__eyebrow">推荐接入方式</p>
+          <h2>先创建文档源，再让 GitLab CI 自动推送</h2>
+          <p>
+            docsctl 会在文档仓库里完成构建、打包和上传。用户只需要在 Modex 创建文档源、复制 Deploy Token，
+            然后把 GitLab CI 模板 include 到文档仓库即可。
+          </p>
+        </div>
+        <ol>
+          <li>点击「接入文档源」，选择框架和归属分类。</li>
+          <li>创建后复制 Deploy Token，保存为 GitLab CI 变量 <code>MODEX_DEPLOY_TOKEN</code>。</li>
+          <li>在文档仓库加入 CI 模板，设置 <code>MODEX_MODULE_KEY</code>、<code>DOCS_BUILDER</code>、<code>DOCS_OUTPUT</code>。</li>
+          <li>推送默认分支，CI 会自动执行 <code>docsctl deploy</code>。</li>
+        </ol>
+        <div className="docs-source-guide__note">
+          支持 VitePress、VuePress、Fumadocs、Docusaurus、MkDocs、HonKit/GitBook、Markdown；其他 HTML 目录可用 Static 接入。
+        </div>
+      </section>
+
       <div className="table-card">
         <div className="table-scroll">
           <table className="data-table">
@@ -222,7 +285,7 @@ export default function AdminModulesPage() {
           <div className="field">
             <label>文档框架</label>
             <Combobox options={DOC_TYPES} value={[draft.doc_type]} onChange={(v) => setDraft({ ...draft, doc_type: v[0] || "vitepress" })} multiple={false} placeholder="选择框架…" />
-            <span className="field-hint">{compiled ? "编译型：CI 构建为静态站后上传。" : "Markdown：modex 直接渲染。"}</span>
+            <span className="field-hint">{draft.doc_type === "static" ? "Static：直接上传已有静态站目录。" : compiled ? "编译型：CI 构建为静态站后上传。" : "Markdown：modex 直接渲染。"}</span>
           </div>
           <div className="field">
             <label>挂载方式</label>
@@ -232,7 +295,7 @@ export default function AdminModulesPage() {
               onChange={(v) => setDraft({ ...draft, mount: v[0] || "single" })}
               multiple={false}
             />
-            <span className="field-hint">{compiled ? "编译型固定 single。" : "split 仅 markdown 型可用。"}</span>
+            <span className="field-hint">{compiled ? "静态站固定 single。" : "split 仅 markdown 型可用。"}</span>
           </div>
         </div>
         <div className="field">
@@ -270,6 +333,31 @@ export default function AdminModulesPage() {
               <button className="button" onClick={rotate}>重新生成</button>
             </div>
             <span className="field-hint">出于安全考虑 Token 仅以掩码展示，点击复制按钮可拷贝完整值。在文档仓库 GitLab CI 变量里设为 <code className="code-chip">MODEX_DEPLOY_TOKEN</code>（Masked）。仓库地址/分支会在首次 CI 推送时自动带过来。</span>
+          </div>
+        ) : null}
+
+        {token && draft.module_key ? (
+          <div className="docs-source-quickstart">
+            <div className="docs-source-quickstart__head">
+              <div>
+                <h3>推送文档</h3>
+                <p>本地调试用一条命令；生产环境推荐 GitLab CI 自动推送。</p>
+              </div>
+            </div>
+            <div className="docs-source-code">
+              <div className="docs-source-code__head">
+                <span>本地一次性部署</span>
+                <CopyButton value={localDeployCommand(draft.module_key, token.deploy_url)} title="复制本地部署命令" label="复制" className="button" />
+              </div>
+              <pre>{localDeployCommand(draft.module_key, token.deploy_url)}</pre>
+            </div>
+            <div className="docs-source-code">
+              <div className="docs-source-code__head">
+                <span>GitLab CI</span>
+                <CopyButton value={gitlabSnippet(draft.module_key, token.deploy_url, draft.doc_type)} title="复制 GitLab CI 配置" label="复制" className="button" />
+              </div>
+              <pre>{gitlabSnippet(draft.module_key, token.deploy_url, draft.doc_type)}</pre>
+            </div>
           </div>
         ) : null}
       </Modal>
