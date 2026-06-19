@@ -163,11 +163,40 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/teams/", s.handleAdminTeamRoutes)
 	mux.HandleFunc("/api/admin/", s.handleAdminAccepted)
 	mux.HandleFunc("/api/webhooks/gitlab", s.handleGitLabWebhook)
-	return s.cors(recoverer(mux))
+	return s.cors(accessLogger(recoverer(mux)))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "modex-api"})
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	embeddingCount, embeddingErr := s.app.Search().EmbeddingCount(ctx)
+	searchStatus := "ok"
+	if embeddingErr != nil {
+		searchStatus = "degraded"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ok",
+		"service": "modex-api",
+		"dependencies": map[string]any{
+			"repository": map[string]any{"configured": s.app.HasRepository()},
+			"object_storage": map[string]any{
+				"mode":   ternary(s.minioClient != nil, "minio", "memory"),
+				"bucket": s.minioBucket,
+			},
+			"search": map[string]any{
+				"status":          searchStatus,
+				"provider":        s.app.Search().Embedder.Name(),
+				"external_vector": s.app.Search().Vectors != nil,
+				"embedding_count": embeddingCount,
+				"error":           errorString(embeddingErr),
+			},
+		},
+		"counts": map[string]int{
+			"modules":  len(s.app.Store().Modules("", "")),
+			"pages":    len(s.app.Store().Pages()),
+			"releases": len(s.app.Store().Releases()),
+		},
+	})
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -1003,11 +1032,14 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
 		return
 	}
+	report := newDeployReport()
 	artifact, err := deploy.ParseZip(r.Body, envInt64("DOCS_DEPLOY_MAX_BYTES", 100*1024*1024))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_artifact", err.Error())
+		report.fail("parse_artifact", err)
+		writeDeployError(w, http.StatusBadRequest, "invalid_artifact", err.Error(), report)
 		return
 	}
+	report.ok("parse_artifact")
 
 	// Deploy auth (GitLab CI / docsctl integration). Each document source owns
 	// an independent token; the artifact module key selects the token to verify.
@@ -1019,40 +1051,59 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	m, moduleErr := s.app.Store().Module(moduleKey)
 	if moduleErr != nil {
-		writeError(w, http.StatusNotFound, "module_not_found", "document source not found")
+		report.fail("authenticate", moduleErr)
+		writeDeployError(w, http.StatusNotFound, "module_not_found", "document source not found", report)
 		return
 	}
 	if m.DeployToken == "" {
-		writeError(w, http.StatusForbidden, "deploy_token_not_configured", "generate a deploy token for this document source first")
+		report.fail("authenticate", errors.New("deploy token is not configured"))
+		writeDeployError(w, http.StatusForbidden, "deploy_token_not_configured", "generate a deploy token for this document source first", report)
 		return
 	}
 	if subtle.ConstantTimeCompare([]byte(provided), []byte(m.DeployToken)) != 1 {
-		writeError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid for this module")
+		report.fail("authenticate", errors.New("deploy token mismatch"))
+		writeDeployError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid for this module", report)
 		return
 	}
+	report.ok("authenticate")
 
+	uploadedSiteFiles := artifact.SiteFiles
 	if s.minioClient != nil {
 		if err := s.uploadSiteFilesToMinIO(r.Context(), artifact, moduleKey, artifact.Metadata.DocsVersion); err != nil {
-			writeError(w, http.StatusBadGateway, "site_upload_failed", err.Error())
+			report.fail("upload_assets", err)
+			writeDeployError(w, http.StatusBadGateway, "site_upload_failed", err.Error(), report)
 			return
 		}
+		report.ok("upload_assets")
 		// MinIO is the source of truth for static site assets in deployed
 		// environments. Keeping the same bytes in the in-memory fallback can
 		// push the backend into multi-GB RSS for image-heavy documentation.
 		artifact.SiteFiles = nil
 		artifact.SiteHTML = nil
+	} else {
+		report.skip("upload_assets", "object storage is not configured; keeping assets in memory")
 	}
 	if err := s.app.Search().DeleteModuleVersionEmbeddings(r.Context(), moduleKey, artifact.Metadata.DocsVersion); err != nil {
-		writeError(w, http.StatusBadGateway, "embedding_cleanup_failed", err.Error())
+		report.fail("clear_embeddings", err)
+		if s.minioClient != nil {
+			s.cleanupUploadedSiteFiles(moduleKey, artifact.Metadata.DocsVersion, uploadedSiteFiles)
+		}
+		writeDeployError(w, http.StatusBadGateway, "embedding_cleanup_failed", err.Error(), report)
 		return
 	}
+	report.ok("clear_embeddings")
 
 	result, err := s.app.Store().IngestArtifact(toStoreArtifact(artifact))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "deploy_failed", err.Error())
+		report.fail("ingest_metadata", err)
+		if s.minioClient != nil {
+			s.cleanupUploadedSiteFiles(moduleKey, artifact.Metadata.DocsVersion, uploadedSiteFiles)
+		}
+		writeDeployError(w, http.StatusBadRequest, "deploy_failed", err.Error(), report)
 		return
 	}
-	s.writeMutation(w, map[string]any{"status": "published", "result": result}, http.StatusAccepted, nil)
+	report.ok("ingest_metadata")
+	s.writeMutation(w, map[string]any{"status": "published", "result": result, "deploy": report}, http.StatusAccepted, nil)
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
@@ -2422,6 +2473,63 @@ func recoverer(next http.Handler) http.Handler {
 	})
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func accessLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rr := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rr, r)
+		if r.URL.Path == "/healthz" {
+			return
+		}
+		log.Printf("http method=%s path=%s status=%d duration_ms=%d remote=%s", r.Method, r.URL.Path, rr.status, time.Since(start).Milliseconds(), r.RemoteAddr)
+	})
+}
+
+type deployStep struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+	Note   string `json:"note,omitempty"`
+}
+
+type deployReport struct {
+	Stages []deployStep `json:"stages"`
+}
+
+func newDeployReport() *deployReport {
+	return &deployReport{Stages: []deployStep{}}
+}
+
+func (r *deployReport) ok(name string) {
+	r.Stages = append(r.Stages, deployStep{Name: name, Status: "ok"})
+}
+
+func (r *deployReport) skip(name, note string) {
+	r.Stages = append(r.Stages, deployStep{Name: name, Status: "skipped", Note: note})
+}
+
+func (r *deployReport) fail(name string, err error) {
+	r.Stages = append(r.Stages, deployStep{Name: name, Status: "failed", Error: errorString(err)})
+	log.Printf("deploy stage failed stage=%s error=%v", name, err)
+}
+
+func writeDeployError(w http.ResponseWriter, status int, code, message string, report *deployReport) {
+	writeJSON(w, status, map[string]any{
+		"error":  map[string]string{"code": code, "message": message},
+		"deploy": report,
+	})
+}
+
 func toStoreArtifact(a deploy.Artifact) store.DeployArtifact {
 	out := store.DeployArtifact{
 		ModuleKey:      a.Metadata.ModuleKey,
@@ -2491,6 +2599,20 @@ func (s *Server) uploadSiteFilesToMinIO(ctx context.Context, artifact deploy.Art
 	return nil
 }
 
+func (s *Server) cleanupUploadedSiteFiles(moduleKey, docsVersion string, files map[string][]byte) {
+	if s.minioClient == nil || len(files) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for name := range files {
+		key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, name)
+		if err := s.minioClient.RemoveObject(ctx, s.minioBucket, key, minio.RemoveObjectOptions{}); err != nil {
+			log.Printf("cleanup uploaded site file failed key=%s error=%v", key, err)
+		}
+	}
+}
+
 func (s *Server) migrateSiteAssetsToMinIO() bool {
 	objects := s.app.Store().SiteObjects()
 	if len(objects) == 0 {
@@ -2517,6 +2639,20 @@ func contentTypeForName(name string, content []byte) string {
 		return http.DetectContentType(content)
 	}
 	return "application/octet-stream"
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func ternary[T any](cond bool, yes, no T) T {
+	if cond {
+		return yes
+	}
+	return no
 }
 
 func envInt64(key string, fallback int64) int64 {

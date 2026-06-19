@@ -59,3 +59,11 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke tests
+        working-directory: frontend
+        run: npm run e2e

@@ -4,10 +4,12 @@ import { useEffect, useRef } from "react";
 import { Search, Loader2, Sparkles } from "lucide-react";
 import { SearchResults } from "@/components/search-results";
 import { useDocSearch } from "@/lib/use-doc-search";
+import { useI18n } from "@/lib/i18n";
 
 export type PaletteScope = { moduleKey?: string; categoryId?: string; label?: string };
 
 export function SearchPalette({ open, onClose, scope }: { open: boolean; onClose: () => void; scope: PaletteScope }) {
+  const { t } = useI18n();
   const s = useDocSearch({ moduleKey: scope.moduleKey, categoryId: scope.categoryId }, onClose);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,13 +43,13 @@ export function SearchPalette({ open, onClose, scope }: { open: boolean; onClose
             value={s.query}
             onChange={(e) => s.setQuery(e.target.value)}
             onKeyDown={s.onKeyDown}
-            placeholder={scope.label ? `在「${scope.label}」内搜索，或向 AI 提问…` : "搜索全部文档，或向 AI 提问…"}
-            aria-label="搜索文档或提问"
+            placeholder={scope.label ? t("search.placeholderScoped", { scope: scope.label }) : t("search.placeholderAll")}
+            aria-label={t("search.aria")}
           />
           {s.loading ? <Loader2 size={18} className="ds-spin muted" /> : null}
           <button className="ds-ask-btn" onClick={s.runAsk} disabled={!s.query.trim() || s.asking}>
             {s.asking ? <Loader2 size={16} className="ds-spin" /> : <Sparkles size={16} />}
-            询问 AI
+            {t("search.askAI")}
           </button>
         </div>
         <SearchResults s={s} />

@@ -35,6 +35,8 @@ deploy/.env
 node_modules/
 frontend/.next/
 frontend/out/
+frontend/playwright-report/
+frontend/test-results/
 frontend/next-env.d.ts
 *.tsbuildinfo
 npm-debug.log*

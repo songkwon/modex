@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"modex/mcp/internal/client"
 )
@@ -26,6 +27,7 @@ type rpcResponse struct {
 func main() {
 	c := client.FromEnv()
 	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		var req rpcRequest
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
@@ -35,6 +37,9 @@ func main() {
 		result, err := handle(c, req)
 		respond(req.ID, result, err)
 	}
+	if err := scanner.Err(); err != nil {
+		respond(nil, nil, fmt.Errorf("stdin read failed: %w", err))
+	}
 }
 
 func handle(c client.Client, req rpcRequest) (any, error) {
@@ -43,10 +48,23 @@ func handle(c client.Client, req rpcRequest) (any, error) {
 		return map[string]any{"protocolVersion": "2024-11-05", "serverInfo": map[string]any{"name": "modex-mcp-server", "version": "0.1.0"}, "capabilities": map[string]any{"tools": map[string]any{}}}, nil
 	case "tools/list":
 		return map[string]any{"tools": []map[string]any{
-			tool("list_modules", "List documentation modules by category or keyword"),
-			tool("list_versions", "List versions for one module"),
-			tool("search_docs", "Search docs with keyword, semantic, or hybrid mode"),
-			tool("get_doc_page", "Get one document page by doc_id"),
+			tool("list_modules", "List documentation modules by category or keyword", map[string]any{
+				"category_id": propString("Optional category/platform id."),
+				"keyword":     propString("Optional module keyword."),
+			}, nil),
+			tool("list_versions", "List versions for one module", map[string]any{
+				"module_key": propString("Module key."),
+			}, []string{"module_key"}),
+			tool("search_docs", "Search docs with keyword, semantic, or hybrid mode", map[string]any{
+				"query":        propString("Search query."),
+				"mode":         map[string]any{"type": "string", "enum": []string{"keyword", "semantic", "hybrid"}, "description": "Search mode. Defaults to hybrid."},
+				"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 20, "description": "Maximum results. Defaults to 5."},
+				"module_key":   propString("Optional module key filter."),
+				"docs_version": propString("Optional docs version filter."),
+			}, []string{"query"}),
+			tool("get_doc_page", "Get one document page by doc_id", map[string]any{
+				"doc_id": propString("Document id returned by search_docs."),
+			}, []string{"doc_id"}),
 		}}, nil
 	case "tools/call":
 		var params struct {
@@ -63,18 +81,33 @@ func handle(c client.Client, req rpcRequest) (any, error) {
 }
 
 func callTool(c client.Client, name string, args map[string]any) (any, error) {
+	if args == nil {
+		args = map[string]any{}
+	}
 	var result any
 	var err error
 	switch name {
 	case "list_modules":
 		result, err = c.ListModules(str(args["category_id"]), str(args["keyword"]))
 	case "list_versions":
-		result, err = c.ListVersions(str(args["module_key"]))
+		moduleKey := str(args["module_key"])
+		if moduleKey == "" {
+			return nil, fmt.Errorf("module_key is required")
+		}
+		result, err = c.ListVersions(moduleKey)
 	case "search_docs":
-		limit := intVal(args["limit"], 5)
+		query := str(args["query"])
+		if query == "" {
+			return nil, fmt.Errorf("query is required")
+		}
+		limit := clampInt(intVal(args["limit"], 5), 1, 20)
+		mode := defaultStr(str(args["mode"]), "hybrid")
+		if mode != "keyword" && mode != "semantic" && mode != "hybrid" {
+			return nil, fmt.Errorf("mode must be keyword, semantic, or hybrid")
+		}
 		body := map[string]any{
-			"query": args["query"],
-			"mode":  defaultStr(str(args["mode"]), "hybrid"),
+			"query": query,
+			"mode":  mode,
 			"page":  1, "page_size": limit,
 			"filters": map[string]any{
 				"modules":       optionalList(str(args["module_key"])),
@@ -83,7 +116,11 @@ func callTool(c client.Client, name string, args map[string]any) (any, error) {
 		}
 		result, err = c.SearchDocs(body)
 	case "get_doc_page":
-		result, err = c.GetDocPage(str(args["doc_id"]))
+		docID := str(args["doc_id"])
+		if docID == "" {
+			return nil, fmt.Errorf("doc_id is required")
+		}
+		result, err = c.GetDocPage(docID)
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
@@ -93,11 +130,15 @@ func callTool(c client.Client, name string, args map[string]any) (any, error) {
 	return result, err
 }
 
-func tool(name, description string) map[string]any {
+func tool(name, description string, properties map[string]any, required []string) map[string]any {
 	return map[string]any{
 		"name": name, "description": description,
-		"inputSchema": map[string]any{"type": "object", "additionalProperties": true},
+		"inputSchema": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
 	}
+}
+
+func propString(description string) map[string]any {
+	return map[string]any{"type": "string", "description": description}
 }
 
 func respond(id, result any, err error) {
@@ -111,7 +152,7 @@ func respond(id, result any, err error) {
 
 func str(v any) string {
 	if s, ok := v.(string); ok {
-		return s
+		return strings.TrimSpace(s)
 	}
 	return ""
 }
@@ -125,6 +166,16 @@ func intVal(v any, fallback int) int {
 	default:
 		return fallback
 	}
+}
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func defaultStr(v, fallback string) string {

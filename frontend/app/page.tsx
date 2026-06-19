@@ -8,9 +8,11 @@ import { DocSearch } from "@/components/doc-search";
 import { PlatformCards } from "@/components/platform-cards";
 import { useSearch } from "@/components/search-provider";
 import { getCategories, getModules } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { Category, ModuleInfo } from "@/types/modex";
 
 export default function HomePage() {
+  const { t } = useI18n();
   const router = useRouter();
   const { clearScope } = useSearch();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -25,11 +27,11 @@ export default function HomePage() {
     const params = new URLSearchParams(window.location.search);
     const loginError = params.get("login_error");
     if (loginError) {
-      alert("登录失败：" + loginError);
+      alert(t("home.loginFailed", { error: loginError }));
       window.history.replaceState({}, "", window.location.pathname);
     }
     return () => clearScope();
-  }, [clearScope]);
+  }, [clearScope, t]);
 
   function selectCategory(category: Category) {
     router.push(`/categories/${category.id}`);
@@ -40,10 +42,10 @@ export default function HomePage() {
       <section className={`home-hero mb-5 ${aiActive ? "home-hero-focus" : ""}`}>
         <div className="registry-kicker">
           <Layers3 size={16} />
-          Modex Registry
+          {t("home.kicker")}
         </div>
-        <h1 className="registry-title">文档中心</h1>
-        <p className="home-hero-sub muted">统一检索所有项目文档，或直接向 AI 提问。</p>
+        <h1 className="registry-title">{t("home.title")}</h1>
+        <p className="home-hero-sub muted">{t("home.subtitle")}</p>
         <DocSearch onAiActiveChange={setAiActive} />
       </section>
 
@@ -51,8 +53,8 @@ export default function HomePage() {
         <section>
           <div className="shelf-toolbar mb-3">
             <div>
-              <h2>分类</h2>
-              <p>按分类组织的文档集合，点击分类或子分类进入。</p>
+              <h2>{t("home.categoriesTitle")}</h2>
+              <p>{t("home.categoriesDescription")}</p>
             </div>
           </div>
           <PlatformCards categories={categories} modules={allModules} onSelect={selectCategory} />

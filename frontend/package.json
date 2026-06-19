@@ -6,7 +6,8 @@
     "dev": "next dev -H 0.0.0.0 -p 3456",
     "build": "next build --webpack",
     "start": "next start -H 0.0.0.0 -p 3456",
-    "lint": "next typegen && tsc --noEmit"
+    "lint": "next typegen && tsc --noEmit",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "highlight.js": "^11.11.1",
@@ -26,6 +27,7 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/node": "^20.14.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Search, Sparkles, Loader2 } from "lucide-react";
 import { SearchResults } from "@/components/search-results";
 import { useDocSearch, type SearchScope } from "@/lib/use-doc-search";
+import { useI18n } from "@/lib/i18n";
 
 export function DocSearch({
   onAiActiveChange,
@@ -18,6 +19,7 @@ export function DocSearch({
   placeholder?: string;
   autoFocus?: boolean;
 }) {
+  const { t } = useI18n();
   const scope: SearchScope = { moduleKey, categoryId };
   const s = useDocSearch(scope);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -41,13 +43,13 @@ export function DocSearch({
           value={s.query}
           onChange={(e) => s.setQuery(e.target.value)}
           onKeyDown={s.onKeyDown}
-          placeholder={placeholder || "搜索文档，或向 AI 提问…"}
-          aria-label="搜索文档或提问"
+          placeholder={placeholder || t("search.placeholder")}
+          aria-label={t("search.aria")}
         />
         {s.loading ? <Loader2 size={18} className="ds-spin muted" /> : null}
         <button className="ds-ask-btn" onClick={s.runAsk} disabled={!s.query.trim() || s.asking}>
           {s.asking ? <Loader2 size={16} className="ds-spin" /> : <Sparkles size={16} />}
-          询问 AI
+          {t("search.askAI")}
         </button>
       </div>
       <SearchResults s={s} />
