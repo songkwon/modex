@@ -71,6 +71,15 @@ async function mockBackend(page: Page) {
   });
 }
 
+async function mockEmptyDocs(page: Page) {
+  await page.route("http://localhost:8671/api/categories/tree", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("http://localhost:8671/api/modules", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("modex_locale", "zh-CN");
@@ -99,4 +108,14 @@ test("mock login exposes the admin console entry", async ({ page }) => {
 
   await expect(page.getByRole("link", { name: /项目指南/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /管理控制台/ })).toBeVisible();
+});
+
+test("home page explains the empty documentation state", async ({ page }) => {
+  await mockEmptyDocs(page);
+  await page.goto("/");
+
+  await expect(page.getByText("还没有接入文档")).toBeVisible();
+  await expect(page.getByText("当前空间暂无分类或文档源")).toBeVisible();
+  await expect(page.getByRole("link", { name: "接入文档源" })).toHaveAttribute("href", "/admin/modules");
+  await expect(page.getByRole("link", { name: "查看项目指南" })).toHaveAttribute("href", "/me/guide");
 });

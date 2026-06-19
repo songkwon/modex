@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Layers3 } from "lucide-react";
+import { FilePlus2, Layers3 } from "lucide-react";
 import { ModuleDrawer } from "@/components/module-drawer";
 import { DocSearch } from "@/components/doc-search";
 import { PlatformCards } from "@/components/platform-cards";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useSearch } from "@/components/search-provider";
 import { getCategories, getModules } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -19,10 +21,14 @@ export default function HomePage() {
   const [allModules, setAllModules] = useState<ModuleInfo[]>([]);
   const [selected, setSelected] = useState<ModuleInfo | null>(null);
   const [aiActive, setAiActive] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getCategories().then(setCategories);
-    getModules().then(setAllModules);
+    setLoading(true);
+    Promise.all([
+      getCategories().then(setCategories).catch(() => setCategories([])),
+      getModules().then(setAllModules).catch(() => setAllModules([])),
+    ]).finally(() => setLoading(false));
     clearScope();
     const params = new URLSearchParams(window.location.search);
     const loginError = params.get("login_error");
@@ -36,6 +42,8 @@ export default function HomePage() {
   function selectCategory(category: Category) {
     router.push(`/categories/${category.id}`);
   }
+
+  const hasDocs = categories.length > 0 || allModules.length > 0;
 
   return (
     <main className="main">
@@ -57,7 +65,23 @@ export default function HomePage() {
               <p>{t("home.categoriesDescription")}</p>
             </div>
           </div>
-          <PlatformCards categories={categories} modules={allModules} onSelect={selectCategory} />
+          {loading ? (
+            <div className="empty-state">{t("home.loadingDocs")}</div>
+          ) : hasDocs ? (
+            <PlatformCards categories={categories} modules={allModules} onSelect={selectCategory} />
+          ) : (
+            <EmptyState
+              icon={FilePlus2}
+              title={t("home.emptyTitle")}
+              hint={t("home.emptyHint")}
+              action={
+                <div className="empty-state-actions">
+                  <Link className="button button-primary" href="/admin/modules">{t("home.emptyAction")}</Link>
+                  <Link className="button" href="/me/guide">{t("home.emptyGuide")}</Link>
+                </div>
+              }
+            />
+          )}
         </section>
       ) : null}
 
