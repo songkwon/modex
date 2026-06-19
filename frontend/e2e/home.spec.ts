@@ -14,8 +14,8 @@ async function mockBackend(page: Page) {
       })
     });
   });
-  await page.route("http://localhost:8671/api/auth/me", async (route) => {
-    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: { code: "unauthorized" } }) });
+  await page.route("http://localhost:8671/api/auth/me*", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(null) });
   });
   await page.route("http://localhost:8671/api/auth/mock-login", async (route) => {
     await route.fulfill({
@@ -73,10 +73,10 @@ async function mockBackend(page: Page) {
 
 async function mockEmptyDocs(page: Page) {
   await page.route("http://localhost:8671/api/categories/tree", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(null) });
   });
   await page.route("http://localhost:8671/api/modules", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(null) });
   });
 }
 

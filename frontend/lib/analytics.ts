@@ -20,18 +20,25 @@ export type AnalyticsEvent =
 
 let initialized = false;
 
+function analyticsEnabled(): boolean {
+  if (typeof window === "undefined" || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return false;
+  const local = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname === "::1";
+  return !local || process.env.NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL === "true";
+}
+
 export function initAnalytics(): void {
-  if (initialized || typeof window === "undefined") return;
+  if (initialized || !analyticsEnabled()) return;
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY!;
   initialized = true;
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  if (!key) return;
   import("posthog-js").then((posthog) => {
     posthog.default.init(key, { api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com" });
+  }).catch(() => {
+    initialized = false;
   });
 }
 
 export function identify(user: { id: string; displayName?: string; email?: string; department?: string; groups?: string[] }): void {
-  if (typeof window === "undefined" || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
+  if (!analyticsEnabled()) return;
   import("posthog-js").then((posthog) => {
     posthog.default.identify(user.id, {
       name: user.displayName,
@@ -39,15 +46,15 @@ export function identify(user: { id: string; displayName?: string; email?: strin
       department: user.department,
       groups: user.groups,
     });
-  });
+  }).catch(() => {});
 }
 
 export function capture(event: AnalyticsEvent, props: Record<string, unknown> = {}): void {
   if (typeof window === "undefined") return;
-  if (process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+  if (analyticsEnabled()) {
     import("posthog-js").then((posthog) => {
       posthog.default.capture(event, props);
-    });
+    }).catch(() => {});
   }
   if (process.env.NODE_ENV !== "production") {
     // Helpful during MVP development before PostHog is enabled.

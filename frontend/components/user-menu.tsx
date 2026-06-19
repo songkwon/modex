@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Terminal, Shield, LogOut, LogIn, ChevronDown, FileText } from "lucide-react";
-import { getAuthConfig, getMe, logout, mockLogin } from "@/lib/api";
+import { getAuthConfig, getOptionalMe, logout, mockLogin } from "@/lib/api";
 import { identify } from "@/lib/analytics";
 import { useI18n } from "@/lib/i18n";
 import type { AuthConfig, User } from "@/types/modex";
@@ -45,8 +45,12 @@ export function UserMenu() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    getMe()
+    getOptionalMe()
       .then((u) => {
+        if (!u) {
+          setUser(null);
+          return;
+        }
         setUser(u);
         identify({
           id: u.id || u.username || u.email,
