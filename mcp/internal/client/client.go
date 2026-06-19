@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -87,14 +89,36 @@ func (c Client) do(req *http.Request) (any, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var decoded any
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
+	var decoded any
+	if len(bytes.TrimSpace(body)) > 0 {
+		if err := json.Unmarshal(body, &decoded); err != nil {
+			if resp.StatusCode >= 300 {
+				return nil, fmt.Errorf("api status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			}
+			return nil, err
+		}
+	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("api status %d: %v", resp.StatusCode, decoded)
+		return nil, fmt.Errorf("api status %d: %s", resp.StatusCode, apiErrorMessage(decoded))
 	}
 	return decoded, nil
+}
+
+func apiErrorMessage(decoded any) string {
+	if m, ok := decoded.(map[string]any); ok {
+		if errObj, ok := m["error"].(map[string]any); ok {
+			code, _ := errObj["code"].(string)
+			message, _ := errObj["message"].(string)
+			if code != "" || message != "" {
+				return strings.TrimSpace(code + ": " + message)
+			}
+		}
+	}
+	return fmt.Sprint(decoded)
 }
 
 func env(key, fallback string) string {

@@ -8,6 +8,8 @@ import { SearchProvider } from "@/components/search-provider";
 import { TopbarSearchButton } from "@/components/topbar-search";
 import { TopbarChatButton } from "@/components/topbar-chat";
 import { AnalyticsInit } from "@/components/analytics-init";
+import { I18nProvider } from "@/lib/i18n";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
@@ -32,24 +34,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
-        <AnalyticsInit />
-        <SearchProvider>
-          <div className="shell">
-            <header className="topbar">
-              <Link className="brand" href="/">
-                <Image src="/logo.svg" alt="Modex" width={28} height={28} priority style={{ borderRadius: 8 }} />
-                <span>Modex</span>
-              </Link>
-              <nav className="nav">
-                <TopbarSearchButton />
-                <TopbarChatButton />
-                <ThemeToggle />
-                <UserMenu />
-              </nav>
-            </header>
-            {children}
-          </div>
-        </SearchProvider>
+        <I18nProvider>
+          <AnalyticsInit />
+          <SearchProvider>
+            <div className="shell">
+              <header className="topbar">
+                <Link className="brand" href="/">
+                  <Image src="/logo.svg" alt="Modex" width={28} height={28} priority style={{ borderRadius: 8 }} />
+                  <span>Modex</span>
+                </Link>
+                <nav className="nav">
+                  <TopbarSearchButton />
+                  <TopbarChatButton />
+                  <LocaleSwitcher />
+                  <ThemeToggle />
+                  <UserMenu />
+                </nav>
+              </header>
+              {children}
+            </div>
+          </SearchProvider>
+        </I18nProvider>
       </body>
     </html>
   );

@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"modex/tools/docsctl/internal/docs"
 )
@@ -225,6 +229,12 @@ func (o options) applyEnv() {
 }
 
 func deploy(root, buildDir, artifact, url, token string) error {
+	if strings.TrimSpace(url) == "" {
+		return fmt.Errorf("deploy url is required (set --deploy-url or DOCS_DEPLOY_URL)")
+	}
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("deploy token is required (set --token or DOCS_DEPLOY_TOKEN; generate it from Modex admin)")
+	}
 	if _, err := os.Stat(artifact); err != nil {
 		// Auto-build and package when the artifact is missing, so `docsctl deploy`
 		// is the only command users need in CI/local workflows.
@@ -242,25 +252,59 @@ func deploy(root, buildDir, artifact, url, token string) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
+	ctx, cancel := context.WithTimeout(context.Background(), envDuration("DOCS_DEPLOY_TIMEOUT", 2*time.Minute))
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/zip")
+	req.Header.Set("User-Agent", "docsctl/"+docsctlVersion)
 	// Per-module / global deploy token (matches backend /api/deploy auth).
-	if token != "" {
-		req.Header.Set("X-Modex-Deploy-Token", token)
-	}
+	req.Header.Set("X-Modex-Deploy-Token", token)
+	fmt.Printf("docsctl deploy uploading %s (%d bytes) to %s\n", artifact, len(b), url)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("deploy request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("deploy failed: %s %s", resp.Status, string(body))
+		return fmt.Errorf("deploy failed: %s: %s", resp.Status, formatAPIError(body))
 	}
 	return nil
+}
+
+func formatAPIError(body []byte) string {
+	var payload struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Deploy struct {
+			Stages []struct {
+				Name   string `json:"name"`
+				Status string `json:"status"`
+				Error  string `json:"error"`
+				Note   string `json:"note"`
+			} `json:"stages"`
+		} `json:"deploy"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil && (payload.Error.Code != "" || payload.Error.Message != "") {
+		msg := strings.TrimSpace(payload.Error.Code + ": " + payload.Error.Message)
+		for _, st := range payload.Deploy.Stages {
+			if st.Status == "failed" {
+				msg += fmt.Sprintf(" (failed stage: %s", st.Name)
+				if st.Error != "" {
+					msg += ": " + st.Error
+				}
+				msg += ")"
+				break
+			}
+		}
+		return msg
+	}
+	return strings.TrimSpace(string(body))
 }
 
 func env(key, fallback string) string {
@@ -280,6 +324,22 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err == nil && d > 0 {
+		return d
+	}
+	var seconds int
+	if _, err := fmt.Sscanf(v, "%d", &seconds); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	return fallback
 }
 
 func must(err error) {

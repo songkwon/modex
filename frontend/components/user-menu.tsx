@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Terminal, Shield, LogOut, LogIn, ChevronDown, BookOpen } from "lucide-react";
 import { getAuthConfig, getMe, logout, mockLogin } from "@/lib/api";
 import { identify } from "@/lib/analytics";
+import { useI18n } from "@/lib/i18n";
 import type { AuthConfig, User } from "@/types/modex";
 
 function initials(name: string) {
@@ -35,6 +36,7 @@ function UserAvatar({ user }: { user: { display_name?: string; username?: string
 }
 
 export function UserMenu() {
+  const { t } = useI18n();
   const [user, setUser] = useState<User | null>(null);
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
   const [open, setOpen] = useState(false);
@@ -81,7 +83,7 @@ export function UserMenu() {
     if (typeof window !== "undefined") window.sessionStorage.removeItem("modex_manual_logout");
     if (cfg?.auth_mode === "oidc") {
       if (cfg.login_url) window.location.href = cfg.login_url;
-      else alert("Keycloak OIDC 未完整配置：请检查 KEYCLOAK_BASE_URL / KEYCLOAK_REALM / OIDC_CLIENT_ID 等环境变量。");
+      else alert(t("user.oidcNotConfigured"));
       return;
     }
     const res = await mockLogin();
@@ -98,7 +100,7 @@ export function UserMenu() {
   if (!user) {
     return (
       <button className="button button-primary" onClick={login}>
-        <LogIn size={16} />登录
+        <LogIn size={16} />{t("user.login")}
       </button>
     );
   }
@@ -111,7 +113,7 @@ export function UserMenu() {
         <UserAvatar user={user} />
         <span className="user-meta">
           <span className="user-name">{user.display_name || user.username}</span>
-          <span className="user-dept">{user.department || "—"}</span>
+          <span className="user-dept">{user.department || t("common.emptyDash")}</span>
         </span>
         <ChevronDown size={15} className="muted" />
       </button>
@@ -120,15 +122,15 @@ export function UserMenu() {
           <div className="user-dropdown-head">
             <div className="font-semibold">{user.display_name || user.username}</div>
             <div className="muted text-xs">{user.email || user.username}{user.department ? ` · ${user.department}` : ""}</div>
-            {user.is_super_admin ? <span className="tag mt-2">超级管理员</span> : null}
+            {user.is_super_admin ? <span className="tag mt-2">{t("user.superAdmin")}</span> : null}
           </div>
           <div className="user-dropdown-list">
-            <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />MCP 使用</Link>
-            <Link className="user-dropdown-item" href="/me/docs-example" onClick={() => setOpen(false)}><BookOpen size={16} />示例文档</Link>
-            {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />管理控制台</Link> : null}
+            <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />{t("user.mcp")}</Link>
+            <Link className="user-dropdown-item" href="/me/docs-example" onClick={() => setOpen(false)}><BookOpen size={16} />{t("user.docsExample")}</Link>
+            {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />{t("user.admin")}</Link> : null}
           </div>
           <div className="user-dropdown-foot">
-            <button className="user-dropdown-item" onClick={signOut}><LogOut size={16} />登出</button>
+            <button className="user-dropdown-item" onClick={signOut}><LogOut size={16} />{t("user.logout")}</button>
           </div>
         </div>
       ) : null}
