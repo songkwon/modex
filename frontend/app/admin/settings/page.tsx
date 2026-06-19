@@ -132,7 +132,12 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <AdminShell title="模型设置" kicker="AI Model" description="配置对话、嵌入、重排序模型，以及 RAG 召回测试和文档分段策略。">
+    <AdminShell
+      title="模型设置"
+      kicker="AI Model"
+      description="配置对话、嵌入、重排序模型，以及 RAG 召回测试和文档分段策略。"
+      contentClassName="admin-settings-content"
+    >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <section className="card" style={{ display: "grid", gap: 18 }}>

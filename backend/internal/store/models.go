@@ -415,17 +415,19 @@ type DailyReadPoint struct {
 
 // ReaderStat is one reader's aggregated read activity for a single page.
 type ReaderStat struct {
-	Reader     string    `json:"reader"` // display name, username, or "匿名"
-	UserID     string    `json:"user_id"`
-	Count      int       `json:"count"`
-	LastReadAt time.Time `json:"last_read_at"`
+	Reader         string    `json:"reader"` // display name, username, or "匿名"
+	UserID         string    `json:"user_id"`
+	Count          int       `json:"count"`
+	AvgDurationSec int       `json:"avg_duration_seconds"`
+	LastReadAt     time.Time `json:"last_read_at"`
 }
 
 // PageReadStats is the per-page reading detail surfaced behind the doc-page
 // "eye" popover: a daily read trend plus a per-reader breakdown.
 type PageReadStats struct {
-	DocID   string           `json:"doc_id"`
-	Total   int              `json:"total"`
-	Daily   []DailyReadPoint `json:"daily"`
-	Readers []ReaderStat     `json:"readers"`
+	DocID          string           `json:"doc_id"`
+	Total          int              `json:"total"`
+	AvgDurationSec int              `json:"avg_duration_seconds"`
+	Daily          []DailyReadPoint `json:"daily"`
+	Readers        []ReaderStat     `json:"readers"`
 }

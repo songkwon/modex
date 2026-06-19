@@ -22,9 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"modex/backend/internal/auth"
+	"modex/backend/internal/application"
 	"modex/backend/internal/deploy"
-	"modex/backend/internal/embedding"
 	"modex/backend/internal/search"
 	"modex/backend/internal/store"
 
@@ -33,9 +32,7 @@ import (
 )
 
 type Server struct {
-	store       *store.Store
-	auth        *auth.Service
-	search      search.Service
+	app         *application.Service
 	minioClient *minio.Client
 	minioBucket string
 }
@@ -45,26 +42,12 @@ func New(st *store.Store) *Server {
 }
 
 func NewWithVectorStore(st *store.Store, vectors search.VectorStore) *Server {
-	provider := embedding.SettingsProvider{Load: func() embedding.Settings {
-		ai := st.Settings().AI
-		return embedding.Settings{
-			BaseURL: ai.EmbeddingBaseURL,
-			Model:   ai.EmbeddingModel,
-			APIKey:  ai.EmbeddingAPIKey,
-			Dim:     ai.EmbeddingDim,
-		}
-	}}
-	authSvc := auth.NewService(auth.FromEnv())
+	return NewWithApplication(application.New(st, vectors, nil))
+}
+
+func NewWithApplication(app *application.Service) *Server {
 	s := &Server{
-		store: st,
-		auth:  authSvc,
-		search: search.Service{
-			Store:          st,
-			Embedder:       provider,
-			Vectors:        vectors,
-			KeywordWeight:  envFloat("HYBRID_KEYWORD_WEIGHT", 0.6),
-			SemanticWeight: envFloat("HYBRID_SEMANTIC_WEIGHT", 0.4),
-		},
+		app: app,
 	}
 	// init MinIO for real site file storage (upload SiteFiles from deploys)
 	if endpoint := os.Getenv("MINIO_ENDPOINT"); endpoint != "" {
@@ -105,11 +88,11 @@ func NewWithVectorStore(st *store.Store, vectors search.VectorStore) *Server {
 		}
 	}
 	if s.minioClient != nil && s.migrateSiteAssetsToMinIO() {
-		s.store.ClearSiteAssets()
+		s.app.Store().ClearSiteAssets()
 	}
-	if vectors != nil {
+	if app.Search().Vectors != nil {
 		// A legacy snapshot may still contain vectors from an older release.
-		st.ClearEmbeddings()
+		app.Store().ClearEmbeddings()
 	}
 	return s
 }
@@ -189,14 +172,14 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 			store.User
 			IsSuperAdmin bool `json:"is_super_admin"`
 			IsTeamAdmin  bool `json:"is_team_admin"`
-		}{User: user, IsSuperAdmin: s.auth.IsSuperAdmin(user), IsTeamAdmin: s.isTeamAdmin(user)})
+		}{User: user, IsSuperAdmin: s.app.Auth().IsSuperAdmin(user), IsTeamAdmin: s.isTeamAdmin(user)})
 		return
 	}
 	writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
 }
 
 func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
-	if s.auth.Config().Mode == "oidc" {
+	if s.app.Auth().Config().Mode == "oidc" {
 		writeError(w, http.StatusForbidden, "mock_login_disabled", "mock login is disabled when AUTH_MODE=oidc")
 		return
 	}
@@ -205,17 +188,17 @@ func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 	}
 	_ = decodeBody(r, &req)
-	user := s.store.CurrentUser()
+	user := s.app.Store().CurrentUser()
 	if req.Username != "" {
-		for _, u := range s.store.Users("") {
+		for _, u := range s.app.Store().Users("") {
 			if strings.EqualFold(u.Username, req.Username) {
 				user = u
 				break
 			}
 		}
 	}
-	user = s.store.UpsertUser(user)
-	if err := s.auth.CreateSession(w, user); err != nil {
+	user = s.app.Store().UpsertUser(user)
+	if err := s.app.Auth().CreateSession(w, user); err != nil {
 		writeError(w, http.StatusInternalServerError, "session_failed", err.Error())
 		return
 	}
@@ -223,7 +206,7 @@ func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	loginURL, err := s.auth.BeginLogin(w)
+	loginURL, err := s.app.Auth().BeginLogin(w)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "oidc_not_configured", err.Error())
 		return
@@ -232,8 +215,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
-	user, err := s.auth.CompleteLogin(r.Context(), r, w)
-	frontend := s.auth.Config().FrontendBaseURL
+	user, err := s.app.Auth().CompleteLogin(r.Context(), r, w)
+	frontend := s.app.Auth().Config().FrontendBaseURL
 	if err != nil {
 		// Surface the failure to the user in the portal rather than a bare JSON
 		// 400, and log the detail server-side for diagnostics.
@@ -242,17 +225,17 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Sync the SSO identity (and its groups) into the user directory.
-	s.store.UpsertUser(user)
+	s.app.Store().UpsertUser(user)
 	http.Redirect(w, r, frontend, http.StatusFound)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	s.auth.Logout(w, r)
+	s.app.Auth().Logout(w, r)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
-	cfg := s.auth.Config()
+	cfg := s.app.Auth().Config()
 	loginURL := ""
 	// Advertise the login URL when a real login is available: always in mock
 	// mode, and in OIDC mode only once the provider is fully configured.
@@ -266,12 +249,12 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"frontend_base_url":  cfg.FrontendBaseURL,
 		// Effective doc-engine plugin state (enabled + non-secret config) so the
 		// renderer can conditionally apply plugins without admin rights.
-		"plugins": s.store.PluginEffective(),
+		"plugins": s.app.Store().PluginEffective(),
 	})
 }
 
 func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
-	tree := s.store.CategoryTree()
+	tree := s.app.Store().CategoryTree()
 	// Admin views pass ?scope=managed to get only the subtrees a team admin may
 	// manage. Public/browse calls (no scope) always get the full tree.
 	if r.URL.Query().Get("scope") == "managed" {
@@ -299,7 +282,7 @@ func filterCategoryTree(nodes []store.Category, set map[string]bool) []store.Cat
 }
 
 func (s *Server) handleModules(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.store.Modules(r.URL.Query().Get("category_id"), r.URL.Query().Get("keyword")))
+	writeJSON(w, http.StatusOK, s.app.Store().Modules(r.URL.Query().Get("category_id"), r.URL.Query().Get("keyword")))
 }
 
 func (s *Server) handleModuleRoutes(w http.ResponseWriter, r *http.Request) {
@@ -310,16 +293,16 @@ func (s *Server) handleModuleRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	moduleKey := parts[0]
 	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "info") {
-		m, err := s.store.Module(moduleKey)
+		m, err := s.app.Store().Module(moduleKey)
 		writeResult(w, m, err)
 		return
 	}
 	if len(parts) == 2 && parts[1] == "versions" {
-		writeJSON(w, http.StatusOK, s.store.Versions(moduleKey))
+		writeJSON(w, http.StatusOK, s.app.Store().Versions(moduleKey))
 		return
 	}
 	if len(parts) == 4 && parts[1] == "versions" && parts[3] == "entries" {
-		writeJSON(w, http.StatusOK, s.store.Entries(moduleKey, parts[2]))
+		writeJSON(w, http.StatusOK, s.app.Store().Entries(moduleKey, parts[2]))
 		return
 	}
 	writeError(w, http.StatusNotFound, "not_found", "module route not found")
@@ -331,7 +314,7 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "docs route not found")
 		return
 	}
-	module, err := s.store.Module(parts[0])
+	module, err := s.app.Store().Module(parts[0])
 	if err != nil {
 		writeResult(w, module, err)
 		return
@@ -341,7 +324,7 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 {
-		writeJSON(w, http.StatusOK, map[string]any{"module": module, "version": parts[1], "entries": s.store.Entries(module.ModuleKey, parts[1])})
+		writeJSON(w, http.StatusOK, map[string]any{"module": module, "version": parts[1], "entries": s.app.Store().Entries(module.ModuleKey, parts[1])})
 		return
 	}
 	if len(parts) >= 3 {
@@ -350,7 +333,7 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(parts) == 4 && parts[3] == "nav" {
-			nav := s.store.Nav(module.ModuleKey, parts[1])
+			nav := s.app.Store().Nav(module.ModuleKey, parts[1])
 			if len(nav) == 0 {
 				writeJSON(w, http.StatusOK, []map[string]string{{"title": "概览", "path": "#overview"}, {"title": "正文", "path": "#content"}, {"title": "元数据", "path": "#metadata"}})
 				return
@@ -358,7 +341,7 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, nav)
 			return
 		}
-		page, err := s.store.PageByRoute(module.ModuleKey, parts[1], parts[2])
+		page, err := s.app.Store().PageByRoute(module.ModuleKey, parts[1], parts[2])
 		if err != nil {
 			writeResult(w, page, err)
 			return
@@ -398,7 +381,7 @@ func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, modul
 		}
 	}
 	// fallback to in-memory
-	f, err := s.store.SiteFile(moduleKey, docsVersion, entryKey, name)
+	f, err := s.app.Store().SiteFile(moduleKey, docsVersion, entryKey, name)
 	if err != nil {
 		writeResult(w, nil, err)
 		return
@@ -411,7 +394,7 @@ func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, modul
 
 func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
 	docID := strings.TrimPrefix(r.URL.Path, "/api/docs/page/")
-	page, err := s.store.Page(docID)
+	page, err := s.app.Store().Page(docID)
 	if err != nil {
 		writeResult(w, page, err)
 		return
@@ -443,7 +426,7 @@ func (s *Server) docPageHTML(ctx context.Context, moduleKey, docsVersion, entryK
 				err = statErr
 			}
 		}
-		if fallback := s.store.PageHTML(moduleKey, docsVersion, entryKey); fallback != "" {
+		if fallback := s.app.Store().PageHTML(moduleKey, docsVersion, entryKey); fallback != "" {
 			return fallback, nil
 		}
 		if err == nil {
@@ -451,7 +434,7 @@ func (s *Server) docPageHTML(ctx context.Context, moduleKey, docsVersion, entryK
 		}
 		return "", fmt.Errorf("read MinIO object %s: %w", key, err)
 	}
-	return s.store.PageHTML(moduleKey, docsVersion, entryKey), nil
+	return s.app.Store().PageHTML(moduleKey, docsVersion, entryKey), nil
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -467,7 +450,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if len(req.Filters.DocsVersions) == 0 {
 		req.DefaultVersionsOnly = true
 	}
-	resp, err := s.search.Search(r.Context(), req)
+	resp, err := s.app.Search().Search(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "search_failed", err.Error())
 		return
@@ -478,15 +461,14 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if req.Log && strings.TrimSpace(req.Query) != "" {
 		filters, _ := json.Marshal(req.Filters)
 		user, _ := s.currentUser(r)
-		s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
+		s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleAsk answers a natural-language question using retrieval over the docs
-// (RAG). When ASK_HTTP_URL is configured it forwards the question plus retrieved
-// context to an external LLM; otherwise it returns an extractive answer built
-// from the top matches so the "Ask AI" flow works without an LLM key.
+// (RAG). The answer model is configured by an administrator; when it is absent
+// or unavailable, the endpoint returns an extractive answer from the top hits.
 func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
@@ -514,14 +496,14 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	if len(req.CategoryIDs) > 0 {
 		filters.CategoryIDs = req.CategoryIDs
 	}
-	resp, err := s.search.Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 8, DefaultVersionsOnly: len(filters.DocsVersions) == 0})
+	resp, err := s.app.Search().Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 8, DefaultVersionsOnly: len(filters.DocsVersions) == 0})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "ask_failed", err.Error())
 		return
 	}
 	answer, provider := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
 	user, _ := s.currentUser(r)
-	s.store.AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
+	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"query":    req.Query,
 		"answer":   answer,
@@ -532,17 +514,11 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []search.Result) (string, string) {
 	// 1) Admin-configured OpenAI-compatible chat model (preferred).
-	if ai := s.store.Settings().AI; strings.TrimSpace(ai.AskBaseURL) != "" && strings.TrimSpace(ai.AskModel) != "" {
+	if ai := s.app.Store().Settings().AI; strings.TrimSpace(ai.AskBaseURL) != "" && strings.TrimSpace(ai.AskModel) != "" {
 		if answer, err := s.askOpenAICompatible(ctx, ai, query, results); err == nil && strings.TrimSpace(answer) != "" {
 			return answer, "llm"
 		} else if err != nil {
 			log.Printf("ask llm failed: %v", err)
-		}
-	}
-	// 2) Legacy custom {query,context}->{answer} proxy via env.
-	if url := os.Getenv("ASK_HTTP_URL"); url != "" {
-		if answer, err := s.askExternalLLM(ctx, url, query, results); err == nil && strings.TrimSpace(answer) != "" {
-			return answer, "http"
 		}
 	}
 	if len(results) == 0 {
@@ -561,41 +537,6 @@ func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []s
 	}
 	b.WriteString("\n以上内容来自下方引用文档，点击可查看完整页面。")
 	return b.String(), "extractive"
-}
-
-func (s *Server) askExternalLLM(ctx context.Context, url, query string, results []search.Result) (string, error) {
-	var ctxBuilder strings.Builder
-	for i, r := range results {
-		if i >= 6 {
-			break
-		}
-		ctxBuilder.WriteString(s.askContextForResult(i+1, r))
-	}
-	payload, _ := json.Marshal(map[string]any{"query": query, "context": ctxBuilder.String()})
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(payload)))
-	if err != nil {
-		return "", err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if key := os.Getenv("ASK_HTTP_API_KEY"); key != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+key)
-	}
-	client := &http.Client{Timeout: 30 * time.Second}
-	httpResp, err := client.Do(httpReq)
-	if err != nil {
-		return "", err
-	}
-	defer httpResp.Body.Close()
-	if httpResp.StatusCode >= 300 {
-		return "", fmt.Errorf("ask endpoint returned %d", httpResp.StatusCode)
-	}
-	var out struct {
-		Answer string `json:"answer"`
-	}
-	if err := json.NewDecoder(httpResp.Body).Decode(&out); err != nil {
-		return "", err
-	}
-	return out.Answer, nil
 }
 
 // askOpenAICompatible calls any OpenAI-compatible /chat/completions endpoint
@@ -619,7 +560,7 @@ func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, q
 
 func (s *Server) askContextForResult(i int, r search.Result) string {
 	content := firstNonEmptyStr(r.Snippet, r.Title)
-	if p, err := s.store.Page(r.DocID); err == nil {
+	if p, err := s.app.Store().Page(r.DocID); err == nil {
 		content = firstNonEmptyStr(p.ContentMD, p.ContentText, p.Description, r.Snippet)
 	}
 	content = truncateRunes(strings.TrimSpace(content), 4200)
@@ -653,14 +594,14 @@ func (s *Server) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, maskedSettings(s.store.Settings()))
+		writeJSON(w, http.StatusOK, maskedSettings(s.app.Store().Settings()))
 	case http.MethodPut, http.MethodPost:
 		var body store.AISettings
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		saved := s.store.SaveAISettings(body)
+		saved := s.app.Store().SaveAISettings(body)
 		writeJSON(w, http.StatusOK, maskedSettings(saved))
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
@@ -675,7 +616,7 @@ func (s *Server) handleAdminRecallTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
 		return
 	}
-	ai := s.store.Settings().AI
+	ai := s.app.Store().Settings().AI
 	query := strings.TrimSpace(ai.RecallTestQuery)
 	if query == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "recall_test_query is required")
@@ -693,7 +634,7 @@ func (s *Server) handleAdminRecallTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "recall_test_doc_ids is required")
 		return
 	}
-	resp, err := s.search.Search(r.Context(), search.Request{
+	resp, err := s.app.Search().Search(r.Context(), search.Request{
 		Query:               query,
 		Mode:                search.ModeHybrid,
 		Page:                1,
@@ -730,7 +671,7 @@ func (s *Server) handleAdminPlugins(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.store.PluginStates()})
+		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.app.Store().PluginStates()})
 	case http.MethodPut, http.MethodPost:
 		var body struct {
 			Plugins map[string]store.PluginSetting `json:"plugins"`
@@ -739,7 +680,7 @@ func (s *Server) handleAdminPlugins(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.store.SavePluginSettings(body.Plugins)})
+		writeJSON(w, http.StatusOK, map[string]any{"plugins": s.app.Store().SavePluginSettings(body.Plugins)})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
 	}
@@ -759,22 +700,22 @@ func (s *Server) handleAdminPluginImport(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		saved, err := s.store.SaveUploadedPlugin(body)
+		saved, err := s.app.Store().SaveUploadedPlugin(body)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_plugin", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"plugin": saved, "plugins": s.store.PluginStates()})
+		writeJSON(w, http.StatusOK, map[string]any{"plugin": saved, "plugins": s.app.Store().PluginStates()})
 	case http.MethodDelete:
 		if key == "" {
 			writeError(w, http.StatusBadRequest, "bad_request", "plugin key required")
 			return
 		}
-		if !s.store.DeleteUploadedPlugin(key) {
+		if !s.app.Store().DeleteUploadedPlugin(key) {
 			writeError(w, http.StatusNotFound, "not_found", "plugin not found")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "key": key, "plugins": s.store.PluginStates()})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "key": key, "plugins": s.app.Store().PluginStates()})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST or DELETE")
 	}
@@ -787,7 +728,7 @@ func (s *Server) handleDocsPlugins(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plugins": s.store.EnabledUploadedPlugins()})
+	writeJSON(w, http.StatusOK, map[string]any{"plugins": s.app.Store().EnabledUploadedPlugins()})
 }
 
 // handleAdminSnippets manages the reusable snippet library and variables.
@@ -798,7 +739,7 @@ func (s *Server) handleAdminSnippets(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		snips, vars := s.store.SnippetData()
+		snips, vars := s.app.Store().SnippetData()
 		writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
 	case http.MethodPut, http.MethodPost:
 		var body struct {
@@ -809,7 +750,7 @@ func (s *Server) handleAdminSnippets(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		snips, vars := s.store.SaveSnippetData(body.Snippets, body.Variables)
+		snips, vars := s.app.Store().SaveSnippetData(body.Snippets, body.Variables)
 		writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or PUT")
@@ -823,7 +764,7 @@ func (s *Server) handleDocsSnippets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
 		return
 	}
-	snips, vars := s.store.SnippetData()
+	snips, vars := s.app.Store().SnippetData()
 	writeJSON(w, http.StatusOK, map[string]any{"snippets": snips, "variables": vars})
 }
 
@@ -846,7 +787,7 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	cur := s.store.Settings().AI
+	cur := s.app.Store().Settings().AI
 	base := strings.TrimSpace(body.BaseURL)
 	if base == "" {
 		base = cur.AskBaseURL
@@ -964,7 +905,7 @@ func ndcg(expected, actual []string) float64 {
 }
 
 func (s *Server) handleFacets(w http.ResponseWriter, r *http.Request) {
-	resp, _ := s.search.Search(r.Context(), search.Request{Mode: search.ModeKeyword, PageSize: 1})
+	resp, _ := s.app.Search().Search(r.Context(), search.Request{Mode: search.ModeKeyword, PageSize: 1})
 	writeJSON(w, http.StatusOK, resp.Facets)
 }
 
@@ -975,7 +916,7 @@ func (s *Server) handleEmbedText(w http.ResponseWriter, r *http.Request) {
 	}
 	if user, ok := s.requireUser(w, r); !ok {
 		return
-	} else if !isAdmin(user) && !s.auth.IsSuperAdmin(user) {
+	} else if !isAdmin(user) && !s.app.Auth().IsSuperAdmin(user) {
 		writeError(w, http.StatusForbidden, "forbidden", "admin required")
 		return
 	}
@@ -986,12 +927,12 @@ func (s *Server) handleEmbedText(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	vec, err := s.search.Embedder.EmbedText(r.Context(), req.Text)
+	vec, err := s.app.Search().Embedder.EmbedText(r.Context(), req.Text)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "embedding_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"provider": s.search.Embedder.Name(), "dimension": len(vec), "embedding": vec})
+	writeJSON(w, http.StatusOK, map[string]any{"provider": s.app.Search().Embedder.Name(), "dimension": len(vec), "embedding": vec})
 }
 
 func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) {
@@ -1001,23 +942,23 @@ func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) 
 	}
 	if user, ok := s.requireUser(w, r); !ok {
 		return
-	} else if !isAdmin(user) && !s.auth.IsSuperAdmin(user) {
+	} else if !isAdmin(user) && !s.app.Auth().IsSuperAdmin(user) {
 		writeError(w, http.StatusForbidden, "forbidden", "admin required")
 		return
 	}
-	count, err := s.search.Reindex(r.Context())
+	count, err := s.app.Search().Reindex(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "embedding_reindex_failed", err.Error())
 		return
 	}
-	storedCount, err := s.search.EmbeddingCount(r.Context())
+	storedCount, err := s.app.Search().EmbeddingCount(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "embedding_count_failed", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":           "reindexed",
-		"provider":         s.search.Embedder.Name(),
+		"provider":         s.app.Search().Embedder.Name(),
 		"embedded_pages":   count,
 		"cached_documents": storedCount,
 	})
@@ -1030,20 +971,20 @@ func (s *Server) handleSearchReindex(w http.ResponseWriter, r *http.Request) {
 	}
 	if user, ok := s.requireUser(w, r); !ok {
 		return
-	} else if !isAdmin(user) && !s.auth.IsSuperAdmin(user) {
+	} else if !isAdmin(user) && !s.app.Auth().IsSuperAdmin(user) {
 		writeError(w, http.StatusForbidden, "forbidden", "admin required")
 		return
 	}
 	// The keyword index is computed from the in-memory page set, so reindexing
 	// primarily (re)builds the embedding cache used by semantic/hybrid search.
-	count, err := s.search.Reindex(r.Context())
+	count, err := s.app.Search().Reindex(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "search_reindex_failed", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":             "reindexed",
-		"indexed_documents":  len(s.store.Pages()),
+		"indexed_documents":  len(s.app.Store().Pages()),
 		"embedded_documents": count,
 	})
 }
@@ -1067,7 +1008,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if provided == "" {
 		provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-	m, moduleErr := s.store.Module(moduleKey)
+	m, moduleErr := s.app.Store().Module(moduleKey)
 	if moduleErr != nil {
 		writeError(w, http.StatusNotFound, "module_not_found", "document source not found")
 		return
@@ -1092,12 +1033,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		artifact.SiteFiles = nil
 		artifact.SiteHTML = nil
 	}
-	if err := s.search.DeleteModuleVersionEmbeddings(r.Context(), moduleKey, artifact.Metadata.DocsVersion); err != nil {
+	if err := s.app.Search().DeleteModuleVersionEmbeddings(r.Context(), moduleKey, artifact.Metadata.DocsVersion); err != nil {
 		writeError(w, http.StatusBadGateway, "embedding_cleanup_failed", err.Error())
 		return
 	}
 
-	result, err := s.store.IngestArtifact(toStoreArtifact(artifact))
+	result, err := s.app.Store().IngestArtifact(toStoreArtifact(artifact))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "deploy_failed", err.Error())
 		return
@@ -1110,7 +1051,7 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	releases := s.store.Releases()
+	releases := s.app.Store().Releases()
 	if set, all := s.accessibleCategoryIDs(user); !all {
 		scoped := releases[:0:0]
 		for _, rel := range releases {
@@ -1191,7 +1132,7 @@ func (s *Server) handleDocFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _ := s.currentUser(r)
-	f := s.store.AddDocFeedback(store.DocFeedback{
+	f := s.app.Store().AddDocFeedback(store.DocFeedback{
 		DocID: req.DocID, Rating: req.Rating, Comment: req.Comment, UserID: user.ID, SessionID: req.SessionID,
 	})
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "recorded", "feedback": f})
@@ -1202,7 +1143,7 @@ func (s *Server) handleDocFeedbackLogs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	logs := s.store.DocFeedbacks()
+	logs := s.app.Store().DocFeedbacks()
 	type out struct {
 		store.DocFeedback
 		DisplayName string `json:"display_name"`
@@ -1215,7 +1156,7 @@ func (s *Server) handleDocFeedbackLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		dn := ""
 		if log.UserID != "" {
-			if u, err := s.store.UserByID(log.UserID); err == nil {
+			if u, err := s.app.Store().UserByID(log.UserID); err == nil {
 				dn = u.DisplayName
 				if dn == "" {
 					dn = u.Username
@@ -1246,7 +1187,7 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	logs := s.store.SearchLogs()
+	logs := s.app.Store().SearchLogs()
 	type out struct {
 		store.SearchLog
 		DisplayName string `json:"display_name"`
@@ -1261,7 +1202,7 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		dn := ""
 		if log.UserID != "" {
-			if u, err := s.store.UserByID(log.UserID); err == nil {
+			if u, err := s.app.Store().UserByID(log.UserID); err == nil {
 				dn = u.DisplayName
 				if dn == "" {
 					dn = u.Username
@@ -1292,7 +1233,7 @@ func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	logs := s.store.MCPLogs()
+	logs := s.app.Store().MCPLogs()
 	type out struct {
 		store.MCPLog
 		DisplayName string `json:"display_name"`
@@ -1306,7 +1247,7 @@ func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		dn := ""
 		if log.UserID != "" {
-			if u, err := s.store.UserByID(log.UserID); err == nil {
+			if u, err := s.app.Store().UserByID(log.UserID); err == nil {
 				dn = u.DisplayName
 				if dn == "" {
 					dn = u.Username
@@ -1333,6 +1274,11 @@ func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMCPLog(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.mcpLogUser(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "MCP log requires a session, OAuth access token, or personal MCP token")
+		return
+	}
 	var req struct {
 		ToolName    string `json:"tool_name"`
 		Query       string `json:"query"`
@@ -1343,16 +1289,20 @@ func (s *Server) handleMCPLog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	user, _ := s.currentUser(r)
-	if user.ID == "" {
-		if tok := bearerToken(r); tok != "" {
-			if u, err := s.store.UserByMCPToken(tok); err == nil {
-				user = u
-			}
+	s.app.Store().AddMCPLog(store.MCPLog{ID: fmt.Sprintf("ml-%d", time.Now().UnixNano()), ToolName: req.ToolName, UserID: user.ID, Query: req.Query, InputJSON: req.InputJSON, ResultCount: req.ResultCount, CreatedAt: time.Now().UTC()})
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "logged"})
+}
+
+func (s *Server) mcpLogUser(r *http.Request) (store.User, bool) {
+	if user, ok := s.currentUser(r); ok {
+		return user, true
+	}
+	if tok := bearerToken(r); tok != "" {
+		if user, err := s.app.Store().UserByMCPToken(tok); err == nil {
+			return user, true
 		}
 	}
-	s.store.AddMCPLog(store.MCPLog{ID: fmt.Sprintf("ml-%d", time.Now().UnixNano()), ToolName: req.ToolName, UserID: user.ID, Query: req.Query, InputJSON: req.InputJSON, ResultCount: req.ResultCount, CreatedAt: time.Now().UTC()})
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "logged"})
+	return store.User{}, false
 }
 
 func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
@@ -1370,7 +1320,7 @@ func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "token_gen_failed", err.Error())
 			return
 		}
-		updated, err := s.store.SetUserMCPToken(user.ID, tok)
+		updated, err := s.app.Store().SetUserMCPToken(user.ID, tok)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "update_failed", err.Error())
 			return
@@ -1385,11 +1335,11 @@ func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
 // a real, cookie-backed action in both mock and OIDC modes, so there is no
 // silent impersonation; anonymous callers simply get ok == false.
 func (s *Server) currentUser(r *http.Request) (store.User, bool) {
-	if user, ok := s.auth.CurrentUser(r); ok {
+	if user, ok := s.app.Auth().CurrentUser(r); ok {
 		return user, true
 	}
 	if tok := bearerToken(r); tok != "" {
-		if user, _, _, err := s.store.UserByOAuthAccessToken(tok); err == nil {
+		if user, _, _, err := s.app.Store().UserByOAuthAccessToken(tok); err == nil {
 			return user, true
 		}
 	}
@@ -1431,7 +1381,7 @@ func (s *Server) isTeamLeader(u store.User, teamKey string) bool {
 	if teamKey == "" {
 		return false
 	}
-	t, err := s.store.Team(teamKey)
+	t, err := s.app.Store().Team(teamKey)
 	if err != nil {
 		return false
 	}
@@ -1445,7 +1395,7 @@ func (s *Server) isTeamLeader(u store.User, teamKey string) bool {
 
 // teamMembers returns usernames/ids in the team (for ownership checks).
 func (s *Server) teamMembers(teamKey string) []string {
-	return s.store.TeamMembers(teamKey)
+	return s.app.Store().TeamMembers(teamKey)
 }
 
 // canManageViaResponsibleTeam allows members (incl. leader) of a category's responsible team
@@ -1469,7 +1419,7 @@ func (s *Server) canManageViaResponsibleTeam(u store.User, categoryIDs []string)
 
 func (s *Server) categoryResponsible(id string) string {
 	// Walk the tree (small data) to find assignment for id or nearest ancestor with one.
-	tree := s.store.CategoryTree()
+	tree := s.app.Store().CategoryTree()
 	var find func([]store.Category) string
 	find = func(cats []store.Category) string {
 		for _, c := range cats {
@@ -1509,18 +1459,18 @@ func (s *Server) categoryResponsible(id string) string {
 // member gets the categories their team(s) own (Category.ResponsibleTeam) plus
 // all descendants. A user with no team gets an empty set.
 func (s *Server) accessibleCategoryIDs(u store.User) (set map[string]bool, all bool) {
-	if s.auth.IsSuperAdmin(u) {
+	if s.app.Auth().IsSuperAdmin(u) {
 		return nil, true
 	}
 	teamKeys := map[string]bool{}
-	for _, k := range s.store.TeamKeysForUser(u) {
+	for _, k := range s.app.Store().TeamKeysForUser(u) {
 		teamKeys[strings.ToLower(strings.TrimSpace(k))] = true
 	}
 	set = map[string]bool{}
 	if len(teamKeys) == 0 {
 		return set, false
 	}
-	cats := s.store.AllCategories()
+	cats := s.app.Store().AllCategories()
 	for _, c := range cats {
 		if c.ResponsibleTeam != "" && teamKeys[strings.ToLower(c.ResponsibleTeam)] {
 			set[c.ID] = true
@@ -1546,19 +1496,19 @@ func (s *Server) accessibleCategoryIDs(u store.User) (set map[string]bool, all b
 // hasConsoleAccess reports whether the user may enter the admin console at all
 // (super admin, or a member/leader of any team).
 func (s *Server) hasConsoleAccess(u store.User) bool {
-	return s.auth.IsSuperAdmin(u) || len(s.store.TeamKeysForUser(u)) > 0
+	return s.app.Auth().IsSuperAdmin(u) || len(s.app.Store().TeamKeysForUser(u)) > 0
 }
 
 // isTeamAdmin reports a non-super-admin who belongs to at least one team (the
 // team-scoped admin tier).
 func (s *Server) isTeamAdmin(u store.User) bool {
-	return !s.auth.IsSuperAdmin(u) && len(s.store.TeamKeysForUser(u)) > 0
+	return !s.app.Auth().IsSuperAdmin(u) && len(s.app.Store().TeamKeysForUser(u)) > 0
 }
 
 // requireConsole gates console-scoped reads (logs, releases, module list). Super
 // admins and team members pass; everyone else gets 403.
 func (s *Server) requireConsole(w http.ResponseWriter, r *http.Request) (store.User, bool) {
-	user, ok := s.auth.CurrentUser(r)
+	user, ok := s.app.Auth().CurrentUser(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "login required")
 		return store.User{}, false
@@ -1575,7 +1525,7 @@ func (s *Server) docCategoryIDs(docID string) []string {
 	if strings.TrimSpace(docID) == "" {
 		return nil
 	}
-	p, err := s.store.Page(docID)
+	p, err := s.app.Store().Page(docID)
 	if err != nil {
 		return nil
 	}
@@ -1625,7 +1575,7 @@ func categoriesIntersect(ids []string, set map[string]bool) bool {
 
 // requireUser writes 401 and returns false when no valid session is present.
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (store.User, bool) {
-	user, ok := s.auth.CurrentUser(r)
+	user, ok := s.app.Auth().CurrentUser(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "login required")
 		return store.User{}, false
@@ -1639,7 +1589,7 @@ func (s *Server) requireSuperAdmin(w http.ResponseWriter, r *http.Request) (stor
 	if !ok {
 		return store.User{}, false
 	}
-	if !s.auth.IsSuperAdmin(user) {
+	if !s.app.Auth().IsSuperAdmin(user) {
 		writeError(w, http.StatusForbidden, "forbidden", "super admin required")
 		return store.User{}, false
 	}
@@ -1655,7 +1605,7 @@ func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categor
 	if !ok {
 		return store.User{}, false
 	}
-	if s.auth.IsSuperAdmin(user) {
+	if s.app.Auth().IsSuperAdmin(user) {
 		return user, true
 	}
 	if isAdmin(user) && canManageCategories(user, categoryIDs) {
@@ -1670,7 +1620,7 @@ func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categor
 
 // moduleCategories resolves the category IDs attached to a module key.
 func (s *Server) moduleCategories(moduleKey string) []string {
-	if m, err := s.store.Module(moduleKey); err == nil {
+	if m, err := s.app.Store().Module(moduleKey); err == nil {
 		return m.CategoryIDs
 	}
 	return nil
@@ -1678,7 +1628,7 @@ func (s *Server) moduleCategories(moduleKey string) []string {
 
 func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusOK, s.store.CategoryTree())
+		writeJSON(w, http.StatusOK, s.app.Store().CategoryTree())
 		return
 	}
 	var c store.Category
@@ -1695,7 +1645,7 @@ func (s *Server) handleAdminCategories(w http.ResponseWriter, r *http.Request) {
 	} else if _, ok := s.requirePlatform(w, r, []string{c.ParentID}); !ok {
 		return
 	}
-	created, err := s.store.CreateCategory(c)
+	created, err := s.app.Store().CreateCategory(c)
 	writeMutation(w, created, http.StatusCreated, err)
 }
 
@@ -1719,7 +1669,7 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		moved, err := s.store.MoveCategory(id, body.ParentID, body.Index)
+		moved, err := s.app.Store().MoveCategory(id, body.ParentID, body.Index)
 		writeMutation(w, moved, http.StatusOK, err)
 		return
 	}
@@ -1733,10 +1683,10 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		updated, err := s.store.UpdateCategory(id, c)
+		updated, err := s.app.Store().UpdateCategory(id, c)
 		writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
-		if err := s.store.DeleteCategory(id); err != nil {
+		if err := s.app.Store().DeleteCategory(id); err != nil {
 			writeResult(w, nil, err)
 			return
 		}
@@ -1752,7 +1702,7 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		modules := s.store.Modules("", "")
+		modules := s.app.Store().Modules("", "")
 		// Team admins only see modules attached to a category they own.
 		if set, all := s.accessibleCategoryIDs(user); !all {
 			scoped := modules[:0:0]
@@ -1793,7 +1743,7 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requirePlatform(w, r, m.CategoryIDs); !ok {
 		return
 	}
-	created, err := s.store.CreateModule(m)
+	created, err := s.app.Store().CreateModule(m)
 	writeMutation(w, created, http.StatusCreated, err)
 }
 
@@ -1816,14 +1766,14 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 	}
 	// Reveal / rotate the CI deploy token (kept out of normal serialization).
 	if len(parts) == 2 && parts[1] == "deploy-token" {
-		m, err := s.store.Module(moduleKey)
+		m, err := s.app.Store().Module(moduleKey)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "not_found", "module not found")
 			return
 		}
 		if r.Method == http.MethodPost { // rotate
 			token := "mdx_" + strconv.FormatInt(time.Now().UnixNano(), 36)
-			if _, err := s.store.UpdateModule(moduleKey, store.Module{DeployToken: token}); err != nil {
+			if _, err := s.app.Store().UpdateModule(moduleKey, store.Module{DeployToken: token}); err != nil {
 				writeResult(w, nil, err)
 				return
 			}
@@ -1862,7 +1812,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 				}
 			}
 		}
-		updated, err := s.store.UpdateModule(moduleKey, m)
+		updated, err := s.app.Store().UpdateModule(moduleKey, m)
 		writeMutation(w, updated, http.StatusOK, err)
 	case len(parts) == 2 && parts[1] == "versions" && r.Method == http.MethodPost:
 		var v store.Version
@@ -1870,7 +1820,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		created, err := s.store.CreateVersion(moduleKey, v)
+		created, err := s.app.Store().CreateVersion(moduleKey, v)
 		writeMutation(w, created, http.StatusCreated, err)
 	case len(parts) == 3 && parts[1] == "versions" && r.Method == http.MethodPut:
 		var v store.Version
@@ -1878,7 +1828,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		updated, err := s.store.UpdateVersion(moduleKey, parts[2], v)
+		updated, err := s.app.Store().UpdateVersion(moduleKey, parts[2], v)
 		writeMutation(w, updated, http.StatusOK, err)
 	case len(parts) == 4 && parts[1] == "versions" && parts[3] == "entries" && r.Method == http.MethodPost:
 		var e store.Entry
@@ -1886,7 +1836,7 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		created, err := s.store.CreateEntry(moduleKey, parts[2], e)
+		created, err := s.app.Store().CreateEntry(moduleKey, parts[2], e)
 		writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "admin module route not found")
@@ -1913,7 +1863,7 @@ func (s *Server) handleMigrateModule(w http.ResponseWriter, r *http.Request, mod
 		writeError(w, http.StatusBadRequest, "bad_request", "category_ids is required")
 		return
 	}
-	if !s.auth.IsSuperAdmin(user) {
+	if !s.app.Auth().IsSuperAdmin(user) {
 		source := s.moduleCategories(moduleKey)
 		if !isAdmin(user) || !canManageCategories(user, source) || !canManageCategories(user, req.CategoryIDs) {
 			writeError(w, http.StatusForbidden, "forbidden", "need management permission on both source and target platforms")
@@ -1922,9 +1872,9 @@ func (s *Server) handleMigrateModule(w http.ResponseWriter, r *http.Request, mod
 	}
 	names := make([]string, 0, len(req.CategoryIDs))
 	for _, id := range req.CategoryIDs {
-		names = append(names, s.store.CategoryName(id))
+		names = append(names, s.app.Store().CategoryName(id))
 	}
-	updated, err := s.store.UpdateModule(moduleKey, store.Module{
+	updated, err := s.app.Store().UpdateModule(moduleKey, store.Module{
 		CategoryIDs:  req.CategoryIDs,
 		CategoryPath: strings.Join(names, " / "),
 		OwnerGroup:   req.OwnerGroup,
@@ -1934,7 +1884,7 @@ func (s *Server) handleMigrateModule(w http.ResponseWriter, r *http.Request, mod
 
 func (s *Server) handleAdminEntryByID(w http.ResponseWriter, r *http.Request) {
 	entryID := strings.TrimPrefix(r.URL.Path, "/api/admin/entries/")
-	if moduleKey, ok := s.store.EntryModuleKey(entryID); ok {
+	if moduleKey, ok := s.app.Store().EntryModuleKey(entryID); ok {
 		if _, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey)); !ok {
 			return
 		}
@@ -1948,10 +1898,10 @@ func (s *Server) handleAdminEntryByID(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		updated, err := s.store.UpdateEntry(entryID, e)
+		updated, err := s.app.Store().UpdateEntry(entryID, e)
 		writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
-		if err := s.store.DeleteEntry(entryID); err != nil {
+		if err := s.app.Store().DeleteEntry(entryID); err != nil {
 			writeResult(w, nil, err)
 			return
 		}
@@ -1972,7 +1922,7 @@ func (s *Server) handleReleaseRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	releaseID := parts[0]
-	rel, err := s.store.Release(releaseID)
+	rel, err := s.app.Store().Release(releaseID)
 	if err != nil {
 		writeResult(w, rel, err)
 		return
@@ -1982,7 +1932,7 @@ func (s *Server) handleReleaseRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "rollback" && r.Method == http.MethodPost {
-		rel, err = s.store.RollbackRelease(releaseID)
+		rel, err = s.app.Store().RollbackRelease(releaseID)
 		writeResult(w, rel, err)
 		return
 	}
@@ -1999,10 +1949,10 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		users := s.store.Users(r.URL.Query().Get("keyword"))
+		users := s.app.Store().Users(r.URL.Query().Get("keyword"))
 		// Enrich with the effective super admin status (persisted flag OR env SUPER_ADMIN_USERS).
 		for i := range users {
-			users[i].SuperAdmin = s.auth.IsSuperAdmin(users[i])
+			users[i].SuperAdmin = s.app.Auth().IsSuperAdmin(users[i])
 		}
 		if wantsPage(r) {
 			page, limit := pageParams(r)
@@ -2016,9 +1966,9 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		created, err := s.store.CreateUser(u)
+		created, err := s.app.Store().CreateUser(u)
 		if err == nil {
-			created.SuperAdmin = s.auth.IsSuperAdmin(created)
+			created.SuperAdmin = s.app.Auth().IsSuperAdmin(created)
 		}
 		writeMutation(w, created, http.StatusCreated, err)
 	default:
@@ -2033,9 +1983,9 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
 	switch r.Method {
 	case http.MethodGet:
-		u, err := s.store.UserByID(id)
+		u, err := s.app.Store().UserByID(id)
 		if err == nil {
-			u.SuperAdmin = s.auth.IsSuperAdmin(u)
+			u.SuperAdmin = s.app.Auth().IsSuperAdmin(u)
 		}
 		writeResult(w, u, err)
 	case http.MethodPut:
@@ -2044,13 +1994,13 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		updated, err := s.store.UpdateUser(id, u)
+		updated, err := s.app.Store().UpdateUser(id, u)
 		if err == nil {
-			updated.SuperAdmin = s.auth.IsSuperAdmin(updated)
+			updated.SuperAdmin = s.app.Auth().IsSuperAdmin(updated)
 		}
 		writeMutation(w, updated, http.StatusOK, err)
 	case http.MethodDelete:
-		if err := s.store.DeleteUser(id); err != nil {
+		if err := s.app.Store().DeleteUser(id); err != nil {
 			writeResult(w, nil, err)
 			return
 		}
@@ -2066,14 +2016,14 @@ func (s *Server) handleAdminGroups(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.store.Groups())
+		writeJSON(w, http.StatusOK, s.app.Store().Groups())
 	case http.MethodPost:
 		var g store.Group
 		if err := decodeBody(r, &g); err != nil {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		created, err := s.store.CreateGroup(g)
+		created, err := s.app.Store().CreateGroup(g)
 		writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
@@ -2086,7 +2036,7 @@ func (s *Server) handleAdminTeams(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		teams := s.store.Teams()
+		teams := s.app.Store().Teams()
 		if kw := keywordOf(r); kw != "" {
 			filtered := teams[:0:0]
 			for _, t := range teams {
@@ -2108,7 +2058,7 @@ func (s *Server) handleAdminTeams(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		created, err := s.store.CreateTeam(t)
+		created, err := s.app.Store().CreateTeam(t)
 		writeMutation(w, created, http.StatusCreated, err)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
@@ -2129,7 +2079,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		tm, err := s.store.Team(key)
+		tm, err := s.app.Store().Team(key)
 		if err != nil {
 			writeResult(w, tm, err)
 			return
@@ -2141,7 +2091,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
-		if !s.auth.IsSuperAdmin(user) && !isMember {
+		if !s.app.Auth().IsSuperAdmin(user) && !isMember {
 			writeError(w, http.StatusForbidden, "forbidden", "team membership or super required")
 			return
 		}
@@ -2149,7 +2099,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			writeJSON(w, http.StatusOK, tm)
 		case http.MethodPut:
-			if !s.auth.IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
+			if !s.app.Auth().IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
 				writeError(w, http.StatusForbidden, "forbidden", "only leader or super can update team")
 				return
 			}
@@ -2158,13 +2108,13 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 				return
 			}
-			updated, err := s.store.UpdateTeam(key, t)
+			updated, err := s.app.Store().UpdateTeam(key, t)
 			writeMutation(w, updated, http.StatusOK, err)
 		case http.MethodDelete:
 			if _, ok := s.requireSuperAdmin(w, r); !ok {
 				return
 			}
-			if err := s.store.DeleteTeam(key); err != nil {
+			if err := s.app.Store().DeleteTeam(key); err != nil {
 				writeResult(w, nil, err)
 				return
 			}
@@ -2178,7 +2128,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if !s.auth.IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
+		if !s.app.Auth().IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
 			writeError(w, http.StatusForbidden, "forbidden", "only team leader or super can add members")
 			return
 		}
@@ -2193,7 +2143,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_input", "username required")
 			return
 		}
-		updated, err := s.store.AddTeamMember(key, req.Username)
+		updated, err := s.app.Store().AddTeamMember(key, req.Username)
 		writeMutation(w, updated, http.StatusOK, err)
 	case len(parts) == 3 && parts[1] == "members" && r.Method == http.MethodDelete:
 		// Leader or super can remove member.
@@ -2201,12 +2151,12 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if !s.auth.IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
+		if !s.app.Auth().IsSuperAdmin(user) && !s.isTeamLeader(user, key) {
 			writeError(w, http.StatusForbidden, "forbidden", "only team leader or super can remove members")
 			return
 		}
 		member := parts[2]
-		updated, err := s.store.RemoveTeamMember(key, member)
+		updated, err := s.app.Store().RemoveTeamMember(key, member)
 		writeMutation(w, updated, http.StatusOK, err)
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "team route not found")
@@ -2214,7 +2164,7 @@ func (s *Server) handleAdminTeamRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminAccepted(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "note": "MVP admin mutation endpoint placeholder"})
+	writeError(w, http.StatusNotFound, "not_found", "admin route not found")
 }
 
 func decodeBody(r *http.Request, v any) error {
@@ -2327,7 +2277,7 @@ func (s *Server) originAllowed(origin string) bool {
 	if origin == "" {
 		return false
 	}
-	for _, allowed := range s.auth.Config().CORSAllowOrigins {
+	for _, allowed := range s.app.Auth().Config().CORSAllowOrigins {
 		if allowed == "*" || allowed == origin {
 			return true
 		}
@@ -2416,7 +2366,7 @@ func (s *Server) uploadSiteFilesToMinIO(ctx context.Context, artifact deploy.Art
 }
 
 func (s *Server) migrateSiteAssetsToMinIO() bool {
-	objects := s.store.SiteObjects()
+	objects := s.app.Store().SiteObjects()
 	if len(objects) == 0 {
 		return true
 	}
@@ -2441,14 +2391,6 @@ func contentTypeForName(name string, content []byte) string {
 		return http.DetectContentType(content)
 	}
 	return "application/octet-stream"
-}
-
-func envFloat(key string, fallback float64) float64 {
-	v, err := strconv.ParseFloat(os.Getenv(key), 64)
-	if err != nil || v == 0 {
-		return fallback
-	}
-	return v
 }
 
 func envInt64(key string, fallback int64) int64 {

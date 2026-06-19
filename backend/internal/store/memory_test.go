@@ -77,6 +77,38 @@ func TestLoadWithoutEmbeddingsSkipsLegacySidecar(t *testing.T) {
 	}
 }
 
+func TestPostgresSnapshotExcludesStaticAssetsAndVectors(t *testing.T) {
+	s := NewSeeded()
+	s.SetEmbedding("DemoModule:latest:guide", []float32{0.1, 0.2, 0.3})
+	_, err := s.IngestArtifact(DeployArtifact{
+		ModuleKey:   "RuntimeDocs",
+		ModuleName:  "Runtime Docs",
+		DocsVersion: "latest",
+		Entries:     []DeployEntry{{Key: "guide", Title: "Guide", Type: "markdown"}},
+		Documents:   []DeployDocument{{DocID: "RuntimeDocs:latest:guide", EntryKey: "guide", Title: "Guide", Content: "hello"}},
+		Nav:         []NavItem{{Title: "Guide", Path: "/docs/RuntimeDocs/latest/guide"}},
+		SiteHTML:    map[string]string{"guide": "<html>hello</html>"},
+		SiteFiles:   map[string][]byte{"site/guide/assets/app.css": []byte("body{}")},
+	})
+	if err != nil {
+		t.Fatalf("IngestArtifact: %v", err)
+	}
+
+	snap := s.toRelationalState()
+	if len(snap.Pages) == 0 {
+		t.Fatal("postgres snapshot should keep searchable page business data")
+	}
+	if len(snap.HTML) != 0 {
+		t.Fatalf("postgres snapshot HTML = %d, want 0; rendered HTML belongs in MinIO", len(snap.HTML))
+	}
+	if len(snap.SiteFiles) != 0 {
+		t.Fatalf("postgres snapshot site files = %d, want 0; site assets belong in MinIO", len(snap.SiteFiles))
+	}
+	if len(snap.Embeddings) != 0 {
+		t.Fatalf("postgres snapshot embeddings = %d, want 0; vectors belong in pgvector", len(snap.Embeddings))
+	}
+}
+
 func TestSnapshotPersistsModuleDeployToken(t *testing.T) {
 	s := NewSeeded()
 	created, err := s.CreateModule(Module{ModuleKey: "TokenModule"})

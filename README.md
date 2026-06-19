@@ -16,7 +16,7 @@ Modex is an internal Module Documentation Experience platform MVP.
 ```bash
 cd deploy
 cp .env.example .env
-docker-compose up --build
+docker compose up --build
 ```
 
 Open:
@@ -84,7 +84,7 @@ We follow a pragmatic split:
   - `AUTH_MODE`, `KEYCLOAK_*`, all `OIDC_*` endpoint / client / redirect settings
   - `COOKIE_*`, `SUPER_ADMIN_USERS`
   - Database, Redis, MinIO, Meilisearch/vector-store, embedding/rerank provider URLs and keys
-  - `PORT`, `DATA_DIR`, CORS origins, etc.
+  - `PORT`, `LEGACY_DATA_DIR` for one-time snapshot imports, CORS origins, etc.
 
 - **Application config file (YAML)** — for higher-level, semantic configuration that describes *how the app should interpret data from external systems*. These are good to keep in a version-controlled file (with comments) so changes are reviewable.
 
@@ -221,12 +221,15 @@ Platform-scoped writes are enforced server-side:
 The home page has a centered search (ChatGPT-style). As you type it shows live
 results with an entry-type icon, platform breadcrumb, title, a context snippet,
 and highlighted matched keywords. The sparkle **询问 AI** action calls
-`POST /api/ask`, which retrieves the top documents and either forwards them to an
-external LLM (`ASK_HTTP_URL`) or returns an extractive answer with cited sources.
+`POST /api/ask`, which retrieves the top documents and sends them to the chat
+model configured on the admin model page. Without an available chat model, it
+returns an extractive answer with cited sources.
 
 ## Deployment Configuration
 
-`deploy/.env.example` keeps deploy-time values out of code. The important groups are:
+`deploy/.env.example` is for local development. For production, start from
+`deploy/prod.env.example` and replace every secret / domain before exposing the
+service. The important groups are:
 
 - Public domains and ports: `APP_BASE_URL`, `FRONTEND_BASE_URL`, `BACKEND_PORT`, `FRONTEND_PORT`, `CORS_ALLOW_ORIGINS`
 - Frontend API routing: `NEXT_PUBLIC_API_BASE_URL` is used by browser-side requests; `INTERNAL_API_BASE_URL` is used by Next.js server rendering inside Docker. In Compose, keep it as `http://backend:8671` unless you change `BACKEND_PORT`.
@@ -236,6 +239,15 @@ external LLM (`ASK_HTTP_URL`) or returns an extractive answer with cited sources
 - Meilisearch: `MEILISEARCH_URL`, `MEILISEARCH_PUBLIC_URL`, `MEILI_*`
 - Retrieval models: embedding and rerank settings are managed on the admin model page
 - MCP: every user generates a personal token on the MCP page and sets it as `MODEX_MCP_TOKEN` in their client
+
+### Production readiness checklist
+
+- Use `AUTH_MODE=oidc`; keep mock login only for local development.
+- Replace all database, MinIO, Meilisearch, OIDC, PostHog, and cookie secrets.
+- Set `COOKIE_SECURE=true`, a production `COOKIE_DOMAIN`, and exact CORS origins.
+- Configure real chat and embedding providers in the admin settings page, then run embedding reindex.
+- Run the recall test with representative expected document IDs before relying on semantic or hybrid search.
+- Use an internal Kroki deployment if diagram source must not leave the network.
 
 ## docsctl Examples
 
@@ -389,15 +401,22 @@ otherwise computed lazily on first semantic/hybrid query and cached; keyword-onl
 search never calls the embedding provider. Publishing a new artifact invalidates
 the cached vectors for that module/version automatically.
 
-## Durable Store Snapshots
+## Durable Storage
 
-Set `DATA_DIR` to make the registry survive restarts. On boot the backend loads
-`${DATA_DIR}/modex-store.json` (or seeds fresh data when absent), saves
-periodically (`DATA_SAVE_INTERVAL_SECONDS`, default 60), and writes a final
-snapshot on graceful shutdown (SIGINT/SIGTERM). Writes are atomic (temp file +
-rename). In Docker Compose this is a `backend-data` named volume mounted at
-`/data`, so `docker compose restart` keeps modules, users, analytics, and search
-indexes. Leave `DATA_DIR` empty for a pure in-memory store.
+Set `DATABASE_URL` to make PostgreSQL the backend business store. The API loads
+the registry from PostgreSQL on boot, saves it periodically
+(`DATA_SAVE_INTERVAL_SECONDS`, default 60), and writes a final save on graceful
+shutdown (SIGINT/SIGTERM). Docker Compose wires this by default through the
+`postgres` service.
+
+Rendered documentation assets are stored in MinIO when `MINIO_ENDPOINT` is set.
+Embeddings are stored in PostgreSQL/pgvector when `DATABASE_URL` is set. The
+backend no longer writes runtime business JSON under `/data`.
+
+For one-time migration from an older snapshot deployment, point
+`LEGACY_DATA_DIR` (or `DATA_DIR`) at the directory containing
+`modex-store.json`. If the PostgreSQL store is empty, the backend imports that
+snapshot once and then persists to PostgreSQL only.
 
 ## Branding
 
@@ -413,10 +432,10 @@ artifact to `POST /api/deploy`, which parses the zip and ingests modules,
 versions, entries, pages, nav, built HTML, and site assets so they immediately
 appear in the portal, search, and MCP. Mock + Keycloak/OIDC login, user/group
 management, analytics, admin CRUD, real search/embedding reindexing, and durable
-snapshot persistence are all implemented.
+PostgreSQL persistence are all implemented.
 
-The next infrastructure iteration replaces the snapshot store with managed
-services: PostgreSQL as the registry/source of truth, Redis for sessions/cache/hot
+The storage layer uses managed services: PostgreSQL as the registry/source of
+truth, Redis for sessions/cache/hot
 counters and transient jobs, MinIO for document artifacts/site bytes, Meilisearch
 for keyword index, and a vector database for embeddings. PostgreSQL + pgvector is
 the preferred first vector store; if scale or operations require it, Chroma or
@@ -446,7 +465,7 @@ Milvus can be plugged in behind the same vector-store interface.
   - 纯 Markdown 仓库也可以用 `DOCS_BUILDER=markdown` 轻量打包（docsctl 支持）。
 
 - **文档内容与 MinIO**：
-  是的。Artifact 中的 `site/`（构建后的 HTML、JS、CSS、图片等静态资源）在生产环境应持久化到 MinIO（当前 MVP 用内存 + snapshot 存储，便于开发和快照恢复；`StorageURI` 字段已预留 `minio://` 路径）。搜索元数据和文本内容进入 store / Meilisearch。
+  是的。Artifact 中的 `site/`（构建后的 HTML、JS、CSS、图片等静态资源）在生产环境持久化到 MinIO。搜索元数据和文本内容进入 PostgreSQL / Meilisearch。
 
 示例 pipeline 见 `docs/pipeline/docs-deploy.example.yml` 和 `tools/docsctl`。
 

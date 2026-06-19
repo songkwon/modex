@@ -56,7 +56,7 @@ export default async function DocPage({
     const siteSrc = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${actualEntryKey}/site/${rel}`;
     return (
       <main className="doc-fullscreen">
-        <PageViewTracker docId={page.doc_id} />
+        <PageViewTracker docId={page.doc_id} title={page.title || module.name} moduleKey={module.module_key} moduleName={module.name} docsVersion={docsVersion} entryKey={actualEntryKey} />
         <DocScope moduleKey={module.module_key} moduleName={module.name} />
         <ImmersiveChrome />
         <div className="doc-version-dock">
@@ -74,7 +74,7 @@ export default async function DocPage({
 
   return (
     <main className="main docs-shell">
-      <PageViewTracker docId={page.doc_id} />
+      <PageViewTracker docId={page.doc_id} title={page.title || module.name} moduleKey={module.module_key} moduleName={module.name} docsVersion={docsVersion} entryKey={actualEntryKey} />
       <DocScope moduleKey={module.module_key} moduleName={module.name} />
       <section className="doc-layout">
         <aside className="doc-sidebar">

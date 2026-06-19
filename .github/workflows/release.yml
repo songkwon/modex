@@ -61,19 +61,19 @@ jobs:
           cd tools/docsctl
           go build -ldflags="-s -w -X main.docsctlVersion=${{ github.ref_name }}" -o "../../dist/${BINARY_NAME}" ./cmd/docsctl
 
-      # 编译 mcp (docs-mcp-server)
-      - name: Build docs-mcp-server
+      # 编译 mcp (modex-mcp-server)
+      - name: Build modex-mcp-server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          BINARY_NAME="docs-mcp-server-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BINARY_NAME="modex-mcp-server-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
             BINARY_NAME="${BINARY_NAME}.exe"
           fi
           cd mcp
-          go build -ldflags="-s -w" -o "../dist/${BINARY_NAME}" ./cmd/docs-mcp-server
+          go build -ldflags="-s -w" -o "../dist/${BINARY_NAME}" ./cmd/modex-mcp-server
 
       - name: Upload Go Binaries
         uses: actions/upload-artifact@v4
@@ -135,7 +135,7 @@ jobs:
           # 提取所有的 Go 编译产物
           find release-artifacts -type f -name "modex-api-*" -exec cp {} final-release/ \;
           find release-artifacts -type f -name "docsctl-*" -exec cp {} final-release/ \;
-          find release-artifacts -type f -name "docs-mcp-server-*" -exec cp {} final-release/ \;
+          find release-artifacts -type f -name "modex-mcp-server-*" -exec cp {} final-release/ \;
           # 提取前端打包产物
           find release-artifacts -type f -name "modex-frontend.zip" -exec cp {} final-release/ \;
           ls -l final-release

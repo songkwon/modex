@@ -55,7 +55,6 @@ services:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     environment:
       PORT: ${BACKEND_PORT:-8671}
-      DATA_DIR: ${DATA_DIR:-/data}
       DOCS_DEPLOY_MAX_BYTES: ${DOCS_DEPLOY_MAX_BYTES:-536870912}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8671}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3456}
@@ -71,8 +70,6 @@ services:
       MEILISEARCH_PUBLIC_URL: ${MEILISEARCH_PUBLIC_URL:-http://localhost:7700}
       AUTH_MODE: ${AUTH_MODE:-mock}
       SUPER_ADMIN_USERS: ${SUPER_ADMIN_USERS:-}
-      ASK_HTTP_URL: ${ASK_HTTP_URL:-}
-      ASK_HTTP_API_KEY: ${ASK_HTTP_API_KEY:-}
       KEYCLOAK_BASE_URL: ${KEYCLOAK_BASE_URL:-}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
@@ -104,7 +101,6 @@ services:
     ports:
       - "${BACKEND_PORT:-8671}:${BACKEND_PORT:-8671}"
     volumes:
-      - backend-data:/data
       # MCP npx package served for intranet download (GET /api/mcp/dist/*).
       - ../mcp/npx:/app/mcp-dist:ro
       - ../mcp/skill:/app/modex-skill:ro
@@ -208,4 +204,3 @@ volumes:
   redis-data:
   minio-data:
   meili-data:
-  backend-data:

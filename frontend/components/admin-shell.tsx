@@ -27,7 +27,19 @@ const adminLinks: [string, string, typeof FolderTree, "super" | "all"][] = [
   ["/admin/mcp-logs", "MCP 日志", MessageSquareText, "all"],
 ];
 
-export function AdminShell({ title, kicker, description, children }: { title: string; kicker?: string; description?: string; children: ReactNode }) {
+export function AdminShell({
+  title,
+  kicker,
+  description,
+  contentClassName,
+  children,
+}: {
+  title: string;
+  kicker?: string;
+  description?: string;
+  contentClassName?: string;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const [isSuper, setIsSuper] = useState<boolean | null>(cachedIsSuper);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -89,7 +101,7 @@ export function AdminShell({ title, kicker, description, children }: { title: st
             );
           })}
         </aside>
-        <div className="grid">
+        <div className={`grid${contentClassName ? ` ${contentClassName}` : ""}`}>
           <header className="hero-panel">
             {kicker ? <div className="page-kicker">{kicker}</div> : null}
             <h1 className="page-title">{title}</h1>

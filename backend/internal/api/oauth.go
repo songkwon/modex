@@ -47,7 +47,7 @@ func (s *Server) handleOAuthMetadata(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
 		return
 	}
-	base := strings.TrimRight(s.auth.Config().AppBaseURL, "/")
+	base := strings.TrimRight(s.app.Auth().Config().AppBaseURL, "/")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                base,
 		"authorization_endpoint":                base + "/oauth/authorize",
@@ -67,7 +67,7 @@ func (s *Server) handleAdminConnectedApps(w http.ResponseWriter, r *http.Request
 	}
 	switch r.Method {
 	case http.MethodGet:
-		apps := s.store.ConnectedApps()
+		apps := s.app.Store().ConnectedApps()
 		out := make([]connectedAppResponse, 0, len(apps))
 		for _, app := range apps {
 			out = append(out, connectedAppOut(app, ""))
@@ -105,7 +105,7 @@ func (s *Server) handleAdminConnectedApps(w http.ResponseWriter, r *http.Request
 		if req.Enabled != nil {
 			enabled = *req.Enabled
 		}
-		app, err := s.store.CreateConnectedApp(store.ConnectedApp{
+		app, err := s.app.Store().CreateConnectedApp(store.ConnectedApp{
 			Name: req.Name, Description: req.Description, ClientID: clientID, RedirectURIs: req.RedirectURIs,
 			Scopes: req.Scopes, Trusted: req.Trusted, Enabled: enabled, CreatedBy: user.ID,
 		}, secret)
@@ -138,13 +138,13 @@ func (s *Server) handleAdminConnectedAppByID(w http.ResponseWriter, r *http.Requ
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		app, err := s.store.UpdateConnectedApp(id, store.ConnectedApp{
+		app, err := s.app.Store().UpdateConnectedApp(id, store.ConnectedApp{
 			Name: req.Name, Description: req.Description, RedirectURIs: req.RedirectURIs,
 			Scopes: req.Scopes, Trusted: req.Trusted, Enabled: req.Enabled,
 		})
 		writeMutation(w, connectedAppOut(app, ""), http.StatusOK, err)
 	case http.MethodDelete:
-		writeMutation(w, map[string]string{"status": "deleted"}, http.StatusOK, s.store.DeleteConnectedApp(id))
+		writeMutation(w, map[string]string{"status": "deleted"}, http.StatusOK, s.app.Store().DeleteConnectedApp(id))
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use PUT or DELETE")
 	}
@@ -155,9 +155,9 @@ func (s *Server) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 		return
 	}
-	user, ok := s.auth.CurrentUser(r)
+	user, ok := s.app.Auth().CurrentUser(r)
 	if !ok {
-		login := s.auth.Config().AppBaseURL + "/api/auth/login?next=" + url.QueryEscape(r.URL.RequestURI())
+		login := s.app.Auth().Config().AppBaseURL + "/api/auth/login?next=" + url.QueryEscape(r.URL.RequestURI())
 		http.Redirect(w, r, login, http.StatusFound)
 		return
 	}
@@ -169,7 +169,7 @@ func (s *Server) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		oauthRedirectError(w, r, redirectURI, state, "unsupported_response_type")
 		return
 	}
-	app, err := s.store.ConnectedAppByClientID(clientID)
+	app, err := s.app.Store().ConnectedAppByClientID(clientID)
 	if err != nil || !app.Enabled || !redirectURIAllowed(app.RedirectURIs, redirectURI) {
 		oauthRedirectError(w, r, redirectURI, state, "invalid_client")
 		return
@@ -188,7 +188,7 @@ func (s *Server) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		oauthRedirectError(w, r, redirectURI, state, "server_error")
 		return
 	}
-	if _, err := s.store.CreateOAuthCode(app.ID, user.ID, redirectURI, scopes, code, oauthCodeTTL); err != nil {
+	if _, err := s.app.Store().CreateOAuthCode(app.ID, user.ID, redirectURI, scopes, code, oauthCodeTTL); err != nil {
 		oauthRedirectError(w, r, redirectURI, state, "server_error")
 		return
 	}
@@ -212,7 +212,7 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID, secret := oauthClientCredentials(r)
-	app, err := s.store.VerifyConnectedAppSecret(clientID, secret)
+	app, err := s.app.Store().VerifyConnectedAppSecret(clientID, secret)
 	if err != nil {
 		writeOAuthTokenError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return
@@ -229,14 +229,14 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Form.Get("grant_type") {
 	case "authorization_code":
-		grant, _, _, err := s.store.RedeemOAuthCode(app.ClientID, r.Form.Get("code"), r.Form.Get("redirect_uri"), access, refresh, oauthAccessTTL, oauthRefreshTTL)
+		grant, _, _, err := s.app.Store().RedeemOAuthCode(app.ClientID, r.Form.Get("code"), r.Form.Get("redirect_uri"), access, refresh, oauthAccessTTL, oauthRefreshTTL)
 		if err != nil {
 			writeOAuthTokenError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid or expired")
 			return
 		}
 		writeOAuthTokenResponse(w, access, refresh, grant.Scopes)
 	case "refresh_token":
-		grant, _, _, err := s.store.RefreshOAuthToken(app.ClientID, r.Form.Get("refresh_token"), access, refresh, oauthAccessTTL, oauthRefreshTTL)
+		grant, _, _, err := s.app.Store().RefreshOAuthToken(app.ClientID, r.Form.Get("refresh_token"), access, refresh, oauthAccessTTL, oauthRefreshTTL)
 		if err != nil {
 			writeOAuthTokenError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid or expired")
 			return
@@ -257,11 +257,11 @@ func (s *Server) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID, secret := oauthClientCredentials(r)
-	if _, err := s.store.VerifyConnectedAppSecret(clientID, secret); err != nil {
+	if _, err := s.app.Store().VerifyConnectedAppSecret(clientID, secret); err != nil {
 		writeOAuthTokenError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return
 	}
-	s.store.RevokeOAuthToken(clientID, r.Form.Get("token"))
+	s.app.Store().RevokeOAuthToken(clientID, r.Form.Get("token"))
 	writeJSON(w, http.StatusOK, map[string]any{"revoked": true})
 }
 
