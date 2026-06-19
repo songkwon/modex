@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { useSearch } from "@/components/search-provider";
 import { useI18n } from "@/lib/i18n";
@@ -9,7 +10,12 @@ import { useI18n } from "@/lib/i18n";
 export function TopbarSearchButton() {
   const { t } = useI18n();
   const { openSearch, scope } = useSearch();
-  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad/.test(window.navigator.platform));
+  }, []);
+
   return (
     <button className="button topbar-search" onClick={openSearch} aria-label={t("nav.search")} title={t("nav.searchTitle")}>
       <Search size={16} />

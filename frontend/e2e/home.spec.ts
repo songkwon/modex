@@ -88,10 +88,14 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("home page renders and switches locale from the user menu", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "文档中心" })).toBeVisible();
   await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
+  expect(pageErrors).toEqual([]);
 
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: /Dev User/ }).click();
