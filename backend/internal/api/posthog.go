@@ -13,7 +13,8 @@ import (
 	"modex/backend/internal/store"
 )
 
-// errPosthogNotConfigured signals that reading statistics are unavailable.
+// errPosthogNotConfigured signals that PostHog query credentials are absent.
+// The API falls back to the built-in analytics store in this case.
 var errPosthogNotConfigured = errors.New("posthog not configured")
 
 // posthogHost returns the configured PostHog API host or the default.

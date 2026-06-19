@@ -121,7 +121,7 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
           <div className="empty-state mt-5">
             <div>
               <div className="font-semibold text-foreground">版本与权限管理</div>
-              <p className="mt-2 text-sm">后续接入数据库后在这里维护默认版本、发布权限和阅读权限。</p>
+              <p className="mt-2 text-sm">在这里维护默认版本、发布权限和阅读权限。</p>
             </div>
           </div>
         </div>
