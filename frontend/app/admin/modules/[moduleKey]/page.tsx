@@ -6,7 +6,6 @@ import { getModule, rotateDeployToken } from "@/lib/api";
 import type { ModuleInfo } from "@/types/modex";
 
 export default function AdminModuleDetail({ params }: { params: Promise<{ moduleKey: string }> }) {
-  const [moduleKey, setModuleKey] = useState("");
   const [module, setModule] = useState<ModuleInfo | null>(null);
   const [shownToken, setShownToken] = useState<string>("");
   const [copied, setCopied] = useState(false);
@@ -30,7 +29,6 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
     let cancelled = false;
     params.then(({ moduleKey: key }) => {
       if (cancelled) return;
-      setModuleKey(key);
       load(key);
     });
     return () => {
