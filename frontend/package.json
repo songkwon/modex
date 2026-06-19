@@ -9,8 +9,6 @@
     "lint": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.51.1",
-    "@tanstack/react-table": "^8.20.5",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.47",
     "lucide-react": "^0.468.0",

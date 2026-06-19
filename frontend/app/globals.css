@@ -636,28 +636,6 @@ select:focus {
   font-weight: 720;
 }
 
-.module-card {
-  position: relative;
-  min-height: 238px;
-  overflow: hidden;
-  background: linear-gradient(180deg, hsl(var(--panel)), hsl(var(--panel-subtle)));
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
-
-.module-card:hover {
-  transform: translateY(-3px);
-  border-color: hsl(var(--accent-border));
-  box-shadow: 0 20px 60px rgb(var(--shadow-color) / 0.1);
-}
-
-.module-card::after {
-  content: "";
-  position: absolute;
-  inset: auto 18px 0 18px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.5), transparent);
-}
-
 .status-dot {
   display: inline-block;
   width: 7px;

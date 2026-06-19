@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { Copy, Check } from "lucide-react";
 
 export function CodeBlockCopy() {
   useEffect(() => {

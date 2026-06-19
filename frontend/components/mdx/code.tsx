@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, ReactElement, ReactNode, isValidElement, useRef, useState } from "react";
+import { Children, ReactElement, ReactNode, isValidElement, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { Mermaid } from "./mermaid";
 import { Kroki, isKrokiLang } from "./kroki";
