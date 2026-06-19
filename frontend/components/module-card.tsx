@@ -3,7 +3,7 @@
 import { ArrowUpRight, BookOpen, Heart, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { isFavoriteModule, setFavoriteModule } from "@/lib/local-docs";
+import { isFavoriteModule, syncSetFavoriteModule, syncedFavoriteModuleKeys } from "@/lib/local-docs";
 import type { ModuleInfo } from "@/types/modex";
 
 export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (module: ModuleInfo) => void }) {
@@ -11,12 +11,13 @@ export function ModuleCard({ module, onInfo }: { module: ModuleInfo; onInfo: (mo
 
   useEffect(() => {
     setFavorite(isFavoriteModule(module.module_key));
+    syncedFavoriteModuleKeys().then((keys) => setFavorite(keys.includes(module.module_key)));
   }, [module.module_key]);
 
   function toggleFavorite() {
     setFavorite((current) => {
       const next = !current;
-      setFavoriteModule(module.module_key, next);
+      syncSetFavoriteModule(module.module_key, next).then((keys) => setFavorite(keys.includes(module.module_key)));
       return next;
     });
   }

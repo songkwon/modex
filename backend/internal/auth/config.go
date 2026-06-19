@@ -26,6 +26,7 @@ type Config struct {
 	CookieDomain     string
 	CookieSameSite   string
 	CookieSecure     bool
+	AutoLogin        bool
 	CORSAllowOrigins []string
 	SuperAdmins      []string
 
@@ -64,6 +65,7 @@ func FromEnv() Config {
 		CookieDomain:     os.Getenv("COOKIE_DOMAIN"),
 		CookieSameSite:   env("COOKIE_SAME_SITE", "lax"),
 		CookieSecure:     env("COOKIE_SECURE", "false") == "true",
+		AutoLogin:        env("AUTO_LOGIN", "false") == "true",
 		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3456")),
 		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
 

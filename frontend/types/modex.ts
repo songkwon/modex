@@ -86,6 +86,7 @@ export type AuthConfig = {
   oidc_login_enabled: boolean;
   login_url: string;
   frontend_base_url: string;
+  auto_login?: boolean;
 };
 
 export type SearchResult = {

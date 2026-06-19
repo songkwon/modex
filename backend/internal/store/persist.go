@@ -30,6 +30,8 @@ type snapshot struct {
 	MCPLogs      []MCPLog             `json:"mcp_logs"`
 	Feedbacks    []DocFeedback        `json:"feedbacks"`
 	PageViews    []PageView           `json:"page_views"`
+	Favorites    []UserFavorite       `json:"favorites"`
+	RecentDocs   []UserRecentDoc      `json:"recent_docs"`
 	Navs         map[string][]NavItem `json:"navs"`
 	HTML         map[string]string    `json:"html,omitempty"`
 	SiteFiles    map[string]SiteFile  `json:"site_files,omitempty"`
@@ -66,6 +68,8 @@ func (s *Store) toSnapshot(includeLarge bool) snapshot {
 		MCPLogs:      s.mcpLogs,
 		Feedbacks:    s.feedbacks,
 		PageViews:    s.pageViews,
+		Favorites:    s.favorites,
+		RecentDocs:   s.recentDocs,
 		Navs:         s.navs,
 		HTML:         nil,
 		SiteFiles:    nil,
@@ -112,6 +116,8 @@ func (s *Store) toRelationalState() snapshot {
 		MCPLogs:      s.mcpLogs,
 		Feedbacks:    s.feedbacks,
 		PageViews:    s.pageViews,
+		Favorites:    s.favorites,
+		RecentDocs:   s.recentDocs,
 		Navs:         s.navs,
 		HTML:         nil,
 		SiteFiles:    nil,
@@ -139,6 +145,8 @@ func storeFromSnapshot(snap snapshot) *Store {
 		mcpLogs:    snap.MCPLogs,
 		feedbacks:  snap.Feedbacks,
 		pageViews:  snap.PageViews,
+		favorites:  snap.Favorites,
+		recentDocs: snap.RecentDocs,
 		navs:       snap.Navs,
 		html:       snap.HTML,
 		siteFiles:  snap.SiteFiles,
@@ -197,6 +205,12 @@ func storeFromSnapshot(snap snapshot) *Store {
 	}
 	if s.pageViews == nil {
 		s.pageViews = []PageView{}
+	}
+	if s.favorites == nil {
+		s.favorites = []UserFavorite{}
+	}
+	if s.recentDocs == nil {
+		s.recentDocs = []UserRecentDoc{}
 	}
 	if s.navs == nil {
 		s.navs = map[string][]NavItem{}

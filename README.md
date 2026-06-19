@@ -4,8 +4,8 @@ Modex is an internal Module Documentation Experience platform MVP.
 
 ## Structure
 
-- `backend/`: Go REST API with mock registry data, search, model/retrieval settings, analytics placeholders.
-- `frontend/`: Next.js portal with home, module cards, info drawer, search, docs reading pages, and admin placeholders.
+- `backend/`: Go REST API for registry data, search, model/retrieval settings, built-in analytics, auth, and persistence.
+- `frontend/`: Next.js portal with home, module cards, search, docs reading pages, personal center, and admin console.
 - `tools/docsctl/`: Go CLI for `validate`, `build`, `package`, and `deploy`.
 - `mcp/`: stdio MCP server that calls the backend API.
 - `deploy/`: Docker Compose and PostgreSQL migration.
@@ -167,6 +167,10 @@ portal; `GET /api/auth/me` simply returns 401 until they log in.
   `/api/auth/login` → Keycloak → `/api/auth/callback`, which sets the session cookie.
 - `AUTH_MODE=mock` (local dev): `POST /api/auth/mock-login` creates a real session
   cookie. Pass `{"username":"alice"}` to log in as a specific seeded user.
+- `AUTO_LOGIN=true` lets the portal automatically start the login flow when no
+  session exists. In mock mode this creates a mock session; in OIDC mode it
+  redirects to the provider once OIDC is fully configured. Keep it disabled when
+  anonymous browsing should stay available.
 
 ### Why Keycloak login can fail
 
@@ -239,11 +243,13 @@ service. The important groups are:
 - Meilisearch: `MEILISEARCH_URL`, `MEILISEARCH_PUBLIC_URL`, `MEILI_*`
 - Retrieval models: embedding and rerank settings are managed on the admin model page
 - MCP: every user generates a personal token on the MCP page and sets it as `MODEX_MCP_TOKEN` in their client
+- Login: `AUTO_LOGIN=true` can force automatic session creation/login flow after
+  the portal detects an anonymous browser session.
 
 ### Production readiness checklist
 
 - Use `AUTH_MODE=oidc`; keep mock login only for local development.
-- Replace all database, MinIO, Meilisearch, OIDC, PostHog, and cookie secrets.
+- Replace all database, MinIO, Meilisearch, OIDC, optional PostHog, and cookie secrets.
 - Set `COOKIE_SECURE=true`, a production `COOKIE_DOMAIN`, and exact CORS origins.
 - Configure real chat and embedding providers in the admin settings page, then run embedding reindex.
 - Run the recall test with representative expected document IDs before relying on semantic or hybrid search.
@@ -371,16 +377,24 @@ Send JSON-RPC lines on stdin:
 
 ## Analytics & Admin APIs
 
-Reading statistics use one PostHog project. In `deploy/.env`, configure
-`POSTHOG_HOST`, `POSTHOG_PROJECT_API_KEY`, `POSTHOG_PERSONAL_API_KEY`, and
-`POSTHOG_PROJECT_ID`. Docker Compose maps the project API key/host into the
-Next.js `NEXT_PUBLIC_*` build variables for browser capture, while the backend
-uses the same host/project with the personal API key for read-stat queries. No
-reading statistics are collected or displayed when PostHog is not configured.
-The document eye popover supports 7/30/90-day daily trends and per-reader totals
-and average duration.
+Reading statistics are collected by the built-in backend analytics store by
+default. Page views and read-progress events record the same dimensions used by
+the optional PostHog integration: `doc_id`, `module_key`, `module_name`,
+`docs_version`, `entry_key`, title/path metadata, `read_id`, session/user, read
+duration, scroll depth, and timestamp. The document eye popover supports
+7/30/90-day daily trends, per-reader totals, and average duration from either
+source.
 
-Admin registry mutations are implemented against the in-memory store:
+PostHog is optional. In `deploy/.env`, configure `POSTHOG_HOST`,
+`POSTHOG_PROJECT_API_KEY`, `POSTHOG_PERSONAL_API_KEY`, and `POSTHOG_PROJECT_ID`
+to also capture browser events and query PostHog for the same read-stat shape.
+Docker Compose maps the project API key/host into the Next.js `NEXT_PUBLIC_*`
+build variables for browser capture, while the backend uses the same host/project
+with the personal API key for read-stat queries. When PostHog is not configured,
+the backend returns the built-in statistics.
+
+Admin registry mutations are persisted through the application repository layer
+when `DATABASE_URL` is configured:
 
 - Categories: `POST /api/admin/categories`, `PUT|DELETE /api/admin/categories/{id}`
 - Modules: `POST /api/admin/modules`, `PUT /api/admin/modules/{module_key}`

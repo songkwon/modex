@@ -37,6 +37,8 @@ type Store struct {
 	mcpLogs    []MCPLog
 	feedbacks  []DocFeedback
 	pageViews  []PageView
+	favorites  []UserFavorite
+	recentDocs []UserRecentDoc
 	navs       map[string][]NavItem
 	html       map[string]string
 	siteFiles  map[string]SiteFile
@@ -91,6 +93,8 @@ func New() *Store {
 		mcpLogs:    []MCPLog{},
 		feedbacks:  []DocFeedback{},
 		pageViews:  []PageView{},
+		favorites:  []UserFavorite{},
+		recentDocs: []UserRecentDoc{},
 		navs:       map[string][]NavItem{},
 		html:       map[string]string{},
 		siteFiles:  map[string]SiteFile{},
@@ -126,6 +130,8 @@ func NewSeeded() *Store {
 		html:       map[string]string{},
 		siteFiles:  map[string]SiteFile{},
 		embeddings: map[string][]float32{},
+		favorites:  []UserFavorite{},
+		recentDocs: []UserRecentDoc{},
 		categories: []Category{
 			{ID: "engineering", Key: "engineering", Name: "工程化", Description: "研发效能、构建、CI/CD 与质量平台", Icon: "wrench", SortOrder: 10, Status: "active", ResponsibleTeam: "engineering"},
 			{ID: "engineering.cbb", ParentID: "engineering", Key: "engineering.cbb", Name: "CBB", Description: "CBB 构建与模块治理", Icon: "package", SortOrder: 11, Status: "active", ResponsibleTeam: "engineering"},
@@ -1252,7 +1258,11 @@ func (s *Store) RecordPageView(pv PageView) PageView {
 		if p.DocID == pv.DocID {
 			pv.PageID = p.ID
 			pv.ModuleKey = p.ModuleKey
+			pv.ModuleName = p.ModuleName
 			pv.DocsVersion = p.DocsVersion
+			pv.EntryKey = p.EntryKey
+			pv.Title = p.Title
+			pv.Path = p.Path
 			break
 		}
 	}
@@ -1262,25 +1272,39 @@ func (s *Store) RecordPageView(pv PageView) PageView {
 
 // RecordReadProgress updates the latest matching page view with duration and
 // scroll depth for the given session and doc, or records a new view if none.
-func (s *Store) RecordReadProgress(docID, sessionID string, durationSeconds int, scrollDepth float64) {
+func (s *Store) RecordReadProgress(docID, sessionID, readID string, durationSeconds int, scrollDepth float64) PageView {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := len(s.pageViews) - 1; i >= 0; i-- {
 		pv := &s.pageViews[i]
-		if pv.DocID == docID && pv.SessionID == sessionID {
+		if pv.DocID == docID && ((readID != "" && pv.ReadID == readID) || (readID == "" && pv.SessionID == sessionID)) {
 			if durationSeconds > pv.DurationSeconds {
 				pv.DurationSeconds = durationSeconds
 			}
 			if scrollDepth > pv.ScrollDepth {
 				pv.ScrollDepth = scrollDepth
 			}
-			return
+			return *pv
 		}
 	}
-	s.pageViews = append(s.pageViews, PageView{
-		ID: s.nextIDLocked("pv"), DocID: docID, SessionID: sessionID,
+	pv := PageView{
+		ID: s.nextIDLocked("pv"), DocID: docID, SessionID: sessionID, ReadID: readID,
 		DurationSeconds: durationSeconds, ScrollDepth: scrollDepth, ViewedAt: time.Now().UTC(),
-	})
+	}
+	for _, p := range s.pages {
+		if p.DocID == pv.DocID {
+			pv.PageID = p.ID
+			pv.ModuleKey = p.ModuleKey
+			pv.ModuleName = p.ModuleName
+			pv.DocsVersion = p.DocsVersion
+			pv.EntryKey = p.EntryKey
+			pv.Title = p.Title
+			pv.Path = p.Path
+			break
+		}
+	}
+	s.pageViews = append(s.pageViews, pv)
+	return pv
 }
 
 // PageAnalytics aggregates recorded views into per-page reading statistics.
@@ -1389,17 +1413,24 @@ func (s *Store) PageReadStats(docID string, days int) PageReadStats {
 	windowStart := today.AddDate(0, 0, -(days - 1))
 
 	type ragg struct {
-		userID string
-		count  int
-		last   time.Time
+		userID   string
+		count    int
+		duration int
+		last     time.Time
 	}
 	readers := map[string]*ragg{}
 	total := 0
+	totalDuration := 0
+	timedReads := 0
 	for _, pv := range s.pageViews {
 		if pv.DocID != docID {
 			continue
 		}
 		total++
+		if pv.DurationSeconds > 0 {
+			totalDuration += pv.DurationSeconds
+			timedReads++
+		}
 		if !pv.ViewedAt.Before(windowStart) {
 			if i, ok := idxByDate[pv.ViewedAt.UTC().Format("2006-01-02")]; ok {
 				daily[i].Count++
@@ -1415,12 +1446,16 @@ func (s *Store) PageReadStats(docID string, days int) PageReadStats {
 			readers[key] = r
 		}
 		r.count++
+		r.duration += pv.DurationSeconds
 		if pv.ViewedAt.After(r.last) {
 			r.last = pv.ViewedAt
 		}
 	}
 
 	out := PageReadStats{DocID: docID, Total: total, Daily: daily, Readers: []ReaderStat{}}
+	if timedReads > 0 {
+		out.AvgDurationSec = totalDuration / timedReads
+	}
 	for _, r := range readers {
 		name := "匿名"
 		if r.userID != "" {
@@ -1434,7 +1469,11 @@ func (s *Store) PageReadStats(docID string, days int) PageReadStats {
 				name = r.userID
 			}
 		}
-		out.Readers = append(out.Readers, ReaderStat{Reader: name, UserID: r.userID, Count: r.count, LastReadAt: r.last})
+		avgDuration := 0
+		if r.count > 0 {
+			avgDuration = r.duration / r.count
+		}
+		out.Readers = append(out.Readers, ReaderStat{Reader: name, UserID: r.userID, Count: r.count, AvgDurationSec: avgDuration, LastReadAt: r.last})
 	}
 	sort.Slice(out.Readers, func(i, j int) bool {
 		if out.Readers[i].Count != out.Readers[j].Count {
@@ -1443,6 +1482,118 @@ func (s *Store) PageReadStats(docID string, days int) PageReadStats {
 		return out.Readers[i].LastReadAt.After(out.Readers[j].LastReadAt)
 	})
 	return out
+}
+
+func (s *Store) UserFavorites(userID string) []UserFavorite {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []UserFavorite{}
+	for _, f := range s.favorites {
+		if f.UserID == userID {
+			out = append(out, f)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *Store) SetUserFavorite(userID, moduleKey string, favorite bool) ([]UserFavorite, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	userID = strings.TrimSpace(userID)
+	moduleKey = strings.TrimSpace(moduleKey)
+	if userID == "" || moduleKey == "" {
+		return nil, ErrInvalid
+	}
+	exists := false
+	for _, m := range s.modules {
+		if m.ModuleKey == moduleKey {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
+	for i := range s.favorites {
+		if s.favorites[i].UserID == userID && s.favorites[i].ModuleKey == moduleKey {
+			if favorite {
+				return s.userFavoritesLocked(userID), nil
+			}
+			s.favorites = append(s.favorites[:i], s.favorites[i+1:]...)
+			return s.userFavoritesLocked(userID), nil
+		}
+	}
+	if favorite {
+		s.favorites = append(s.favorites, UserFavorite{ID: s.nextIDLocked("fav"), UserID: userID, ModuleKey: moduleKey, CreatedAt: time.Now().UTC()})
+	}
+	return s.userFavoritesLocked(userID), nil
+}
+
+func (s *Store) userFavoritesLocked(userID string) []UserFavorite {
+	out := []UserFavorite{}
+	for _, f := range s.favorites {
+		if f.UserID == userID {
+			out = append(out, f)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *Store) UserRecentDocs(userID string, limit int) []UserRecentDoc {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if limit <= 0 {
+		limit = 30
+	}
+	out := []UserRecentDoc{}
+	for _, r := range s.recentDocs {
+		if r.UserID == userID {
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ViewedAt.After(out[j].ViewedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func (s *Store) RecordUserRecentDoc(userID string, recent UserRecentDoc) (UserRecentDoc, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	userID = strings.TrimSpace(userID)
+	recent.DocID = strings.TrimSpace(recent.DocID)
+	if userID == "" || recent.DocID == "" {
+		return UserRecentDoc{}, ErrInvalid
+	}
+	for _, p := range s.pages {
+		if p.DocID == recent.DocID {
+			recent.Title = firstNonEmpty(recent.Title, p.Title)
+			recent.ModuleKey = firstNonEmpty(recent.ModuleKey, p.ModuleKey)
+			recent.ModuleName = firstNonEmpty(recent.ModuleName, p.ModuleName)
+			recent.DocsVersion = firstNonEmpty(recent.DocsVersion, p.DocsVersion)
+			recent.EntryKey = firstNonEmpty(recent.EntryKey, p.EntryKey)
+			recent.Href = firstNonEmpty(recent.Href, "/docs/"+p.ModuleKey+"/"+p.DocsVersion+"/"+p.EntryKey)
+			break
+		}
+	}
+	if recent.ID == "" {
+		recent.ID = s.nextIDLocked("recent")
+	}
+	recent.UserID = userID
+	if recent.ViewedAt.IsZero() {
+		recent.ViewedAt = time.Now().UTC()
+	}
+	filtered := s.recentDocs[:0]
+	for _, item := range s.recentDocs {
+		if !(item.UserID == userID && item.DocID == recent.DocID) {
+			filtered = append(filtered, item)
+		}
+	}
+	s.recentDocs = append(filtered, recent)
+	return recent, nil
 }
 
 // CreateCategory adds a new category. Key is required and must be unique.

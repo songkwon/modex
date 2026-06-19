@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Heart, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { favoriteModuleKeys, favoriteModulesFrom, setFavoriteModule } from "@/lib/local-docs";
+import { favoriteModuleKeys, favoriteModulesFrom, syncSetFavoriteModule, syncedFavoriteModuleKeys } from "@/lib/local-docs";
 import { getModules } from "@/lib/api";
 import type { ModuleInfo } from "@/types/modex";
 
@@ -15,6 +15,7 @@ export default function FavoritesPage() {
 
   useEffect(() => {
     setFavoriteKeys(favoriteModuleKeys());
+    syncedFavoriteModuleKeys().then(setFavoriteKeys);
     getModules()
       .then(setModules)
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
@@ -26,7 +27,7 @@ export default function FavoritesPage() {
   const favorites = favoriteModulesFrom(modules);
 
   function remove(moduleKey: string) {
-    setFavoriteKeys(setFavoriteModule(moduleKey, false));
+    syncSetFavoriteModule(moduleKey, false).then(setFavoriteKeys);
   }
 
   return (

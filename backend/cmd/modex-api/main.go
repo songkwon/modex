@@ -18,9 +18,9 @@ import (
 
 func analyticsSource() string {
 	if api.PosthogConfigured() {
-		return "PostHog (project_id=" + os.Getenv("POSTHOG_PROJECT_ID") + ", host=" + api.PosthogHost() + ")"
+		return "built-in + PostHog (project_id=" + os.Getenv("POSTHOG_PROJECT_ID") + ", host=" + api.PosthogHost() + ")"
 	}
-	return "disabled (PostHog not configured)"
+	return "built-in"
 }
 
 func main() {
@@ -54,9 +54,6 @@ func main() {
 	log.Printf("analytics source: %s", analyticsSource())
 
 	handler := srv.Handler()
-	if appSvc.HasRepository() {
-		handler = persistMutations(handler, appSvc)
-	}
 	httpServer := &http.Server{Addr: addr, Handler: handler}
 
 	// Periodic + graceful-shutdown persistence when PostgreSQL is configured.
@@ -144,20 +141,6 @@ func autosavePostgres(appSvc *application.Service, stop <-chan struct{}) {
 			return
 		}
 	}
-}
-
-func persistMutations(next http.Handler, appSvc *application.Service) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			if err := appSvc.Save(ctx); err != nil {
-				log.Printf("persist relational mutation %s %s: %v", r.Method, r.URL.Path, err)
-			}
-		}
-	})
 }
 
 func env(key, fallback string) string {
