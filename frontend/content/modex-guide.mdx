@@ -23,27 +23,20 @@ Modex 是一个正式的团队文档体验平台：负责把工程文档从仓�
 
 ## 系统组成
 
-<Tree>
-  <Folder name="backend">
-    <File name="Go REST API" />
-    <File name="OIDC / sessions / permissions" />
-    <File name="Deploy ingest / search / analytics" />
-  </Folder>
-  <Folder name="frontend">
-    <File name="Next.js portal" />
-    <File name="MDX renderer" />
-    <File name="Admin console" />
-    <File name="i18n catalogs" />
-  </Folder>
-  <Folder name="tools/docsctl">
-    <File name="validate / build / package / deploy" />
-  </Folder>
-  <Folder name="mcp">
-    <File name="stdio MCP server" />
-    <File name="npx package" />
-    <File name="Modex Skill" />
-  </Folder>
-</Tree>
+<CardGroup cols={2}>
+  <Card title="backend" icon="Server">
+    Go REST API，负责认证会话、权限、文档发布接收、搜索索引、阅读统计和运维健康检查。
+  </Card>
+  <Card title="frontend" icon="BookOpen">
+    Next.js 门户，提供文档阅读、MDX 渲染、搜索问答、用户入口、管理控制台和国际化界面。
+  </Card>
+  <Card title="tools/docsctl" icon="Package">
+    文档仓库侧 CLI，负责 validate、build、package、deploy，把不同文档框架统一成 Modex artifact。
+  </Card>
+  <Card title="mcp" icon="Terminal">
+    面向 AI 工具的 MCP server、npx 包和 Modex Skill，让 Claude Code、Cursor 等客户端读取平台文档。
+  </Card>
+</CardGroup>
 
 ## 快速启动
 
