@@ -1489,6 +1489,13 @@ select:focus {
   color: hsl(var(--muted));
 }
 .empty-state-box .button { margin-top: 4px; }
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
 
 .split-panel {
   display: grid;
