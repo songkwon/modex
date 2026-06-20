@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, X } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export type ComboOption = { value: string; label: string; hint?: string; depth?: number };
 
@@ -16,7 +17,7 @@ export function Combobox({
   options,
   value,
   onChange,
-  placeholder = "搜索并选择…",
+  placeholder,
   multiple = true,
   allowCreate = false,
 }: {
@@ -27,6 +28,7 @@ export function Combobox({
   multiple?: boolean;
   allowCreate?: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -127,10 +129,10 @@ export function Combobox({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => toggle(query.trim())}
               >
-                新增 “{query.trim()}”
+                {t("legacy.2a0593aa7255")}{query.trim()}”
               </button>
             ) : null}
-            {!filtered.length && !canCreate ? <div className="combo-empty">无匹配项</div> : null}
+            {!filtered.length && !canCreate ? <div className="combo-empty">{t("legacy.336cba9a9241")}</div> : null}
           </div>,
           document.body,
         )
@@ -144,7 +146,7 @@ export function Combobox({
             {labelFor(v)}
             <button
               type="button"
-              aria-label="移除"
+              aria-label={t("legacy.6135d4159e89")}
               onClick={(e) => {
                 e.stopPropagation();
                 onChange(value.filter((x) => x !== v));
@@ -156,7 +158,7 @@ export function Combobox({
         ))}
         <input
           value={query}
-          placeholder={visibleChips.length ? "" : placeholder}
+          placeholder={visibleChips.length ? "" : (placeholder ?? t("legacy.2fe6a18a82e9"))}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

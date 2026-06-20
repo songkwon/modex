@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Sparkles, X, Loader2, ArrowUp } from "lucide-react";
 import { askAI } from "@/lib/api";
 import type { SearchResult } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 type Message = { role: "user" | "assistant"; text: string; sources?: SearchResult[] };
 
@@ -21,6 +22,7 @@ export function DocChatPanel({
   moduleKey: string;
   moduleName: string;
 }) {
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,7 +42,7 @@ export function DocChatPanel({
       const res = await askAI(q, { module_key: moduleKey });
       setMessages((m) => [...m, { role: "assistant", text: res.answer, sources: res.sources }]);
     } catch (e) {
-      setMessages((m) => [...m, { role: "assistant", text: "出错了：" + String(e) }]);
+      setMessages((m) => [...m, { role: "assistant", text: t("legacy.7481f4cbad36") + String(e) }]);
     } finally {
       setBusy(false);
     }
@@ -51,16 +53,16 @@ export function DocChatPanel({
       <div className={`doc-chat-scrim ${open ? "open" : ""}`} onClick={onClose} />
       <aside className={`doc-chat-drawer ${open ? "open" : ""}`} aria-hidden={!open}>
         <header className="doc-chat-head">
-          <span className="doc-chat-title"><Sparkles size={16} className="ds-ask-icon" /> 询问 AI</span>
+          <span className="doc-chat-title"><Sparkles size={16} className="ds-ask-icon" /> {t("legacy.69d8ed1c70a6")}</span>
           <span className="doc-chat-sub muted">{moduleName}</span>
-          <button className="button icon-button" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          <button className="button icon-button" onClick={onClose} aria-label={t("legacy.3fd47edce45b")}><X size={16} /></button>
         </header>
 
         <div className="doc-chat-body" ref={bodyRef}>
           {messages.length === 0 ? (
             <div className="doc-chat-empty muted">
-              针对「{moduleName}」的文档提问，例如：<br />
-              “这个模块怎么接入？”、“有哪些已知风险？”
+              {t("legacy.4f49b6aa91cc")}{moduleName}{t("legacy.9c46aa549d19")}<br />
+              {t("legacy.f1a51d80d7a6")}
             </div>
           ) : null}
           {messages.map((m, i) => (
@@ -77,7 +79,7 @@ export function DocChatPanel({
               ) : null}
             </div>
           ))}
-          {busy ? <div className="doc-chat-msg assistant"><div className="doc-chat-bubble"><Loader2 size={15} className="ds-spin" /> 思考中…</div></div> : null}
+          {busy ? <div className="doc-chat-msg assistant"><div className="doc-chat-bubble"><Loader2 size={15} className="ds-spin" /> {t("legacy.64088d8cd78a")}</div></div> : null}
         </div>
 
         <div className="doc-chat-input">
@@ -90,10 +92,10 @@ export function DocChatPanel({
                 send();
               }
             }}
-            placeholder="询问关于本文档的问题…"
+            placeholder={t("legacy.b01115dc1577")}
             rows={1}
           />
-          <button className="button button-primary doc-chat-send" onClick={send} disabled={!input.trim() || busy} aria-label="发送">
+          <button className="button button-primary doc-chat-send" onClick={send} disabled={!input.trim() || busy} aria-label={t("legacy.edecf0ae6e51")}>
             <ArrowUp size={16} />
           </button>
         </div>

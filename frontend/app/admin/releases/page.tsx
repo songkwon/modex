@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { usePaged } from "@/lib/use-paged";
+import { useI18n } from "@/lib/i18n";
 
 const PAGE_SIZE = 12;
 
@@ -24,18 +25,19 @@ type Release = {
 };
 
 export default function ReleasesPage() {
+  const { t } = useI18n();
   const [keyword, setKeyword] = useState("");
   const { items: pageRows, total, page, setPage, error } = usePaged<Release>("/api/admin/releases", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title="发布记录" kicker="Releases" description="追踪每次文档发布的来源、构建系统、版本与状态。">
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>加载失败：{error}</div> : null}
+    <AdminShell title={t("legacy.7290d89a6d74")} kicker="Releases" description={t("legacy.85135e8716b5")}>
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("legacy.01de8216e0d0")}{error}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder="搜索模块 / 发布人 / 版本"
+            placeholder={t("legacy.7ff56c80c8f0")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -46,20 +48,20 @@ export default function ReleasesPage() {
         {total === 0 ? (
           <EmptyState
             icon={History}
-            title={keyword ? "没有匹配的发布记录" : "暂无发布记录"}
-            hint={keyword ? "换个关键词试试。" : "通过 CI 推送文档（docsctl deploy）后，每次发布都会记录在这里。"}
+            title={keyword ? t("legacy.f3f06af0da9a") : t("legacy.f3208952b99f")}
+            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.d08269066815")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
                 <th>Release</th>
-                <th>模块</th>
-                <th>文档版本</th>
-                <th>发布人</th>
-                <th>构建</th>
-                <th>状态</th>
-                <th>发布时间</th>
+                <th>{t("legacy.b07e5088eafa")}</th>
+                <th>{t("legacy.78d8ccff9b0b")}</th>
+                <th>{t("legacy.984d7eb384ea")}</th>
+                <th>{t("legacy.e80bc10ef28b")}</th>
+                <th>{t("legacy.6320b4a8722a")}</th>
+                <th>{t("legacy.e8ff4d335dee")}</th>
               </tr>
             </thead>
             <tbody>

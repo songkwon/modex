@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 type ThemeChoice = "light" | "dark" | "system";
 const KEY = "modex_theme";
@@ -17,6 +18,7 @@ function apply(choice: ThemeChoice) {
 }
 
 export function ThemeToggle() {
+  const { t } = useI18n();
   const [choice, setChoice] = useState<ThemeChoice>("system");
 
   useEffect(() => {
@@ -38,11 +40,11 @@ export function ThemeToggle() {
     apply(next);
   }
 
-  const label = choice === "system" ? "跟随系统" : choice === "dark" ? "夜间" : "白天";
+  const label = choice === "system" ? t("legacy.217cfe7db1e3") : choice === "dark" ? t("legacy.df2cedace72a") : t("legacy.6fa7e15a01ab");
   const Icon = choice === "system" ? Monitor : choice === "dark" ? Moon : Sun;
 
   return (
-    <button className="button icon-button" onClick={cycle} title={`主题：${label}（点击切换）`} aria-label={`主题：${label}`}>
+    <button className="button icon-button" onClick={cycle} title={t("legacy.fc175993cd37", { value1: label })} aria-label={t("legacy.fc83a6ca6db4", { value1: label })}>
       <Icon size={18} />
     </button>
   );

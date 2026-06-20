@@ -1,4 +1,7 @@
+"use client";
+
 import { ReactNode } from "react";
+import { useI18n } from "@/lib/i18n";
 
 // Frame wraps media with a border + optional caption.
 export function Frame({ caption, children }: { caption?: string; children: ReactNode }) {
@@ -51,18 +54,19 @@ export function MarkdownExample({
   source: string;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mdx-example">
       {title ? <div className="mdx-example__title">{title}</div> : null}
       <div className="mdx-example__grid">
         <div className="mdx-example__pane">
-          <div className="mdx-example__label">源码</div>
+          <div className="mdx-example__label">{t("legacy.41b50a9198f4")}</div>
           <pre className="mdx-example__source">
             <code>{source.trim()}</code>
           </pre>
         </div>
         <div className="mdx-example__pane">
-          <div className="mdx-example__label">呈现效果</div>
+          <div className="mdx-example__label">{t("legacy.700a692abb19")}</div>
           <div className="mdx-example__preview">{children}</div>
         </div>
       </div>

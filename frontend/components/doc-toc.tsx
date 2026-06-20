@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { List } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 type Item = { id: string; text: string; level: number };
 type Point = { x: number; y: number };
@@ -15,6 +16,7 @@ type ActiveRange = { top: number; height: number; dotX: number; dotY: number };
 //   clipPath so the active segment follows the exact line shape.
 // - A small dot marks the end of the active range (the lowest visible heading).
 export function DocToc() {
+  const { t } = useI18n();
   const [items, setItems] = useState<Item[]>([]);
   const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
   const [activeRange, setActiveRange] = useState<ActiveRange | null>(null);
@@ -142,7 +144,7 @@ export function DocToc() {
   return (
     <>
       <p className="doc-toc-title doc-toc-head">
-        <List size={14} /> 本页目录
+        <List size={14} /> {t("legacy.a610e0c62b3e")}
       </p>
       <div className="doc-toc-wrap" ref={navRef}>
         {rail ? (
@@ -170,7 +172,7 @@ export function DocToc() {
             ) : null}
           </svg>
         ) : null}
-        <nav className="doc-toc-tree" aria-label="本页目录">
+        <nav className="doc-toc-tree" aria-label={t("legacy.a610e0c62b3e")}>
           {items.map((it) => (
             <a
               key={it.id}

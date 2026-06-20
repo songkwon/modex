@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 // Renders an admin-imported JSX plugin inside an isolated iframe. The iframe is
 // sandboxed with allow-scripts but WITHOUT allow-same-origin → it gets an opaque
@@ -25,6 +26,7 @@ export function SandboxedPlugin({
   props?: Record<string, unknown>;
   minHeight?: number;
 }) {
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [height, setHeight] = useState(minHeight);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +83,7 @@ function dec(id){return decodeURIComponent(escape(atob(document.getElementById(i
   if (error) {
     return (
       <div className="mdx-plugin mdx-plugin--error">
-        <span className="mdx-plugin__tag">第三方插件错误</span>
+        <span className="mdx-plugin__tag">{t("legacy.c1918f8165fe")}</span>
         <pre>{error}</pre>
       </div>
     );

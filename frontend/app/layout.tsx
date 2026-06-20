@@ -9,6 +9,7 @@ import { TopbarSearchButton } from "@/components/topbar-search";
 import { TopbarChatButton } from "@/components/topbar-chat";
 import { AnalyticsInit } from "@/components/analytics-init";
 import { I18nProvider } from "@/lib/i18n";
+import { getServerLocale } from "@/lib/i18n-server";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
@@ -26,14 +27,15 @@ export const viewport: Viewport = {
   themeColor: "#0E1F30"
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getServerLocale();
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>
-        <I18nProvider>
+        <I18nProvider initialLocale={locale}>
           <AnalyticsInit />
           <SearchProvider>
             <div className="shell">

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 /** Compact page list with first/last + ellipsis, used under admin tables. */
 function pageList(current: number, total: number): (number | "…")[] {
@@ -26,6 +27,7 @@ export function Pagination({
   total: number;
   onPage: (p: number) => void;
 }) {
+  const { t } = useI18n();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
@@ -33,10 +35,10 @@ export function Pagination({
   return (
     <div className="pagination">
       <span>
-        共 {total} 条 · 第 {from}–{to} 条
+        共 {total} {t("legacy.064f059f1a4f")} {from}–{to} 条
       </span>
       <div className="pagination-pages">
-        <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="上一页">
+        <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label={t("legacy.c9b9ae7a6144")}>
           <ChevronLeft size={15} />
         </button>
         {pageList(page, totalPages).map((p, i) =>
@@ -50,7 +52,7 @@ export function Pagination({
             </button>
           ),
         )}
-        <button className="page-btn" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label="下一页">
+        <button className="page-btn" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label={t("legacy.8a8542f69648")}>
           <ChevronRight size={15} />
         </button>
       </div>

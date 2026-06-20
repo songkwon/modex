@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { usePaged } from "@/lib/use-paged";
+import { useI18n } from "@/lib/i18n";
 
 const PAGE_SIZE = 12;
 
@@ -22,18 +23,19 @@ type SearchLog = {
 };
 
 export default function SearchLogsPage() {
+  const { t } = useI18n();
   const [keyword, setKeyword] = useState("");
   const { items: pageRows, total, page, setPage, error } = usePaged<SearchLog>("/api/admin/analytics/search", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title="搜索日志" kicker="Search Analytics" description="观察高频搜索词、无结果查询和搜索点击行为。">
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>加载失败：{error}</div> : null}
+    <AdminShell title={t("legacy.1b9b75f51d20")} kicker="Search Analytics" description={t("legacy.9f4505ae6160")}>
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("legacy.01de8216e0d0")}{error}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder="搜索查询词 / 用户 / IP"
+            placeholder={t("legacy.77c5e12f55eb")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -44,19 +46,19 @@ export default function SearchLogsPage() {
         {total === 0 ? (
           <EmptyState
             icon={Search}
-            title={keyword ? "没有匹配的搜索日志" : "暂无搜索日志"}
-            hint={keyword ? "换个关键词试试。" : "用户执行一次搜索（按回车或点击结果）后，记录会显示在这里。"}
+            title={keyword ? t("legacy.4d4e33d46e72") : t("legacy.2c45f43d5445")}
+            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.705c85d8bb95")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>查询词</th>
-                <th>模式</th>
-                <th>结果数</th>
-                <th>用户</th>
-                <th>点击</th>
-                <th>时间</th>
+                <th>{t("legacy.97e406603ba9")}</th>
+                <th>{t("legacy.47a270081ab2")}</th>
+                <th>{t("legacy.15c20d768e18")}</th>
+                <th>{t("legacy.0d0e1a86b3aa")}</th>
+                <th>{t("legacy.dc71485f8ee9")}</th>
+                <th>{t("legacy.8b6ff498515b")}</th>
               </tr>
             </thead>
             <tbody>

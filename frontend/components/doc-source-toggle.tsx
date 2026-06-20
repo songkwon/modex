@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileCode, Copy, Check, Eye } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 type ViewMode = "rendered" | "source";
 
@@ -12,6 +13,7 @@ export function DocSourceToggle({
   source: string;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<ViewMode>("rendered");
   const [copied, setCopied] = useState(false);
 
@@ -21,7 +23,7 @@ export function DocSourceToggle({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      alert("复制失败，请手动选中复制");
+      alert(t("legacy.cbc8618279a5"));
     }
   }
 
@@ -31,16 +33,16 @@ export function DocSourceToggle({
         <button
           className={`doc-view-toggle__btn${mode === "rendered" ? " active" : ""}`}
           onClick={() => setMode("rendered")}
-          title="渲染视图"
+          title={t("legacy.4390fa32fde0")}
         >
-          <Eye size={14} /> 查看效果
+          <Eye size={14} /> {t("legacy.c990c85989ec")}
         </button>
         <button
           className={`doc-view-toggle__btn${mode === "source" ? " active" : ""}`}
           onClick={() => setMode("source")}
-          title="原始 Markdown"
+          title={t("legacy.7d8081dad59b")}
         >
-          <FileCode size={14} /> 查看原始文档
+          <FileCode size={14} /> {t("legacy.a57a3a44d9c3")}
         </button>
       </div>
 
@@ -49,10 +51,10 @@ export function DocSourceToggle({
       ) : (
         <div className="doc-source">
           <div className="doc-source__head">
-            <span className="doc-source__label">原始 Markdown</span>
+            <span className="doc-source__label">{t("legacy.7d8081dad59b")}</span>
             <button className="doc-source__copy" onClick={copySource}>
               {copied ? <Check size={14} /> : <Copy size={14} />}
-              {copied ? "已复制" : "复制"}
+              {copied ? t("legacy.8f6f8d979c98") : t("legacy.63d90d977348")}
             </button>
           </div>
           <pre className="doc-source__pre">{source}</pre>

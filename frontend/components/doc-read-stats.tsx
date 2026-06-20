@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, Loader2, LineChart as LineChartIcon, Users } from "lucide-react";
 import { getDocAnalytics, type DocReadStats as Stats } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
+import type { TranslateFn } from "@/lib/messages";
 
 type Tab = "trend" | "readers";
 type RangeDays = 7 | 30 | 90;
@@ -12,6 +14,7 @@ type RangeDays = 7 | 30 | 90;
 // per-reader breakdown from PostHog when configured, otherwise the built-in
 // first-party analytics store.
 export function DocReadStats({ docId }: { docId: string }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<Tab>("trend");
@@ -59,8 +62,8 @@ export function DocReadStats({ docId }: { docId: string }) {
       <button
         className="button icon-button read-stats-trigger"
         onClick={() => setOpen((v) => !v)}
-        title="查看阅读情况"
-        aria-label="查看阅读情况"
+        title={t("legacy.99a1d5bd3348")}
+        aria-label={t("legacy.99a1d5bd3348")}
         aria-expanded={open}
       >
         <Eye size={16} />
@@ -70,34 +73,34 @@ export function DocReadStats({ docId }: { docId: string }) {
       {open ? (
         <div className="read-stats-pop">
           <div className="read-stats-head">
-            <strong>阅读情况</strong>
-            <span className="tag">{source === "posthog" ? "PostHog" : "内置统计"}</span>
+            <strong>{t("legacy.3f7111630e72")}</strong>
+            <span className="tag">{source === "posthog" ? "PostHog" : t("legacy.6ddee7759454")}</span>
             <select
               className="read-stats-range"
               value={days}
               onChange={(e) => setDays(Number(e.target.value) as RangeDays)}
-              aria-label="统计时间范围"
+              aria-label={t("legacy.80ee5ade8132")}
             >
-              <option value={7}>近 7 天</option>
-              <option value={30}>近 30 天</option>
-              <option value={90}>近 90 天</option>
+              <option value={7}>{t("legacy.2261b06712a3")}</option>
+              <option value={30}>{t("legacy.f729bb3d3f7e")}</option>
+              <option value={90}>{t("legacy.0909522d9092")}</option>
             </select>
             <div className="read-stats-tabs">
               <button className={`read-stats-tab${tab === "trend" ? " active" : ""}`} onClick={() => setTab("trend")}>
-                <LineChartIcon size={14} /> 趋势
+                <LineChartIcon size={14} /> {t("legacy.9b59e637c838")}
               </button>
               <button className={`read-stats-tab${tab === "readers" ? " active" : ""}`} onClick={() => setTab("readers")}>
-                <Users size={14} /> 阅读者
+                <Users size={14} /> {t("legacy.b836711928b9")}
               </button>
             </div>
           </div>
 
           {loading ? (
-            <div className="read-stats-empty"><Loader2 size={16} className="ds-spin" /> 加载中…</div>
+            <div className="read-stats-empty"><Loader2 size={16} className="ds-spin" /> {t("legacy.4927a53bcc88")}</div>
           ) : error ? (
-            <div className="read-stats-empty muted">加载失败</div>
+            <div className="read-stats-empty muted">{t("legacy.d1d044826a45")}</div>
           ) : !data || data.total === 0 ? (
-            <div className="read-stats-empty muted">暂无阅读记录</div>
+            <div className="read-stats-empty muted">{t("legacy.5d7aa3d2bc79")}</div>
           ) : tab === "trend" ? (
             <TrendChart stats={data} />
           ) : (
@@ -110,6 +113,7 @@ export function DocReadStats({ docId }: { docId: string }) {
 }
 
 function TrendChart({ stats }: { stats: Stats }) {
+  const { t } = useI18n();
   const { daily } = stats;
   const W = 320;
   const H = 120;
@@ -128,10 +132,10 @@ function TrendChart({ stats }: { stats: Stats }) {
   return (
     <div className="read-stats-body">
       <div className="read-stats-summary">
-        <span><strong>{stats.total}</strong><small>总阅读</small></span>
-        <span><strong>{fmtDuration(stats.avg_duration_seconds)}</strong><small>平均时长</small></span>
+        <span><strong>{stats.total}</strong><small>{t("legacy.301ded2a5a81")}</small></span>
+        <span><strong>{fmtDuration(stats.avg_duration_seconds, t)}</strong><small>{t("legacy.654e27cd53c2")}</small></span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="read-stats-chart" role="img" aria-label="每日阅读量趋势">
+      <svg viewBox={`0 0 ${W} ${H}`} className="read-stats-chart" role="img" aria-label={t("legacy.cb77993ee539")}>
         <path d={area} className="read-stats-area" />
         <path d={line} className="read-stats-line" fill="none" />
         {daily.map((d, i) =>
@@ -140,7 +144,7 @@ function TrendChart({ stats }: { stats: Stats }) {
       </svg>
       <div className="read-stats-axis muted">
         <span>{first}</span>
-        <span>峰值 {peak?.count ?? 0}/日</span>
+        <span>{t("legacy.5fa34377ddca")} {peak?.count ?? 0}{t("legacy.bd6af0fbad9c")}</span>
         <span>{last}</span>
       </div>
     </div>
@@ -148,8 +152,9 @@ function TrendChart({ stats }: { stats: Stats }) {
 }
 
 function ReadersTable({ readers }: { readers: Stats["readers"] }) {
+  const { t } = useI18n();
   if (!readers || readers.length === 0) {
-    return <div className="read-stats-empty muted">暂无阅读者</div>;
+    return <div className="read-stats-empty muted">{t("legacy.9b7af2319166")}</div>;
   }
   return (
     <div className="read-stats-body">
@@ -157,7 +162,7 @@ function ReadersTable({ readers }: { readers: Stats["readers"] }) {
         {readers.map((r, i) => (
           <div className="read-stats-reader" key={`${r.user_id || r.reader}-${i}`}>
             <span className="read-stats-reader-name">{r.reader}</span>
-            <span className="read-stats-reader-count">{r.count} 次 · 平均 {fmtDuration(r.avg_duration_seconds)}</span>
+            <span className="read-stats-reader-count">{r.count} {t("legacy.0a3ad5392111")} {fmtDuration(r.avg_duration_seconds, t)}</span>
             <span className="read-stats-reader-time muted">{fmtTime(r.last_read_at)}</span>
           </div>
         ))}
@@ -166,12 +171,12 @@ function ReadersTable({ readers }: { readers: Stats["readers"] }) {
   );
 }
 
-function fmtDuration(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0 秒";
-  if (seconds < 60) return `${Math.round(seconds)} 秒`;
+function fmtDuration(seconds: number, t: TranslateFn) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return t("legacy.3db3bfd88e0a");
+  if (seconds < 60) return t("legacy.5e713c2f3240", { value1: Math.round(seconds) });
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
-  return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
+  return rest ? t("legacy.c0a227e60381", { value1: minutes, value2: rest }) : t("legacy.418d220ecac4", { value1: minutes });
 }
 
 function fmtTime(iso: string) {

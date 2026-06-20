@@ -3,6 +3,7 @@
 import { ReactNode, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { Icon } from "./icon";
+import { useI18n } from "@/lib/i18n";
 
 export function Accordion({
   title,
@@ -41,12 +42,13 @@ export function AccordionGroup({ children }: { children: ReactNode }) {
 
 // Expandable behaves like an inline accordion, typically nesting fields.
 export function Expandable({ title, defaultOpen = false, children }: { title?: string; defaultOpen?: boolean; children: ReactNode }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className={`mdx-expandable${open ? " is-open" : ""}`}>
       <button type="button" className="mdx-expandable__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <ChevronRight size={14} className="mdx-accordion__chevron" aria-hidden />
-        <span>{title ?? "展开"}</span>
+        <span>{title ?? t("legacy.00bd3960fea8")}</span>
       </button>
       {open ? <div className="mdx-expandable__body">{children}</div> : null}
     </div>
