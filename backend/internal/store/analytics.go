@@ -6,31 +6,31 @@ import (
 	"time"
 )
 
-func (s *Store) AddSearchLog(log SearchLog) {
+func (s *MemoryStore) AddSearchLog(log SearchLog) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.searchLogs = append(s.searchLogs, log)
 }
 
-func (s *Store) SearchLogs() []SearchLog {
+func (s *MemoryStore) SearchLogs() []SearchLog {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]SearchLog(nil), s.searchLogs...)
 }
 
-func (s *Store) AddMCPLog(log MCPLog) {
+func (s *MemoryStore) AddMCPLog(log MCPLog) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mcpLogs = append(s.mcpLogs, log)
 }
 
-func (s *Store) MCPLogs() []MCPLog {
+func (s *MemoryStore) MCPLogs() []MCPLog {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]MCPLog(nil), s.mcpLogs...)
 }
 
-func (s *Store) AddDocFeedback(f DocFeedback) DocFeedback {
+func (s *MemoryStore) AddDocFeedback(f DocFeedback) DocFeedback {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if f.CreatedAt.IsZero() {
@@ -51,14 +51,14 @@ func (s *Store) AddDocFeedback(f DocFeedback) DocFeedback {
 	return f
 }
 
-func (s *Store) DocFeedbacks() []DocFeedback {
+func (s *MemoryStore) DocFeedbacks() []DocFeedback {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]DocFeedback(nil), s.feedbacks...)
 }
 
 // RecordPageView appends a page view and returns the stored record.
-func (s *Store) RecordPageView(pv PageView) PageView {
+func (s *MemoryStore) RecordPageView(pv PageView) PageView {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if pv.ViewedAt.IsZero() {
@@ -85,7 +85,7 @@ func (s *Store) RecordPageView(pv PageView) PageView {
 
 // RecordReadProgress updates the latest matching page view with duration and
 // scroll depth for the given session and doc, or records a new view if none.
-func (s *Store) RecordReadProgress(docID, sessionID, readID string, durationSeconds int, scrollDepth float64) PageView {
+func (s *MemoryStore) RecordReadProgress(docID, sessionID, readID string, durationSeconds int, scrollDepth float64) PageView {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := len(s.pageViews) - 1; i >= 0; i-- {
@@ -123,7 +123,7 @@ func (s *Store) RecordReadProgress(docID, sessionID, readID string, durationSeco
 // PageAnalytics aggregates recorded views into per-page reading statistics.
 // Pages with no recorded views fall back to seeded read counts so the admin
 // dashboard is populated on a fresh start.
-func (s *Store) PageAnalytics() []PageStat {
+func (s *MemoryStore) PageAnalytics() []PageStat {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	now := time.Now().UTC()
@@ -190,7 +190,7 @@ func (s *Store) PageAnalytics() []PageStat {
 	return out
 }
 
-func (s *Store) seedReadsLocked(moduleKey string, week bool) int {
+func (s *MemoryStore) seedReadsLocked(moduleKey string, week bool) int {
 	for _, m := range s.modules {
 		if strings.EqualFold(m.ModuleKey, moduleKey) {
 			if week {
@@ -205,7 +205,7 @@ func (s *Store) seedReadsLocked(moduleKey string, week bool) int {
 // PageReadStats aggregates recorded views for one document into a daily read
 // trend (last `days` days, inclusive of today) plus a per-reader breakdown.
 // Readers are keyed by user id, falling back to session id for anonymous views.
-func (s *Store) PageReadStats(docID string, days int) PageReadStats {
+func (s *MemoryStore) PageReadStats(docID string, days int) PageReadStats {
 	if days <= 0 {
 		days = 30
 	}
@@ -297,7 +297,7 @@ func (s *Store) PageReadStats(docID string, days int) PageReadStats {
 	return out
 }
 
-func (s *Store) UserFavorites(userID string) []UserFavorite {
+func (s *MemoryStore) UserFavorites(userID string) []UserFavorite {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []UserFavorite{}
@@ -310,7 +310,7 @@ func (s *Store) UserFavorites(userID string) []UserFavorite {
 	return out
 }
 
-func (s *Store) SetUserFavorite(userID, moduleKey string, favorite bool) ([]UserFavorite, error) {
+func (s *MemoryStore) SetUserFavorite(userID, moduleKey string, favorite bool) ([]UserFavorite, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	userID = strings.TrimSpace(userID)
@@ -343,7 +343,7 @@ func (s *Store) SetUserFavorite(userID, moduleKey string, favorite bool) ([]User
 	return s.userFavoritesLocked(userID), nil
 }
 
-func (s *Store) userFavoritesLocked(userID string) []UserFavorite {
+func (s *MemoryStore) userFavoritesLocked(userID string) []UserFavorite {
 	out := []UserFavorite{}
 	for _, f := range s.favorites {
 		if f.UserID == userID {
@@ -354,7 +354,7 @@ func (s *Store) userFavoritesLocked(userID string) []UserFavorite {
 	return out
 }
 
-func (s *Store) UserRecentDocs(userID string, limit int) []UserRecentDoc {
+func (s *MemoryStore) UserRecentDocs(userID string, limit int) []UserRecentDoc {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if limit <= 0 {
@@ -373,7 +373,7 @@ func (s *Store) UserRecentDocs(userID string, limit int) []UserRecentDoc {
 	return out
 }
 
-func (s *Store) RecordUserRecentDoc(userID string, recent UserRecentDoc) (UserRecentDoc, error) {
+func (s *MemoryStore) RecordUserRecentDoc(userID string, recent UserRecentDoc) (UserRecentDoc, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	userID = strings.TrimSpace(userID)

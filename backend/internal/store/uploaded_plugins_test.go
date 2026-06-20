@@ -3,7 +3,7 @@ package store
 import "testing"
 
 func TestSaveUploadedPluginValidation(t *testing.T) {
-	st := New()
+	st := NewTestStore()
 	cases := []struct {
 		name string
 		p    UploadedPlugin
@@ -27,7 +27,7 @@ func TestSaveUploadedPluginValidation(t *testing.T) {
 }
 
 func TestUploadedPluginEnableFlow(t *testing.T) {
-	st := New()
+	st := NewTestStore()
 	if _, err := st.SaveUploadedPlugin(UploadedPlugin{Key: "demo", Name: "Demo", Kind: "component", Tag: "Demo", Code: "code"}); err != nil {
 		t.Fatal(err)
 	}

@@ -107,7 +107,7 @@ func mergePlugins(overrides map[string]PluginSetting, uploaded []UploadedPlugin)
 }
 
 // PluginStates returns the catalog merged with saved overrides (admin view).
-func (s *Store) PluginStates() []PluginState {
+func (s *MemoryStore) PluginStates() []PluginState {
 	s.mu.RLock()
 	overrides := s.settings.Plugins
 	uploaded := s.settings.UploadedPlugins
@@ -117,7 +117,7 @@ func (s *Store) PluginStates() []PluginState {
 
 // SavePluginSettings persists enable/config overrides, ignoring unknown plugin
 // keys and config fields not declared in the catalog.
-func (s *Store) SavePluginSettings(overrides map[string]PluginSetting) []PluginState {
+func (s *MemoryStore) SavePluginSettings(overrides map[string]PluginSetting) []PluginState {
 	allowed := map[string]map[string]bool{}
 	for _, def := range pluginCatalog {
 		fs := map[string]bool{}
@@ -160,7 +160,7 @@ func (s *Store) SavePluginSettings(overrides map[string]PluginSetting) []PluginS
 
 // PluginEffective returns a slim enabled+config map for the public config API,
 // consumed by the doc renderer to drive conditional plugins.
-func (s *Store) PluginEffective() map[string]PluginSetting {
+func (s *MemoryStore) PluginEffective() map[string]PluginSetting {
 	states := s.PluginStates()
 	out := make(map[string]PluginSetting, len(states))
 	for _, st := range states {

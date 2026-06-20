@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, GitBranch, Pencil, Plus, Search } from "lucide-react";
+import { BookOpen, Boxes, GitBranch, Info, Pencil, Plus, Search } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
+import { Mermaid } from "@/components/mdx/mermaid";
 import { createModule, getManagedCategories, getDeployToken, rotateDeployToken, updateModule } from "@/lib/api";
 import { usePaged } from "@/lib/use-paged";
 import type { Category, ModuleInfo } from "@/types/modex";
@@ -24,6 +25,46 @@ const DOC_TYPES = [
   { value: "static", label: "Static", hint: "通用静态站" },
 ];
 const COMPILED = new Set(["vitepress", "vuepress", "fumadocs", "docusaurus", "mkdocs", "honkit", "gitbook", "static"]);
+const INTEGRATION_FLOW = `sequenceDiagram
+    autonumber
+    participant User as 管理员
+    participant Modex as Modex
+    participant CI as 文档仓库 CI
+    participant Docsctl as docsctl
+    User->>Modex: 创建文档源并复制 Deploy Token
+    User->>CI: 配置 Token、module key 和构建参数
+    CI->>Docsctl: 执行 docsctl deploy
+    Docsctl->>Docsctl: 注入 DOCS_BASE 并构建、打包
+    Docsctl->>Modex: 上传文档制品和仓库元数据
+    Modex-->>User: 归档版本并开放检索`;
+
+const BASE_CONFIGS = [
+  {
+    name: "VitePress",
+    file: "docs/.vitepress/config.ts",
+    code: `export default defineConfig({\n  base: process.env.DOCS_BASE || "/",\n})`,
+  },
+  {
+    name: "VuePress",
+    file: "docs/.vuepress/config.ts",
+    code: `export default defineUserConfig({\n  base: process.env.DOCS_BASE || "/",\n})`,
+  },
+  {
+    name: "Docusaurus",
+    file: "docusaurus.config.ts",
+    code: `export default {\n  baseUrl: process.env.DOCS_BASE || "/",\n}`,
+  },
+  {
+    name: "Fumadocs / Next.js",
+    file: "next.config.mjs",
+    code: `const basePath = (process.env.DOCS_BASE || "").replace(/\\\/$/, "");\nexport default { basePath, assetPrefix: basePath || undefined, output: "export" };`,
+  },
+  {
+    name: "MkDocs",
+    file: "mkdocs.yml",
+    code: `site_url: !ENV [DOCS_BASE, "/"]`,
+  },
+];
 
 type Draft = {
   module_key?: string;
@@ -94,6 +135,7 @@ export default function AdminModulesPage() {
   const [keyword, setKeyword] = useState("");
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [token, setToken] = useState<{ deploy_token: string; deploy_url: string } | null>(null);
   const isEdit = !!draft.module_key;
@@ -183,29 +225,10 @@ export default function AdminModulesPage() {
           <input placeholder="搜索名称 / key / 仓库" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         </div>
         <div className="admin-toolbar-actions">
+          <button className="button" onClick={() => setGuideOpen(true)}><BookOpen size={16} /> 接入说明</button>
           <button className="button button-primary" onClick={openCreate}><Plus size={16} /> 接入文档源</button>
         </div>
       </div>
-
-      <section className="docs-source-guide">
-        <div>
-          <p className="docs-source-guide__eyebrow">推荐接入方式</p>
-          <h2>先创建文档源，再让 GitLab CI 自动推送</h2>
-          <p>
-            docsctl 会在文档仓库里完成构建、打包和上传。用户只需要在 Modex 创建文档源、复制 Deploy Token，
-            然后把 GitLab CI 模板 include 到文档仓库即可。
-          </p>
-        </div>
-        <ol>
-          <li>点击「接入文档源」，选择框架和归属分类。</li>
-          <li>创建后复制 Deploy Token，保存为 GitLab CI 变量 <code>MODEX_DEPLOY_TOKEN</code>。</li>
-          <li>在文档仓库加入 CI 模板，设置 <code>MODEX_MODULE_KEY</code>、<code>DOCS_BUILDER</code>、<code>DOCS_OUTPUT</code>。</li>
-          <li>推送默认分支，CI 会自动执行 <code>docsctl deploy</code>。</li>
-        </ol>
-        <div className="docs-source-guide__note">
-          支持 VitePress、VuePress、Fumadocs、Docusaurus、MkDocs、HonKit/GitBook、Markdown；其他 HTML 目录可用 Static 接入。docsctl 会自动注入文档 base，并修正常见的根路径静态资源引用。
-        </div>
-      </section>
 
       <div className="table-card">
         <div className="table-scroll">
@@ -263,6 +286,71 @@ export default function AdminModulesPage() {
         </div>
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
       </div>
+
+      <Modal
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        title="文档源接入说明"
+        subtitle="从创建文档源到 CI 构建、打包和发布"
+        width={920}
+        footer={<button className="button button-primary" onClick={() => setGuideOpen(false)}>知道了</button>}
+      >
+        <div className="docs-integration-guide">
+          <section className="docs-integration-section">
+            <div className="docs-integration-heading">
+              <span className="docs-integration-index">01</span>
+              <div><h3>接入流程</h3><p>生产环境推荐由文档仓库的 GitLab CI 自动发布。</p></div>
+            </div>
+            <ol className="docs-integration-steps">
+              <li><span>1</span><div><strong>创建文档源</strong><p>选择框架和归属分类，创建后复制 Deploy Token。</p></div></li>
+              <li><span>2</span><div><strong>配置 CI 变量</strong><p>将 Token 保存为 <code>MODEX_DEPLOY_TOKEN</code>，并设置 module key、构建器和输出目录。</p></div></li>
+              <li><span>3</span><div><strong>引入 CI 模板</strong><p>推送默认分支后，模板会执行 <code>docsctl deploy</code> 完成校验、构建、打包和上传。</p></div></li>
+            </ol>
+          </section>
+
+          <section className="docs-integration-section">
+            <div className="docs-integration-heading">
+              <span className="docs-integration-index">02</span>
+              <div><h3>构建与发布链路</h3><p>Deploy Token 只放在 CI Secret 中，不要提交到文档仓库。</p></div>
+            </div>
+            <div className="docs-integration-diagram" aria-label="文档接入 UML 时序图">
+              <Mermaid chart={INTEGRATION_FLOW} />
+            </div>
+          </section>
+
+          <section className="docs-integration-section">
+            <div className="docs-integration-heading">
+              <span className="docs-integration-index">03</span>
+              <div><h3>打包型文档如何处理 base</h3><p>VitePress、VuePress 等静态站需要在构建时知道最终挂载路径。</p></div>
+            </div>
+            <div className="docs-integration-callout">
+              <Info size={18} />
+              <div>
+                <strong>docsctl 会自动注入，无需在 CI 中手工拼接路径</strong>
+                <p>运行构建命令时会同时写入 <code>DOCS_BASE</code>、<code>MODEX_DOCS_BASE</code>、<code>VITEPRESS_BASE</code> 和 <code>BASE_URL</code>。文档项目的配置文件仍需读取其中一个变量，推荐统一读取 <code>DOCS_BASE</code>。</p>
+              </div>
+            </div>
+            <p className="docs-integration-note">构建完成后，docsctl 还会修正常见 HTML、CSS 和 manifest 中的根路径资源引用。这是兼容兜底；涉及客户端路由、运行时代码或框架生成链接时，仍应在框架配置中正确使用 base。</p>
+          </section>
+
+          <section className="docs-integration-section">
+            <div className="docs-integration-heading">
+              <span className="docs-integration-index">04</span>
+              <div><h3>配置文件修改示例</h3><p>保留 <code>"/"</code> 作为本地独立运行时的默认值。</p></div>
+            </div>
+            <div className="docs-base-config-grid">
+              {BASE_CONFIGS.map((item) => (
+                <article className="docs-base-config" key={item.name}>
+                  <div className="docs-base-config__head"><strong>{item.name}</strong><code>{item.file}</code></div>
+                  <pre>{item.code}</pre>
+                  <CopyButton value={item.code} title={`复制 ${item.name} 配置`} className="icon-btn docs-base-config__copy" />
+                </article>
+              ))}
+            </div>
+            <p className="docs-integration-note"><strong>Markdown / Static：</strong>Markdown 资源由 docsctl 打包时处理；已有静态目录可直接使用 Static，并由产物重写机制兼容常见绝对资源路径。HonKit / GitBook 若无可用的 base 配置，也使用该兜底机制。</p>
+          </section>
+        </div>
+      </Modal>
 
       <Modal
         open={modalOpen}

@@ -37,14 +37,13 @@ export function initAnalytics(): void {
   });
 }
 
-export function identify(user: { id: string; displayName?: string; email?: string; department?: string; groups?: string[] }): void {
+export function identify(user: { id: string; displayName?: string; email?: string; department?: string }): void {
   if (!analyticsEnabled()) return;
   import("posthog-js").then((posthog) => {
     posthog.default.identify(user.id, {
       name: user.displayName,
       email: user.email,
       department: user.department,
-      groups: user.groups,
     });
   }).catch(() => {});
 }

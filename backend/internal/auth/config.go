@@ -31,6 +31,7 @@ type Config struct {
 	CORSAllowOrigins []string
 	SuperAdmins      []string
 	RedisURL         string
+	DatabaseURL      string
 	SessionTTL       time.Duration
 
 	// UserMapping controls which OIDC claims are used for core user identity fields.
@@ -72,6 +73,7 @@ func FromEnv() Config {
 		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3456")),
 		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
 		RedisURL:         os.Getenv("REDIS_URL"),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		SessionTTL:       envDuration("SESSION_TTL", 8*time.Hour),
 
 		// UserMapping comes from a combination of (optional) config file + env overrides.

@@ -12,7 +12,7 @@ func findState(states []PluginState, key string) (PluginState, bool) {
 }
 
 func TestPluginStatesDefaults(t *testing.T) {
-	states := New().PluginStates()
+	states := NewTestStore().PluginStates()
 	if len(states) != len(pluginCatalog) {
 		t.Fatalf("states = %d, want %d", len(states), len(pluginCatalog))
 	}
@@ -29,7 +29,7 @@ func TestPluginStatesDefaults(t *testing.T) {
 }
 
 func TestSavePluginSettingsOverrideAndFilter(t *testing.T) {
-	st := New()
+	st := NewTestStore()
 	st.SavePluginSettings(map[string]PluginSetting{
 		"kroki":   {Enabled: false, Config: map[string]string{"base_url": "  http://kroki.internal:8000  ", "bogus": "x"}},
 		"unknown": {Enabled: true},
@@ -56,7 +56,7 @@ func TestSavePluginSettingsOverrideAndFilter(t *testing.T) {
 }
 
 func TestPluginEffective(t *testing.T) {
-	st := New()
+	st := NewTestStore()
 	st.SavePluginSettings(map[string]PluginSetting{"math": {Enabled: false}})
 	eff := st.PluginEffective()
 	if eff["math"].Enabled {

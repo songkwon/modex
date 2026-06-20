@@ -1,146 +1,11 @@
 package store
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 )
 
-func TestSnapshotRoundTrip(t *testing.T) {
-	s := NewSeeded()
-	if _, err := s.CreateUser(User{Username: "carol", Roles: []string{"viewer"}}); err != nil {
-		t.Fatalf("CreateUser: %v", err)
-	}
-	s.RecordPageView(PageView{DocID: "DemoModule:latest:guide", SessionID: "x"})
-	s.SetEmbedding("DemoModule:latest:guide", []float32{0.1, 0.2, 0.3})
-
-	path := filepath.Join(t.TempDir(), "snap.json")
-	if err := s.Save(path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	loaded, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got, want := len(loaded.Users("")), len(s.Users("")); got != want {
-		t.Fatalf("users after reload = %d, want %d", got, want)
-	}
-	if _, err := loaded.UserByID(""); err == nil {
-		t.Fatal("expected lookup of empty id to fail")
-	}
-	if loaded.EmbeddingCount() != 0 {
-		t.Fatalf("embeddings after reload = %d, want 0; vectors must not be snapshotted", loaded.EmbeddingCount())
-	}
-	for _, suffix := range []string{".pages.json", ".html.json", ".site_files.json"} {
-		if _, err := os.Stat(strings.TrimSuffix(path, ".json") + suffix); err != nil {
-			t.Fatalf("expected split snapshot %s: %v", suffix, err)
-		}
-	}
-	stats := loaded.PageAnalytics()
-	var pv int
-	for _, st := range stats {
-		if st.DocID == "DemoModule:latest:guide" {
-			pv = st.PV
-		}
-	}
-	if pv != 1 {
-		t.Fatalf("page view after reload = %d, want 1", pv)
-	}
-	// Verify new IDs continue past the persisted sequence (no collisions).
-	created, err := loaded.CreateModule(Module{ModuleKey: "PersistedModule"})
-	if err != nil {
-		t.Fatalf("CreateModule after reload: %v", err)
-	}
-	if created.ID == "" {
-		t.Fatal("expected generated module ID after reload")
-	}
-}
-
-func TestLoadWithoutEmbeddingsSkipsLegacySidecar(t *testing.T) {
-	s := NewSeeded()
-	path := filepath.Join(t.TempDir(), "snap.json")
-	if err := s.Save(path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	sidecar := strings.TrimSuffix(path, ".json") + ".embeddings.json"
-	if err := os.WriteFile(sidecar, []byte(`{"DemoModule:latest:guide":[0.1,0.2,0.3]}`), 0o644); err != nil {
-		t.Fatalf("write legacy embeddings: %v", err)
-	}
-	loaded, err := LoadWithoutEmbeddings(path)
-	if err != nil {
-		t.Fatalf("LoadWithoutEmbeddings: %v", err)
-	}
-	if loaded.EmbeddingCount() != 0 {
-		t.Fatalf("embeddings after skipped load = %d, want 0", loaded.EmbeddingCount())
-	}
-}
-
-func TestPostgresSnapshotExcludesStaticAssetsAndVectors(t *testing.T) {
-	s := NewSeeded()
-	s.SetEmbedding("DemoModule:latest:guide", []float32{0.1, 0.2, 0.3})
-	_, err := s.IngestArtifact(DeployArtifact{
-		ModuleKey:   "RuntimeDocs",
-		ModuleName:  "Runtime Docs",
-		DocsVersion: "latest",
-		Entries:     []DeployEntry{{Key: "guide", Title: "Guide", Type: "markdown"}},
-		Documents:   []DeployDocument{{DocID: "RuntimeDocs:latest:guide", EntryKey: "guide", Title: "Guide", Content: "hello"}},
-		Nav:         []NavItem{{Title: "Guide", Path: "/docs/RuntimeDocs/latest/guide"}},
-		SiteHTML:    map[string]string{"guide": "<html>hello</html>"},
-		SiteFiles:   map[string][]byte{"site/guide/assets/app.css": []byte("body{}")},
-	})
-	if err != nil {
-		t.Fatalf("IngestArtifact: %v", err)
-	}
-
-	snap := s.toRelationalState()
-	if len(snap.Pages) == 0 {
-		t.Fatal("postgres snapshot should keep searchable page business data")
-	}
-	if len(snap.HTML) != 0 {
-		t.Fatalf("postgres snapshot HTML = %d, want 0; rendered HTML belongs in MinIO", len(snap.HTML))
-	}
-	if len(snap.SiteFiles) != 0 {
-		t.Fatalf("postgres snapshot site files = %d, want 0; site assets belong in MinIO", len(snap.SiteFiles))
-	}
-	if len(snap.Embeddings) != 0 {
-		t.Fatalf("postgres snapshot embeddings = %d, want 0; vectors belong in pgvector", len(snap.Embeddings))
-	}
-}
-
-func TestSnapshotPersistsModuleDeployToken(t *testing.T) {
-	s := NewSeeded()
-	created, err := s.CreateModule(Module{ModuleKey: "TokenModule"})
-	if err != nil {
-		t.Fatalf("CreateModule: %v", err)
-	}
-	if created.DeployToken == "" {
-		t.Fatal("expected generated deploy token")
-	}
-
-	path := filepath.Join(t.TempDir(), "snap.json")
-	if err := s.Save(path); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	loaded, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	mod, err := loaded.Module("TokenModule")
-	if err != nil {
-		t.Fatalf("Module: %v", err)
-	}
-	if mod.DeployToken != created.DeployToken {
-		t.Fatalf("deploy token after reload = %q, want %q", mod.DeployToken, created.DeployToken)
-	}
-	if !mod.DeployTokenSet {
-		t.Fatal("expected DeployTokenSet after reload")
-	}
-}
-
 func TestSiteObjectsUseCanonicalModuleKey(t *testing.T) {
-	s := New()
+	s := NewTestStore()
 	_, err := s.IngestArtifact(DeployArtifact{
 		ModuleKey:   "RuntimeDocs",
 		DocsVersion: "latest",
@@ -163,16 +28,10 @@ func TestSiteObjectsUseCanonicalModuleKey(t *testing.T) {
 	}
 }
 
-func TestLoadMissingReturnsNotFound(t *testing.T) {
-	if _, err := Load(filepath.Join(t.TempDir(), "nope.json")); err != ErrNotFound {
-		t.Fatalf("err = %v, want ErrNotFound", err)
-	}
-}
+func TestUserCRUD(t *testing.T) {
+	s := NewSeededTestStore()
 
-func TestUserCRUDAndGroupAutoRegister(t *testing.T) {
-	s := NewSeeded()
-
-	created, err := s.CreateUser(User{Username: "carol", Department: "测试", Groups: []string{"qa-team"}, Roles: []string{"viewer"}})
+	created, err := s.CreateUser(User{Username: "carol", Department: "测试", Roles: []string{"viewer"}})
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -182,17 +41,6 @@ func TestUserCRUDAndGroupAutoRegister(t *testing.T) {
 	if _, err := s.CreateUser(User{Username: "CAROL"}); err != ErrConflict {
 		t.Fatalf("duplicate username err = %v, want ErrConflict", err)
 	}
-	// qa-team should have been auto-registered as a group.
-	var hasQA bool
-	for _, g := range s.Groups() {
-		if g.GroupKey == "qa-team" {
-			hasQA = true
-		}
-	}
-	if !hasQA {
-		t.Fatal("expected qa-team group to be auto-registered")
-	}
-
 	updated, err := s.UpdateUser(created.ID, User{Roles: []string{"maintainer"}, Status: "disabled"})
 	if err != nil {
 		t.Fatalf("UpdateUser: %v", err)
@@ -210,11 +58,11 @@ func TestUserCRUDAndGroupAutoRegister(t *testing.T) {
 }
 
 func TestUpsertUserSyncsOnLogin(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 	before := len(s.Users(""))
 
 	// Existing seeded user alice: upsert should update, not duplicate.
-	u := s.UpsertUser(User{ID: "u-alice", Username: "alice", Department: "新部门", Groups: []string{"cad-team", "release"}})
+	u := s.UpsertUser(User{ID: "u-alice", Username: "alice", Department: "新部门"})
 	if u.Source != "oidc" || u.Department != "新部门" {
 		t.Fatalf("upsert existing wrong: %+v", u)
 	}
@@ -226,14 +74,14 @@ func TestUpsertUserSyncsOnLogin(t *testing.T) {
 	}
 
 	// New identity from provider: should be created.
-	s.UpsertUser(User{Username: "dave", Email: "dave@example.com", Groups: []string{"ops"}})
+	s.UpsertUser(User{Username: "dave", Email: "dave@example.com"})
 	if got := len(s.Users("")); got != before+1 {
 		t.Fatalf("expected new user added, count %d -> %d", before, got)
 	}
 }
 
 func TestPageAnalyticsAggregatesViews(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 	doc := "DemoModule:latest:guide"
 
 	s.RecordPageView(PageView{DocID: doc, SessionID: "a", DurationSeconds: 10})
@@ -266,7 +114,7 @@ func TestPageAnalyticsAggregatesViews(t *testing.T) {
 }
 
 func TestPageAnalyticsFallsBackToSeedReads(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 	for _, st := range s.PageAnalytics() {
 		if st.DocID == "CBB:latest:build-cache" {
 			if st.Reads30d == 0 {
@@ -279,7 +127,7 @@ func TestPageAnalyticsFallsBackToSeedReads(t *testing.T) {
 }
 
 func TestModuleVersionEntryCRUD(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 
 	if _, err := s.CreateModule(Module{ModuleKey: "NCKernel", CategoryIDs: []string{"nc"}}); err != nil {
 		t.Fatalf("CreateModule: %v", err)
@@ -319,14 +167,14 @@ func TestModuleVersionEntryCRUD(t *testing.T) {
 }
 
 func TestVersionRequiresExistingModule(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 	if _, err := s.CreateVersion("Ghost", Version{DocsVersion: "latest"}); err != ErrNotFound {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
 
 func TestRollbackRelease(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 	rel, err := s.RollbackRelease("rel-demo-latest-001")
 	if err != nil {
 		t.Fatalf("RollbackRelease: %v", err)
@@ -340,7 +188,7 @@ func TestRollbackRelease(t *testing.T) {
 }
 
 func TestIngestArtifactPublishesPagesNavAndHTML(t *testing.T) {
-	s := NewSeeded()
+	s := NewSeededTestStore()
 	result, err := s.IngestArtifact(DeployArtifact{
 		ModuleKey:      "RuntimeDocs",
 		ModuleName:     "Runtime Docs",

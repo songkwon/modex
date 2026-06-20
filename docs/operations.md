@@ -36,3 +36,11 @@ and MinIO backups together to keep metadata and artifacts consistent.
 
 Document content releases can be rolled back independently from the admin
 release page; this does not roll back the Modex application itself.
+
+## Data consistency
+
+The API reads and writes business data directly through PostgreSQL on every
+request. There is no process-local business cache, periodic autosave, or whole
+store snapshot. Committed changes are immediately visible to every API
+instance. Static documentation assets use MinIO when configured and otherwise
+fall back to the `docs_site_file` PostgreSQL table.

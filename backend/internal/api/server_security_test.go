@@ -10,7 +10,7 @@ import (
 )
 
 func TestAdminReleaseRollbackRequiresLogin(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/releases/rel-demo-latest-001/rollback", nil)
 	rr := httptest.NewRecorder()
 
@@ -22,7 +22,7 @@ func TestAdminReleaseRollbackRequiresLogin(t *testing.T) {
 }
 
 func TestOptionalCurrentUserProbeIsAnonymousWithout401(t *testing.T) {
-	srv := New(store.New())
+	srv := New(store.NewTestStore())
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/me?optional=1", nil)
 	rr := httptest.NewRecorder()
 
@@ -37,7 +37,7 @@ func TestOptionalCurrentUserProbeIsAnonymousWithout401(t *testing.T) {
 }
 
 func TestEmptyPublicModulesUsesJSONArray(t *testing.T) {
-	srv := New(store.New())
+	srv := New(store.NewTestStore())
 	req := httptest.NewRequest(http.MethodGet, "/api/modules", nil)
 	rr := httptest.NewRecorder()
 
@@ -52,7 +52,7 @@ func TestEmptyPublicModulesUsesJSONArray(t *testing.T) {
 }
 
 func TestEmbedTextRequiresAdminSession(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodPost, "/api/embeddings/embed-text", strings.NewReader(`{"text":"hello"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestEmbedTextRequiresAdminSession(t *testing.T) {
 }
 
 func TestAdminPluginsRequiresLogin(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/plugins", nil)
 	rr := httptest.NewRecorder()
 
@@ -77,7 +77,7 @@ func TestAdminPluginsRequiresLogin(t *testing.T) {
 }
 
 func TestMCPLogRequiresAuthenticatedCaller(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodPost, "/api/mcp/log", strings.NewReader(`{"tool_name":"search_docs"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -90,7 +90,7 @@ func TestMCPLogRequiresAuthenticatedCaller(t *testing.T) {
 }
 
 func TestMCPLogAcceptsPersonalMCPToken(t *testing.T) {
-	st := store.NewSeeded()
+	st := store.NewSeededTestStore()
 	current := st.CurrentUser()
 	if _, err := st.SetUserMCPToken(current.ID, "mcp-test-token"); err != nil {
 		t.Fatalf("SetUserMCPToken: %v", err)
@@ -113,7 +113,7 @@ func TestMCPLogAcceptsPersonalMCPToken(t *testing.T) {
 }
 
 func TestUnknownAdminRouteReturnsNotFound(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodPost, "/api/admin/unknown-placeholder", nil)
 	rr := httptest.NewRecorder()
 
@@ -125,7 +125,7 @@ func TestUnknownAdminRouteReturnsNotFound(t *testing.T) {
 }
 
 func TestConfigExposesPluginDefaults(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	rr := httptest.NewRecorder()
 

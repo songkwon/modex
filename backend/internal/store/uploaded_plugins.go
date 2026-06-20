@@ -32,7 +32,7 @@ var (
 )
 
 // UploadedPlugins returns a copy of the imported plugin list.
-func (s *Store) UploadedPlugins() []UploadedPlugin {
+func (s *MemoryStore) UploadedPlugins() []UploadedPlugin {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]UploadedPlugin, len(s.settings.UploadedPlugins))
@@ -42,7 +42,7 @@ func (s *Store) UploadedPlugins() []UploadedPlugin {
 
 // EnabledUploadedPlugins returns only imported plugins currently toggled on.
 // Consumed by the renderer (uploaded plugins default to disabled).
-func (s *Store) EnabledUploadedPlugins() []UploadedPlugin {
+func (s *MemoryStore) EnabledUploadedPlugins() []UploadedPlugin {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := []UploadedPlugin{}
@@ -56,7 +56,7 @@ func (s *Store) EnabledUploadedPlugins() []UploadedPlugin {
 
 // SaveUploadedPlugin validates and upserts an imported plugin (by key). It never
 // changes the enabled flag — imports stay disabled until an admin turns them on.
-func (s *Store) SaveUploadedPlugin(p UploadedPlugin) (UploadedPlugin, error) {
+func (s *MemoryStore) SaveUploadedPlugin(p UploadedPlugin) (UploadedPlugin, error) {
 	p.Key = strings.TrimSpace(p.Key)
 	p.Name = strings.TrimSpace(p.Name)
 	p.Tag = strings.TrimSpace(p.Tag)
@@ -112,7 +112,7 @@ func (s *Store) SaveUploadedPlugin(p UploadedPlugin) (UploadedPlugin, error) {
 }
 
 // DeleteUploadedPlugin removes an imported plugin and its enable override.
-func (s *Store) DeleteUploadedPlugin(key string) bool {
+func (s *MemoryStore) DeleteUploadedPlugin(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, ex := range s.settings.UploadedPlugins {

@@ -57,7 +57,6 @@ export function UserMenu() {
           displayName: u.display_name,
           email: u.email,
           department: u.department,
-          groups: u.groups,
         });
       })
       .catch(() => setUser(null))

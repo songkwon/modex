@@ -192,7 +192,6 @@ func (s *Server) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		oauthRedirectError(w, r, redirectURI, state, "server_error")
 		return
 	}
-	s.persistStore("oauth code")
 	u, _ := url.Parse(redirectURI)
 	out := u.Query()
 	out.Set("code", code)
@@ -235,7 +234,6 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 			writeOAuthTokenError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid or expired")
 			return
 		}
-		s.persistStore("oauth code redeem")
 		writeOAuthTokenResponse(w, access, refresh, grant.Scopes)
 	case "refresh_token":
 		grant, _, _, err := s.app.Store().RefreshOAuthToken(app.ClientID, r.Form.Get("refresh_token"), access, refresh, oauthAccessTTL, oauthRefreshTTL)
@@ -243,7 +241,6 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 			writeOAuthTokenError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid or expired")
 			return
 		}
-		s.persistStore("oauth token refresh")
 		writeOAuthTokenResponse(w, access, refresh, grant.Scopes)
 	default:
 		writeOAuthTokenError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
@@ -265,7 +262,6 @@ func (s *Server) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.app.Store().RevokeOAuthToken(clientID, r.Form.Get("token"))
-	s.persistStore("oauth token revoke")
 	writeJSON(w, http.StatusOK, map[string]any{"revoked": true})
 }
 

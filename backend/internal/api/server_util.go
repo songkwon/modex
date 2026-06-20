@@ -37,19 +37,7 @@ func (s *Server) writeMutation(w http.ResponseWriter, v any, successStatus int, 
 		writeResult(w, nil, err)
 		return
 	}
-	s.persistStore("mutation")
 	writeJSON(w, successStatus, v)
-}
-
-func (s *Server) persistStore(reason string) {
-	if !s.app.HasRepository() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := s.app.Save(ctx); err != nil {
-		log.Printf("persist relational store after %s: %v", reason, err)
-	}
 }
 
 func writeResult(w http.ResponseWriter, v any, err error) {

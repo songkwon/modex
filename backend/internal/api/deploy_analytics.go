@@ -62,13 +62,12 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		report.ok("upload_assets")
-		// MinIO is the source of truth for static site assets in deployed
-		// environments. Keeping the same bytes in the in-memory fallback can
-		// push the backend into multi-GB RSS for image-heavy documentation.
+		// MinIO is the source of truth for static site assets when configured;
+		// avoid duplicating the same bytes in PostgreSQL.
 		artifact.SiteFiles = nil
 		artifact.SiteHTML = nil
 	} else {
-		report.skip("upload_assets", "object storage is not configured; keeping assets in memory")
+		report.skip("upload_assets", "object storage is not configured; storing assets in PostgreSQL")
 	}
 	if err := s.app.Search().DeleteModuleVersionEmbeddings(r.Context(), moduleKey, artifact.Metadata.DocsVersion); err != nil {
 		report.fail("clear_embeddings", err)

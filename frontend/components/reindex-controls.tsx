@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { reindexEmbeddings, reindexSearch } from "@/lib/api";
+import { getMe, reindexEmbeddings, reindexSearch } from "@/lib/api";
 
 export function ReindexControls() {
   const [busy, setBusy] = useState<string>("");
   const [result, setResult] = useState<string>("");
+  const [isSuper, setIsSuper] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getMe().then((me) => setIsSuper(!!me.is_super_admin)).catch(() => setIsSuper(false));
+  }, []);
 
   async function run(kind: "search" | "embeddings") {
     setBusy(kind);
@@ -20,6 +25,9 @@ export function ReindexControls() {
       setBusy("");
     }
   }
+
+  // Index maintenance is a platform-wide operation; hide it from team admins.
+  if (!isSuper) return null;
 
   return (
     <section className="panel">

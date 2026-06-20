@@ -287,16 +287,12 @@ export default function AdminSettingsPage() {
                 placeholder={embeddingKeySet ? "已配置（留空则保持不变）" : "sk-…"}
                 onChange={(e) => setAI({ ...ai, embedding_api_key: e.target.value })}
               />
+              <span className="field-hint">嵌入接口的访问密钥；留空保持原有配置不变。</span>
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>向量维度</label>
-              <input
-                type="number"
-                min={1}
-                value={ai.embedding_dim ?? ""}
-                placeholder="384 / 768 / 1024 / 1536"
-                onChange={(e) => setAI({ ...ai, embedding_dim: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
-              />
+              <label>向量维度（固定）</label>
+              <input type="number" value={1024} readOnly disabled />
+              <span className="field-hint">系统固定为 1024 维，请选用输出 1024 维的模型（如 bge-m3）。</span>
             </div>
           </div>
         </div>
@@ -442,7 +438,7 @@ export default function AdminSettingsPage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button className="button button-primary" onClick={submit} disabled={saving}>
-            {saving ? <Loader2 size={16} className="ds-spin" /> : <Sparkles size={16} />} 保存设置
+            {saving ? <Loader2 size={16} className="ds-spin" /> : ''} 保存设置
           </button>
           {saved ? <span className="badge badge-success"><Check size={13} /> 已保存</span> : null}
         </div>

@@ -15,11 +15,11 @@ var (
 	ErrConflict = errors.New("resource already exists")
 )
 
-type Store struct {
+// MemoryStore is a test fake. Production assembly injects PostgresRepository.
+type MemoryStore struct {
 	mu         sync.RWMutex
 	user       User
 	users      []User
-	groups     []Group
 	apps       []ConnectedApp
 	grants     []OAuthGrant
 	teams      []Team
@@ -44,7 +44,7 @@ type Store struct {
 }
 
 // Settings returns a copy of the persisted platform settings.
-func (s *Store) Settings() Settings {
+func (s *MemoryStore) Settings() Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.settings
@@ -52,7 +52,7 @@ func (s *Store) Settings() Settings {
 
 // SaveAISettings updates the AI connection. An empty AskAPIKey keeps the
 // previously stored key (so a masked round-trip from the UI does not wipe it).
-func (s *Store) SaveAISettings(ai AISettings) Settings {
+func (s *MemoryStore) SaveAISettings(ai AISettings) Settings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(ai.AskAPIKey) == "" {
@@ -69,13 +69,10 @@ func (s *Store) SaveAISettings(ai AISettings) Settings {
 	return s.settings
 }
 
-// New returns a completely empty store. This is the default for a fresh start
-// ("从0开始"). No demo users, categories, modules or documents are created.
-// Use NewSeeded() only for tests or when you explicitly want demo data.
-func New() *Store {
-	return &Store{
+// NewTestStore returns an empty deterministic fake for unit tests.
+func NewTestStore() *MemoryStore {
+	return &MemoryStore{
 		users:      []User{},
-		groups:     []Group{},
 		apps:       []ConnectedApp{},
 		grants:     []OAuthGrant{},
 		teams:      []Team{},
@@ -98,24 +95,17 @@ func New() *Store {
 	}
 }
 
-func NewSeeded() *Store {
+func NewSeededTestStore() *MemoryStore {
 	now := time.Now().UTC()
-	s := &Store{
-		user: User{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Groups: []string{"cad-team", "engineering"}, Roles: []string{"admin"}},
+	s := &MemoryStore{
+		user: User{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Roles: []string{"admin"}},
 		users: []User{
-			{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Groups: []string{"cad-team", "engineering"}, Roles: []string{"admin"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
-			{ID: "u-alice", Username: "alice", DisplayName: "Alice", Email: "alice@example.com", Department: "CAD", Groups: []string{"cad-team"}, Roles: []string{"maintainer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
-			{ID: "u-bob", Username: "bob", DisplayName: "Bob", Email: "bob@example.com", Department: "前端", Groups: []string{"frontend-platform"}, Roles: []string{"viewer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
+			{ID: "u-dev", Username: "dev", DisplayName: "研发用户", Email: "dev@example.com", Department: "工程化", Roles: []string{"admin"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
+			{ID: "u-alice", Username: "alice", DisplayName: "Alice", Email: "alice@example.com", Department: "CAD", Roles: []string{"maintainer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
+			{ID: "u-bob", Username: "bob", DisplayName: "Bob", Email: "bob@example.com", Department: "前端", Roles: []string{"viewer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
 		},
 		apps:   []ConnectedApp{},
 		grants: []OAuthGrant{},
-		groups: []Group{
-			{ID: "g-admin", GroupKey: "admin", Name: "平台管理员", Source: "seed", CreatedAt: now, UpdatedAt: now},
-			{ID: "g-engineering", GroupKey: "engineering", Name: "工程化", Source: "seed", CreatedAt: now, UpdatedAt: now},
-			{ID: "g-cad", GroupKey: "cad-team", Name: "CAD 团队", Source: "seed", CreatedAt: now, UpdatedAt: now},
-			{ID: "g-frontend", GroupKey: "frontend-platform", Name: "前端平台", Source: "seed", CreatedAt: now, UpdatedAt: now},
-			{ID: "g-standards", GroupKey: "standards", Name: "研发规范", Source: "seed", CreatedAt: now, UpdatedAt: now},
-		},
 		teams: []Team{
 			{ID: "t-cad", Key: "cad-team", Name: "CAD 团队", Description: "CAD 内核与插件文档维护团队", Leaders: []string{"alice"}, Members: []string{"alice", "bob"}, CreatedAt: now, UpdatedAt: now},
 			{ID: "t-eng", Key: "engineering", Name: "工程化团队", Description: "工程化平台与 CBB 规范维护", Leaders: []string{"dev"}, Members: []string{"dev", "alice"}, CreatedAt: now, UpdatedAt: now},
@@ -173,7 +163,7 @@ func NewSeeded() *Store {
 	return s
 }
 
-func (s *Store) CurrentUser() User {
+func (s *MemoryStore) CurrentUser() User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.user
@@ -181,7 +171,7 @@ func (s *Store) CurrentUser() User {
 
 // Users returns all users, optionally filtered by a case-insensitive keyword
 // matching username, display name, email, or department.
-func (s *Store) Users(keyword string) []User {
+func (s *MemoryStore) Users(keyword string) []User {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	q := strings.ToLower(strings.TrimSpace(keyword))
@@ -196,7 +186,7 @@ func (s *Store) Users(keyword string) []User {
 	return out
 }
 
-func (s *Store) UserByID(id string) (User, error) {
+func (s *MemoryStore) UserByID(id string) (User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.userByIDLocked(id)
@@ -204,7 +194,7 @@ func (s *Store) UserByID(id string) (User, error) {
 
 // userByIDLocked looks up a user without acquiring the lock; callers must hold
 // s.mu (read or write).
-func (s *Store) userByIDLocked(id string) (User, error) {
+func (s *MemoryStore) userByIDLocked(id string) (User, error) {
 	for _, u := range s.users {
 		if u.ID == id {
 			return u, nil
@@ -213,7 +203,7 @@ func (s *Store) userByIDLocked(id string) (User, error) {
 	return User{}, ErrNotFound
 }
 
-func (s *Store) UserByMCPToken(token string) (User, error) {
+func (s *MemoryStore) UserByMCPToken(token string) (User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, u := range s.users {
@@ -224,7 +214,7 @@ func (s *Store) UserByMCPToken(token string) (User, error) {
 	return User{}, ErrNotFound
 }
 
-func (s *Store) SetUserMCPToken(id string, token string) (User, error) {
+func (s *MemoryStore) SetUserMCPToken(id string, token string) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.users {
@@ -237,7 +227,7 @@ func (s *Store) SetUserMCPToken(id string, token string) (User, error) {
 	return User{}, ErrNotFound
 }
 
-func (s *Store) CreateUser(u User) (User, error) {
+func (s *MemoryStore) CreateUser(u User) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(u.Username) == "" {
@@ -265,11 +255,10 @@ func (s *Store) CreateUser(u User) (User, error) {
 	u.UpdatedAt = now
 	// SuperAdmin can be set at creation time (usually only by another super admin via the admin UI).
 	s.users = append(s.users, u)
-	s.ensureGroupsLocked(u.Groups)
 	return u, nil
 }
 
-func (s *Store) UpdateUser(id string, patch User) (User, error) {
+func (s *MemoryStore) UpdateUser(id string, patch User) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.users {
@@ -285,10 +274,6 @@ func (s *Store) UpdateUser(id string, patch User) (User, error) {
 		}
 		if patch.Department != "" {
 			u.Department = patch.Department
-		}
-		if patch.Groups != nil {
-			u.Groups = patch.Groups
-			s.ensureGroupsLocked(patch.Groups)
 		}
 		if patch.Roles != nil {
 			u.Roles = patch.Roles
@@ -307,7 +292,7 @@ func (s *Store) UpdateUser(id string, patch User) (User, error) {
 	return User{}, ErrNotFound
 }
 
-func (s *Store) DeleteUser(id string) error {
+func (s *MemoryStore) DeleteUser(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.users {
@@ -320,13 +305,12 @@ func (s *Store) DeleteUser(id string) error {
 }
 
 // UpsertUser syncs an identity from the SSO provider into the user directory on
-// login, recording groups and refreshing the last-login timestamp. Manual role
-// assignments are preserved unless the provider supplies roles.
-func (s *Store) UpsertUser(u User) User {
+// login, refreshing the last-login timestamp. Manual role assignments are
+// preserved unless the provider supplies roles.
+func (s *MemoryStore) UpsertUser(u User) User {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
-	s.ensureGroupsLocked(u.Groups)
 	for i := range s.users {
 		existing := &s.users[i]
 		if existing.ID == u.ID || (u.Username != "" && strings.EqualFold(existing.Username, u.Username)) {
@@ -341,9 +325,6 @@ func (s *Store) UpsertUser(u User) User {
 			}
 			if u.Avatar != "" {
 				existing.Avatar = u.Avatar
-			}
-			if len(u.Groups) > 0 {
-				existing.Groups = u.Groups
 			}
 			if len(u.Roles) > 0 {
 				existing.Roles = u.Roles
@@ -369,79 +350,8 @@ func (s *Store) UpsertUser(u User) User {
 	return u
 }
 
-func (s *Store) Groups() []Group {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := append([]Group{}, s.groups...) // non-nil
-	sort.Slice(out, func(i, j int) bool { return out[i].GroupKey < out[j].GroupKey })
-	return out
-}
-
-func (s *Store) CreateGroup(g Group) (Group, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if strings.TrimSpace(g.GroupKey) == "" {
-		return Group{}, ErrInvalid
-	}
-	for _, existing := range s.groups {
-		if strings.EqualFold(existing.GroupKey, g.GroupKey) {
-			return Group{}, ErrConflict
-		}
-	}
-	if g.ID == "" {
-		g.ID = s.nextIDLocked("g")
-	}
-	if g.Name == "" {
-		g.Name = g.GroupKey
-	}
-	if g.Source == "" {
-		g.Source = "manual"
-	}
-	now := time.Now().UTC()
-	g.CreatedAt = now
-	g.UpdatedAt = now
-	s.groups = append(s.groups, g)
-	return g, nil
-}
-
-// ensureGroupsLocked auto-registers any group keys referenced by a user so the
-// group directory stays consistent. Caller must hold the write lock.
-func (s *Store) ensureGroupsLocked(keys []string) {
-	for _, key := range keys {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		found := false
-		for _, g := range s.groups {
-			if strings.EqualFold(g.GroupKey, key) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			now := time.Now().UTC()
-			s.groups = append(s.groups, Group{ID: s.nextIDLocked("g"), GroupKey: key, Name: key, Source: "auto", CreatedAt: now, UpdatedAt: now})
-		}
-	}
-}
-
-// ensureTeamGroupLocked ensures a team's key exists as a group (for owner_group compat).
-func (s *Store) ensureTeamGroupLocked(key string) {
-	if strings.TrimSpace(key) == "" {
-		return
-	}
-	for _, g := range s.groups {
-		if strings.EqualFold(g.GroupKey, key) {
-			return
-		}
-	}
-	now := time.Now().UTC()
-	s.groups = append(s.groups, Group{ID: s.nextIDLocked("g"), GroupKey: key, Name: key, Source: "team", CreatedAt: now, UpdatedAt: now})
-}
-
 // Teams returns all teams sorted by key.
-func (s *Store) Teams() []Team {
+func (s *MemoryStore) Teams() []Team {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := append([]Team{}, s.teams...) // always non-nil, even if s.teams was nil
@@ -450,7 +360,7 @@ func (s *Store) Teams() []Team {
 }
 
 // Team returns a team by key (preferred) or ID.
-func (s *Store) Team(key string) (Team, error) {
+func (s *MemoryStore) Team(key string) (Team, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	k := strings.ToLower(strings.TrimSpace(key))
@@ -464,7 +374,7 @@ func (s *Store) Team(key string) (Team, error) {
 
 // CreateTeam creates a maintenance team. Key is required and unique. Leader is
 // auto-added to members if provided and not present.
-func (s *Store) CreateTeam(t Team) (Team, error) {
+func (s *MemoryStore) CreateTeam(t Team) (Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(t.Key) == "" {
@@ -493,12 +403,11 @@ func (s *Store) CreateTeam(t Team) (Team, error) {
 	t.CreatedAt = now
 	t.UpdatedAt = now
 	s.teams = append(s.teams, t)
-	s.ensureTeamGroupLocked(t.Key)
 	return t, nil
 }
 
 // UpdateTeam patches name/desc/leader/members.
-func (s *Store) UpdateTeam(key string, patch Team) (Team, error) {
+func (s *MemoryStore) UpdateTeam(key string, patch Team) (Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.teams {
@@ -525,14 +434,13 @@ func (s *Store) UpdateTeam(key string, patch Team) (Team, error) {
 			}
 		}
 		tm.UpdatedAt = time.Now().UTC()
-		s.ensureTeamGroupLocked(tm.Key)
 		return *tm, nil
 	}
 	return Team{}, ErrNotFound
 }
 
 // DeleteTeam removes a team (no cascade; modules/categories keep the key as string ref).
-func (s *Store) DeleteTeam(key string) error {
+func (s *MemoryStore) DeleteTeam(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.teams {
@@ -545,7 +453,7 @@ func (s *Store) DeleteTeam(key string) error {
 }
 
 // AddTeamMember adds a username (or id) to the team's members. Idempotent.
-func (s *Store) AddTeamMember(key, member string) (Team, error) {
+func (s *MemoryStore) AddTeamMember(key, member string) (Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	member = strings.TrimSpace(member)
@@ -567,7 +475,7 @@ func (s *Store) AddTeamMember(key, member string) (Team, error) {
 }
 
 // RemoveTeamMember removes a member. Leader is not auto-removed (call SetTeamLeader first if needed).
-func (s *Store) RemoveTeamMember(key, member string) (Team, error) {
+func (s *MemoryStore) RemoveTeamMember(key, member string) (Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	member = strings.TrimSpace(member)
@@ -590,7 +498,7 @@ func (s *Store) RemoveTeamMember(key, member string) (Team, error) {
 }
 
 // SetTeamLeader sets leader and ensures they are in members.
-func (s *Store) SetTeamLeader(key, leader string) (Team, error) {
+func (s *MemoryStore) SetTeamLeader(key, leader string) (Team, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	leader = strings.TrimSpace(leader)
@@ -615,7 +523,7 @@ func (s *Store) SetTeamLeader(key, leader string) (Team, error) {
 }
 
 // TeamMembers returns the member list for a team (for permission/display).
-func (s *Store) TeamMembers(key string) []string {
+func (s *MemoryStore) TeamMembers(key string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, t := range s.teams {
@@ -628,7 +536,7 @@ func (s *Store) TeamMembers(key string) []string {
 
 // TeamKeysForUser returns the keys of every team the user belongs to, counting
 // both the designated leader and listed members.
-func (s *Store) TeamKeysForUser(u User) []string {
+func (s *MemoryStore) TeamKeysForUser(u User) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var keys []string
@@ -645,7 +553,7 @@ func (s *Store) TeamKeysForUser(u User) []string {
 }
 
 // AllCategories returns a flat copy of every category (with ParentID links).
-func (s *Store) AllCategories() []Category {
+func (s *MemoryStore) AllCategories() []Category {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]Category, len(s.categories))
@@ -654,7 +562,7 @@ func (s *Store) AllCategories() []Category {
 }
 
 // CategoryName returns the display name for a category id (or the id if unknown).
-func (s *Store) CategoryName(id string) string {
+func (s *MemoryStore) CategoryName(id string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, c := range s.categories {
@@ -665,7 +573,7 @@ func (s *Store) CategoryName(id string) string {
 	return id
 }
 
-func (s *Store) categoryPathLocked(ids []string) string {
+func (s *MemoryStore) categoryPathLocked(ids []string) string {
 	if len(ids) == 0 {
 		return ""
 	}
@@ -684,7 +592,7 @@ func (s *Store) categoryPathLocked(ids []string) string {
 }
 
 // EntryModuleKey returns the module key that owns an entry, for permission checks.
-func (s *Store) EntryModuleKey(entryID string) (string, bool) {
+func (s *MemoryStore) EntryModuleKey(entryID string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, e := range s.entries {
@@ -695,7 +603,7 @@ func (s *Store) EntryModuleKey(entryID string) (string, bool) {
 	return "", false
 }
 
-func (s *Store) CategoryTree() []Category {
+func (s *MemoryStore) CategoryTree() []Category {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	byParent := map[string][]Category{}
@@ -720,7 +628,7 @@ func (s *Store) CategoryTree() []Category {
 	return res
 }
 
-func (s *Store) Modules(categoryID, keyword string) []Module {
+func (s *MemoryStore) Modules(categoryID, keyword string) []Module {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]Module, 0)
@@ -740,7 +648,7 @@ func (s *Store) Modules(categoryID, keyword string) []Module {
 	return out
 }
 
-func (s *Store) Module(moduleKey string) (Module, error) {
+func (s *MemoryStore) Module(moduleKey string) (Module, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, m := range s.modules {
@@ -753,13 +661,13 @@ func (s *Store) Module(moduleKey string) (Module, error) {
 	return Module{}, ErrNotFound
 }
 
-func (s *Store) Versions(moduleKey string) []Version {
+func (s *MemoryStore) Versions(moduleKey string) []Version {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.versionsForLocked(moduleKey)
 }
 
-func (s *Store) Entries(moduleKey, docsVersion string) []Entry {
+func (s *MemoryStore) Entries(moduleKey, docsVersion string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []Entry
@@ -772,7 +680,7 @@ func (s *Store) Entries(moduleKey, docsVersion string) []Entry {
 	return out
 }
 
-func (s *Store) Releases() []Release {
+func (s *MemoryStore) Releases() []Release {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := append([]Release(nil), s.releases...)
@@ -780,7 +688,7 @@ func (s *Store) Releases() []Release {
 	return out
 }
 
-func (s *Store) Page(docID string) (Page, error) {
+func (s *MemoryStore) Page(docID string) (Page, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.pages {
@@ -791,7 +699,7 @@ func (s *Store) Page(docID string) (Page, error) {
 	return Page{}, ErrNotFound
 }
 
-func (s *Store) PageByRoute(moduleKey, docsVersion, entryKey string) (Page, error) {
+func (s *MemoryStore) PageByRoute(moduleKey, docsVersion, entryKey string) (Page, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.pages {
@@ -827,19 +735,19 @@ func (s *Store) PageByRoute(moduleKey, docsVersion, entryKey string) (Page, erro
 	return Page{}, ErrNotFound
 }
 
-func (s *Store) Nav(moduleKey, docsVersion string) []NavItem {
+func (s *MemoryStore) Nav(moduleKey, docsVersion string) []NavItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return cloneNav(s.navs[routeKey(moduleKey, docsVersion, "")])
 }
 
-func (s *Store) PageHTML(moduleKey, docsVersion, entryKey string) string {
+func (s *MemoryStore) PageHTML(moduleKey, docsVersion, entryKey string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.html[routeKey(moduleKey, docsVersion, entryKey)]
 }
 
-func (s *Store) SiteFile(moduleKey, docsVersion, entryKey, name string) (SiteFile, error) {
+func (s *MemoryStore) SiteFile(moduleKey, docsVersion, entryKey, name string) (SiteFile, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if name == "" {
@@ -853,14 +761,14 @@ func (s *Store) SiteFile(moduleKey, docsVersion, entryKey, name string) (SiteFil
 	return f, nil
 }
 
-func (s *Store) Pages() []Page {
+func (s *MemoryStore) Pages() []Page {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]Page(nil), s.pages...)
 }
 
 // Embedding returns the cached embedding vector for a document, if present.
-func (s *Store) Embedding(docID string) ([]float32, bool) {
+func (s *MemoryStore) Embedding(docID string) ([]float32, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	v, ok := s.embeddings[docID]
@@ -871,7 +779,7 @@ func (s *Store) Embedding(docID string) ([]float32, bool) {
 }
 
 // SetEmbedding stores (or replaces) the embedding vector for a document.
-func (s *Store) SetEmbedding(docID string, vec []float32) {
+func (s *MemoryStore) SetEmbedding(docID string, vec []float32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.embeddings == nil {
@@ -881,14 +789,14 @@ func (s *Store) SetEmbedding(docID string, vec []float32) {
 }
 
 // EmbeddingCount reports how many documents currently have cached embeddings.
-func (s *Store) EmbeddingCount() int {
+func (s *MemoryStore) EmbeddingCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.embeddings)
 }
 
 // ClearEmbeddings drops the entire embedding cache (used before a full reindex).
-func (s *Store) ClearEmbeddings() {
+func (s *MemoryStore) ClearEmbeddings() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.embeddings = map[string][]float32{}
@@ -897,7 +805,7 @@ func (s *Store) ClearEmbeddings() {
 // ClearSiteAssets drops cached rendered HTML and static site files from memory.
 // Deployed environments can serve these assets from MinIO instead, which keeps
 // the backend RSS from growing with image-heavy or large documentation sites.
-func (s *Store) ClearSiteAssets() {
+func (s *MemoryStore) ClearSiteAssets() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.html = map[string]string{}
@@ -906,7 +814,7 @@ func (s *Store) ClearSiteAssets() {
 
 // SiteObjects returns the currently cached site assets keyed by their MinIO
 // object path. It is used once at startup to migrate legacy snapshot data.
-func (s *Store) SiteObjects() map[string]SiteFile {
+func (s *MemoryStore) SiteObjects() map[string]SiteFile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string]SiteFile, len(s.html)+len(s.siteFiles))
