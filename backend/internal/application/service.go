@@ -28,6 +28,18 @@ type Service struct {
 }
 
 func New(st *store.Store, vectors search.VectorStore, repository Repository) *Service {
+	return newService(st, vectors, repository, auth.NewService(auth.FromEnv()))
+}
+
+func NewConfigured(st *store.Store, vectors search.VectorStore, repository Repository) (*Service, error) {
+	authService, err := auth.NewConfiguredService(auth.FromEnv())
+	if err != nil {
+		return nil, err
+	}
+	return newService(st, vectors, repository, authService), nil
+}
+
+func newService(st *store.Store, vectors search.VectorStore, repository Repository, authService *auth.Service) *Service {
 	provider := embedding.SettingsProvider{Load: func() embedding.Settings {
 		ai := st.Settings().AI
 		return embedding.Settings{
@@ -39,7 +51,7 @@ func New(st *store.Store, vectors search.VectorStore, repository Repository) *Se
 	}}
 	return &Service{
 		store:      st,
-		auth:       auth.NewService(auth.FromEnv()),
+		auth:       authService,
 		repository: repository,
 		search: search.Service{
 			Store:          st,
@@ -75,6 +87,7 @@ func (s *Service) Save(ctx context.Context) error {
 }
 
 func (s *Service) Close() {
+	_ = s.auth.Close()
 	if s.repository != nil {
 		s.repository.Close()
 	}

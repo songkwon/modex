@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -54,7 +55,10 @@ type UserMapping struct {
 //   - CONFIG_FILE environment variable (highest priority for location)
 //   - Then a short list of conventional locations (./config.yaml, ./configs/config.yaml, /etc/modex/config.yaml)
 func Load() (FileConfig, error) {
-	path := findConfigPath()
+	path, err := findConfigPath()
+	if err != nil {
+		return FileConfig{}, err
+	}
 	if path == "" {
 		return FileConfig{}, nil // no config file configured or present — this is fine
 	}
@@ -102,11 +106,17 @@ func LoadUserMapping() UserMapping {
 
 // findConfigPath returns the first existing config file path according to the lookup rules.
 // It does not return an error if nothing is found (the caller decides what to do).
-func findConfigPath() string {
+func findConfigPath() (string, error) {
 	candidates := []string{}
 
 	if explicit := os.Getenv("CONFIG_FILE"); explicit != "" {
-		candidates = append(candidates, explicit)
+		if _, err := os.Stat(explicit); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return "", fmt.Errorf("%w: %s", ErrConfigNotFound, explicit)
+			}
+			return "", err
+		}
+		return explicit, nil
 	}
 
 	// Conventional locations.
@@ -134,10 +144,10 @@ func findConfigPath() string {
 			continue
 		}
 		if _, err := os.Stat(p); err == nil {
-			return p
+			return p, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // MustLoad is like Load but logs and returns an empty config on error (never panics the server).

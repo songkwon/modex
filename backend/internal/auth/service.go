@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -14,21 +16,38 @@ import (
 	"time"
 
 	"modex/backend/internal/store"
+
+	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 type Service struct {
-	cfg      Config
-	client   *http.Client
-	mu       sync.RWMutex
-	sessions map[string]store.User
+	cfg        Config
+	client     *http.Client
+	sessions   sessionStore
+	providerMu sync.Mutex
+	verifier   *oidc.IDTokenVerifier
 }
 
 func NewService(cfg Config) *Service {
-	return &Service{
-		cfg:      cfg,
-		client:   &http.Client{Timeout: 20 * time.Second},
-		sessions: map[string]store.User{},
+	return newService(cfg, newMemorySessionStore())
+}
+
+func NewConfiguredService(cfg Config) (*Service, error) {
+	if cfg.RedisURL == "" {
+		return NewService(cfg), nil
 	}
+	sessions, err := newRedisSessionStore(cfg.RedisURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect Redis session store: %w", err)
+	}
+	return newService(cfg, sessions), nil
+}
+
+func newService(cfg Config, sessions sessionStore) *Service {
+	if cfg.SessionTTL <= 0 {
+		cfg.SessionTTL = 8 * time.Hour
+	}
+	return &Service{cfg: cfg, client: &http.Client{Timeout: 20 * time.Second}, sessions: sessions}
 }
 
 func (s *Service) Config() Config {
@@ -78,6 +97,18 @@ func (s *Service) BeginLogin(w http.ResponseWriter) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	nonce, err := randomToken(32)
+	if err != nil {
+		return "", err
+	}
+	verifier, err := randomToken(48)
+	if err != nil {
+		return "", err
+	}
+	transaction := loginTransaction{Nonce: nonce, CodeVerifier: verifier}
+	if err := s.sessions.Set(context.Background(), oauthStateKey(state), transaction, 5*time.Minute); err != nil {
+		return "", fmt.Errorf("store OAuth2 transaction: %w", err)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.cfg.StateCookie,
 		Value:    state,
@@ -88,7 +119,13 @@ func (s *Service) BeginLogin(w http.ResponseWriter) (string, error) {
 		SameSite: sameSiteMode(s.cfg.CookieSameSite),
 		Secure:   s.cfg.CookieSecure,
 	})
-	return s.cfg.LoginURL(state), nil
+	challenge := sha256.Sum256([]byte(verifier))
+	return s.cfg.LoginURL(
+		state,
+		"nonce", nonce,
+		"code_challenge", base64.RawURLEncoding.EncodeToString(challenge[:]),
+		"code_challenge_method", "S256",
+	), nil
 }
 
 func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.ResponseWriter) (store.User, error) {
@@ -105,14 +142,23 @@ func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.Res
 		return store.User{}, errors.New("missing OAuth2 code or state")
 	}
 	stateCookie, err := r.Cookie(s.cfg.StateCookie)
-	if err != nil || stateCookie.Value != state {
+	if err != nil || subtle.ConstantTimeCompare([]byte(stateCookie.Value), []byte(state)) != 1 {
 		return store.User{}, errors.New("invalid OAuth2 state")
 	}
-	token, err := s.exchangeCode(ctx, code)
+	var transaction loginTransaction
+	if err := s.sessions.Get(ctx, oauthStateKey(state), &transaction); err != nil {
+		return store.User{}, errors.New("expired or invalid OAuth2 transaction")
+	}
+	_ = s.sessions.Delete(ctx, oauthStateKey(state))
+	token, err := s.exchangeCode(ctx, code, transaction.CodeVerifier)
 	if err != nil {
 		return store.User{}, err
 	}
-	user, err := s.fetchUserInfo(ctx, token.AccessToken, token.IDToken)
+	claims, err := s.verifyIDToken(ctx, token.IDToken, token.AccessToken, transaction.Nonce)
+	if err != nil {
+		return store.User{}, err
+	}
+	user, err := s.fetchUserInfo(ctx, token.AccessToken, claims)
 	if err != nil {
 		return store.User{}, err
 	}
@@ -132,15 +178,15 @@ func (s *Service) CreateSession(w http.ResponseWriter, user store.User) error {
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	s.sessions[sessionID] = user
-	s.mu.Unlock()
+	if err := s.sessions.Set(context.Background(), userSessionKey(sessionID), user, s.cfg.SessionTTL); err != nil {
+		return fmt.Errorf("store user session: %w", err)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.cfg.SessionCookie,
 		Value:    sessionID,
 		Domain:   s.cfg.CookieDomain,
 		Path:     "/",
-		MaxAge:   int((8 * time.Hour).Seconds()),
+		MaxAge:   int(s.cfg.SessionTTL.Seconds()),
 		HttpOnly: true,
 		SameSite: sameSiteMode(s.cfg.CookieSameSite),
 		Secure:   s.cfg.CookieSecure,
@@ -153,27 +199,27 @@ func (s *Service) CurrentUser(r *http.Request) (store.User, bool) {
 	if err != nil || cookie.Value == "" {
 		return store.User{}, false
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	user, ok := s.sessions[cookie.Value]
-	return user, ok
+	var user store.User
+	if err := s.sessions.Get(r.Context(), userSessionKey(cookie.Value), &user); err != nil {
+		return store.User{}, false
+	}
+	return user, true
 }
 
 func (s *Service) Logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(s.cfg.SessionCookie); err == nil {
-		s.mu.Lock()
-		delete(s.sessions, cookie.Value)
-		s.mu.Unlock()
+		_ = s.sessions.Delete(r.Context(), userSessionKey(cookie.Value))
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.cfg.SessionCookie, Value: "", Domain: s.cfg.CookieDomain, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: sameSiteMode(s.cfg.CookieSameSite), Secure: s.cfg.CookieSecure})
 }
 
-func (s *Service) exchangeCode(ctx context.Context, code string) (tokenResponse, error) {
+func (s *Service) exchangeCode(ctx context.Context, code, codeVerifier string) (tokenResponse, error) {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", s.cfg.ClientID)
 	form.Set("code", code)
 	form.Set("redirect_uri", s.cfg.RedirectURL)
+	form.Set("code_verifier", codeVerifier)
 	if s.cfg.ClientSecret != "" {
 		form.Set("client_secret", s.cfg.ClientSecret)
 	}
@@ -200,16 +246,7 @@ func (s *Service) exchangeCode(ctx context.Context, code string) (tokenResponse,
 	return token, nil
 }
 
-func (s *Service) fetchUserInfo(ctx context.Context, accessToken, idToken string) (store.User, error) {
-	// Collect claims from both ID token (often has custom mappers like wxPhotoURL) and userinfo endpoint.
-	claims := map[string]any{}
-
-	if idToken != "" {
-		if idClaims, err := parseJWTClaims(idToken); err == nil {
-			mergeInto(claims, idClaims)
-		}
-	}
-
+func (s *Service) fetchUserInfo(ctx context.Context, accessToken string, claims map[string]any) (store.User, error) {
 	if s.cfg.UserInfoURL != "" && accessToken != "" {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.UserInfoURL, nil)
 		if err != nil {
@@ -239,7 +276,7 @@ func (s *Service) fetchUserInfo(ctx context.Context, accessToken, idToken string
 	// Stable internal ID: prefer the configured unique claim value; fall back to sub.
 	userID := uniqueID
 	if userID == "" {
-		userID = getString(claims, "sub")
+		return store.User{}, errors.New("OIDC claims do not contain a stable user identifier")
 	}
 
 	// Username for login/display fallback.
@@ -276,6 +313,58 @@ func (s *Service) fetchUserInfo(ctx context.Context, accessToken, idToken string
 	}, nil
 }
 
+type loginTransaction struct {
+	Nonce        string `json:"nonce"`
+	CodeVerifier string `json:"code_verifier"`
+}
+
+func userSessionKey(id string) string   { return "modex:session:" + id }
+func oauthStateKey(state string) string { return "modex:oauth-state:" + state }
+
+func (s *Service) verifyIDToken(ctx context.Context, rawIDToken, accessToken, nonce string) (map[string]any, error) {
+	if rawIDToken == "" {
+		return nil, errors.New("OIDC token endpoint returned empty id_token")
+	}
+	verifier, err := s.idTokenVerifier(ctx)
+	if err != nil {
+		return nil, err
+	}
+	idToken, err := verifier.Verify(ctx, rawIDToken)
+	if err != nil {
+		return nil, fmt.Errorf("verify OIDC ID token: %w", err)
+	}
+	if nonce == "" || subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(nonce)) != 1 {
+		return nil, errors.New("invalid OIDC nonce")
+	}
+	if idToken.AccessTokenHash != "" {
+		if err := idToken.VerifyAccessToken(accessToken); err != nil {
+			return nil, fmt.Errorf("verify OIDC access token hash: %w", err)
+		}
+	}
+	claims := map[string]any{}
+	if err := idToken.Claims(&claims); err != nil {
+		return nil, fmt.Errorf("decode verified OIDC claims: %w", err)
+	}
+	return claims, nil
+}
+
+func (s *Service) idTokenVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	s.providerMu.Lock()
+	defer s.providerMu.Unlock()
+	if s.verifier != nil {
+		return s.verifier, nil
+	}
+	provider, err := oidc.NewProvider(ctx, s.cfg.IssuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("discover OIDC provider: %w", err)
+	}
+	s.verifier = provider.Verifier(&oidc.Config{ClientID: s.cfg.ClientID})
+	return s.verifier, nil
+}
+
+func (s *Service) Healthy(ctx context.Context) error { return s.sessions.Ping(ctx) }
+func (s *Service) Close() error                      { return s.sessions.Close() }
+
 type tokenResponse struct {
 	AccessToken string `json:"access_token"`
 	IDToken     string `json:"id_token"`
@@ -299,37 +388,6 @@ func first(values ...string) string {
 		}
 	}
 	return ""
-}
-
-// parseJWTClaims extracts the payload claims from a JWT without signature validation.
-// This is safe here because the token was obtained directly from the token endpoint
-// after a successful authorization code exchange.
-func parseJWTClaims(token string) (map[string]any, error) {
-	if token == "" {
-		return nil, nil
-	}
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("invalid jwt format")
-	}
-	payload := parts[1]
-	// Pad base64 if needed
-	if pad := len(payload) % 4; pad != 0 {
-		payload += strings.Repeat("=", 4-pad)
-	}
-	b, err := base64.URLEncoding.DecodeString(payload)
-	if err != nil {
-		// try raw encoding (no padding)
-		b, err = base64.RawURLEncoding.DecodeString(parts[1])
-		if err != nil {
-			return nil, err
-		}
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
-	return m, nil
 }
 
 // getString safely extracts a string value from claims (handles string, number, single-element slice).
