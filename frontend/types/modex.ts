@@ -74,7 +74,6 @@ export type Team = {
 };
 
 export type AuthConfig = {
-  auth_mode: "mock" | "oidc" | string;
   oidc_login_enabled: boolean;
   login_url: string;
   frontend_base_url: string;

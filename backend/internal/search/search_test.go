@@ -94,7 +94,7 @@ func (f *fakeVectorStore) Count(context.Context) (int, error) { return len(f.vec
 func newService() Service {
 	return Service{
 		Store:          store.NewSeededTestStore(),
-		Embedder:       embedding.MockProvider{Dim: 256},
+		Embedder:       embedding.FallbackProvider{Dim: 256},
 		KeywordWeight:  0.6,
 		SemanticWeight: 0.4,
 	}
@@ -196,7 +196,7 @@ func TestDefaultVersionsOnlyFiltersDuplicateOldVersions(t *testing.T) {
 	ingest("v1.0.0", "线程池配置 max_workers legacy")
 	ingest("v2.0.0", "线程池配置 max_workers current")
 
-	s := Service{Store: st, Embedder: embedding.MockProvider{Dim: 256}}
+	s := Service{Store: st, Embedder: embedding.FallbackProvider{Dim: 256}}
 	resp, err := s.Search(context.Background(), Request{Query: "max_workers", Mode: ModeKeyword, PageSize: 10, DefaultVersionsOnly: true})
 	if err != nil {
 		t.Fatalf("Search default versions: %v", err)

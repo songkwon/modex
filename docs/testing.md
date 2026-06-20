@@ -44,9 +44,9 @@ npm run e2e
 
 Current smoke coverage:
 
-- home page renders from mocked category/module data
-- locale selector switches `zh-CN` to `en-US`
-- mock login exposes the admin console entry
+- home page renders from mocked category/module data, with the login entry when logged out
+- an authenticated user can switch the locale from `zh-CN` to `en-US`
+- an authenticated admin sees the admin console entry
 
 Install browsers on a new CI runner or developer machine if Playwright asks for
 them:

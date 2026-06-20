@@ -145,12 +145,12 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	if req.Mode != ModeKeyword && strings.TrimSpace(req.Query) != "" {
 		queryVec, _ = s.Embedder.EmbedText(ctx, req.Query)
 	}
-	// The mock provider returns pseudo-random vectors (no real semantics). In
+	// The fallback provider returns hash-based vectors (no real semantics). In
 	// hybrid mode that noise floats weak docs up and buries strong keyword hits
 	// (e.g. an "EventBus" page for the query "EventBus怎么用"), so when embeddings
-	// are mock we score hybrid by keyword only. Explicit semantic mode still uses
-	// the vectors — that's the caller asking for vector ranking specifically.
-	mockEmbed := s.Embedder.Name() == "mock"
+	// come from the fallback we score hybrid by keyword only. Explicit semantic
+	// mode still uses the vectors — the caller asked for vector ranking.
+	fallbackEmbed := s.Embedder.Name() == "fallback"
 	vectors := map[string][]float32{}
 	semanticScores := map[string]float64{}
 	if len(queryVec) > 0 {
@@ -193,7 +193,7 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		case ModeSemantic:
 			final = sScore
 		default:
-			if mockEmbed {
+			if fallbackEmbed {
 				final = kScore
 			} else {
 				final = kScore*kw + sScore*sw

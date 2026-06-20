@@ -10,7 +10,6 @@ import (
 )
 
 type Config struct {
-	Mode             string
 	AppBaseURL       string
 	FrontendBaseURL  string
 	IssuerURL        string
@@ -47,12 +46,7 @@ func FromEnv() Config {
 		issuer = keycloakBase + "/realms/" + realm
 	}
 	appBase := strings.TrimRight(env("APP_BASE_URL", "http://localhost:8671"), "/")
-	mode := env("AUTH_MODE", "mock")
-	if mode == "keycloak" {
-		mode = "oidc"
-	}
 	cfg := Config{
-		Mode:             mode,
 		AppBaseURL:       appBase,
 		FrontendBaseURL:  strings.TrimRight(env("FRONTEND_BASE_URL", "http://localhost:3456"), "/"),
 		IssuerURL:        issuer,
@@ -100,7 +94,7 @@ func FromEnv() Config {
 }
 
 func (c Config) LoginReady() bool {
-	return c.Mode == "oidc" && c.IssuerURL != "" && c.AuthURL != "" && c.TokenURL != "" && c.ClientID != ""
+	return c.IssuerURL != "" && c.AuthURL != "" && c.TokenURL != "" && c.ClientID != ""
 }
 
 func (c Config) LoginURL(state string, options ...string) string {

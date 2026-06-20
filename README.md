@@ -138,7 +138,7 @@ npx skills add https://modex.example.com
 
 生产部署建议：
 
-- 使用 `AUTH_MODE=oidc`，mock 登录仅用于开发。
+- 登录统一走 OIDC，需配置好 `KEYCLOAK_*` / `OIDC_*` 环境变量。
 - 设置 `COOKIE_SECURE=true`、生产 `COOKIE_DOMAIN` 和精确 CORS origins。
 - 替换 PostgreSQL、MinIO、Meilisearch、OIDC、PostHog、cookie 等所有 secret。
 - 配置真实 Chat/Embedding/Rerank provider 后执行 embedding reindex。
@@ -310,7 +310,7 @@ Common configuration files:
 
 Production recommendations:
 
-- Use `AUTH_MODE=oidc`; keep mock login for development only.
+- Login is OIDC-only; configure the `KEYCLOAK_*` / `OIDC_*` environment variables.
 - Set `COOKIE_SECURE=true`, a production `COOKIE_DOMAIN`, and exact CORS origins.
 - Replace all PostgreSQL, MinIO, Meilisearch, OIDC, PostHog, and cookie secrets.
 - Configure real chat, embedding, and rerank providers, then run embedding reindex.

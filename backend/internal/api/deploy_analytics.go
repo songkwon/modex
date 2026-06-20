@@ -482,5 +482,5 @@ func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // currentUser returns the authenticated user from the session cookie. Login is
-// a real, cookie-backed action in both mock and OIDC modes, so there is no
-// silent impersonation; anonymous callers simply get ok == false.
+// a real, cookie-backed OIDC action, so there is no silent impersonation;
+// anonymous callers simply get ok == false.

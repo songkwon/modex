@@ -30,12 +30,12 @@ func TestSettingsProviderUsesCurrentAdminSettings(t *testing.T) {
 
 	cfg := Settings{Dim: 3}
 	provider := SettingsProvider{Load: func() Settings { return cfg }}
-	if provider.Name() != "mock" {
-		t.Fatalf("provider name = %q, want mock", provider.Name())
+	if provider.Name() != "fallback" {
+		t.Fatalf("provider name = %q, want fallback", provider.Name())
 	}
-	mockVector, err := provider.EmbedText(context.Background(), "hello")
-	if err != nil || len(mockVector) != 3 {
-		t.Fatalf("mock vector len = %d, err = %v", len(mockVector), err)
+	fallbackVector, err := provider.EmbedText(context.Background(), "hello")
+	if err != nil || len(fallbackVector) != 3 {
+		t.Fatalf("fallback vector len = %d, err = %v", len(fallbackVector), err)
 	}
 
 	cfg = Settings{BaseURL: server.URL + "/v1", Model: "embed-v2", APIKey: "secret"}
