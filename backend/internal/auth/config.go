@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"modex/backend/internal/config"
 )
@@ -29,6 +30,8 @@ type Config struct {
 	AutoLogin        bool
 	CORSAllowOrigins []string
 	SuperAdmins      []string
+	RedisURL         string
+	SessionTTL       time.Duration
 
 	// UserMapping controls which OIDC claims are used for core user identity fields.
 	// Values are resolved from an optional config file + environment variable overrides.
@@ -68,6 +71,8 @@ func FromEnv() Config {
 		AutoLogin:        env("AUTO_LOGIN", "false") == "true",
 		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3456")),
 		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
+		RedisURL:         os.Getenv("REDIS_URL"),
+		SessionTTL:       envDuration("SESSION_TTL", 8*time.Hour),
 
 		// UserMapping comes from a combination of (optional) config file + env overrides.
 		// See internal/config for precedence rules and why some settings live in files
@@ -93,10 +98,10 @@ func FromEnv() Config {
 }
 
 func (c Config) LoginReady() bool {
-	return c.Mode == "oidc" && c.AuthURL != "" && c.TokenURL != "" && c.UserInfoURL != "" && c.ClientID != ""
+	return c.Mode == "oidc" && c.IssuerURL != "" && c.AuthURL != "" && c.TokenURL != "" && c.ClientID != ""
 }
 
-func (c Config) LoginURL(state string) string {
+func (c Config) LoginURL(state string, options ...string) string {
 	u, _ := url.Parse(c.AuthURL)
 	q := u.Query()
 	q.Set("client_id", c.ClientID)
@@ -104,8 +109,20 @@ func (c Config) LoginURL(state string) string {
 	q.Set("response_type", "code")
 	q.Set("scope", strings.Join(c.Scopes, " "))
 	q.Set("state", state)
+	for i := 0; i+1 < len(options); i += 2 {
+		q.Set(options[i], options[i+1])
+	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return fallback
 }
 
 func env(key, fallback string) string {

@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"modex/backend/internal/api"
 	"modex/backend/internal/application"
+	"modex/backend/internal/config"
 	"modex/backend/internal/repository"
 	"modex/backend/internal/store"
 	"modex/backend/internal/vectorstore"
@@ -24,6 +26,9 @@ func analyticsSource() string {
 }
 
 func main() {
+	if _, err := config.Load(); err != nil {
+		log.Fatalf("load application config: %v", err)
+	}
 	addr := ":" + env("PORT", "8671")
 
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -40,7 +45,10 @@ func main() {
 		defer vectors.Close()
 		log.Printf("embedding store: PostgreSQL/pgvector")
 	}
-	appSvc := application.New(st, vectors, repository)
+	appSvc, err := application.NewConfigured(st, vectors, repository)
+	if err != nil {
+		log.Fatalf("initialize application: %v", err)
+	}
 	defer appSvc.Close()
 	srv := api.NewWithApplication(appSvc)
 	if appSvc.HasRepository() {
@@ -54,7 +62,15 @@ func main() {
 	log.Printf("analytics source: %s", analyticsSource())
 
 	handler := srv.Handler()
-	httpServer := &http.Server{Addr: addr, Handler: handler}
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: envDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		ReadTimeout:       envDuration("HTTP_READ_TIMEOUT", 30*time.Second),
+		WriteTimeout:      envDuration("HTTP_WRITE_TIMEOUT", 60*time.Second),
+		IdleTimeout:       envDuration("HTTP_IDLE_TIMEOUT", 2*time.Minute),
+		MaxHeaderBytes:    envInt("HTTP_MAX_HEADER_BYTES", 1<<20),
+	}
 
 	// Periodic + graceful-shutdown persistence when PostgreSQL is configured.
 	// The autosave goroutine gets its own stop channel (closed by main after the
@@ -157,4 +173,22 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return fallback
 }
