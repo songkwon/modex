@@ -162,7 +162,7 @@ export default function AdminConnectedAppsPage() {
     <AdminShell
       title="应用链接"
       kicker="Connected Apps"
-      description="注册外部应用，让它们通过 OAuth 授权访问 Modex API 与 MCP。Modex 保持通用开源能力，内部网关只是这里的一个普通应用。"
+      description="注册外部应用，让它们通过 OAuth 授权访问 Modex API 与 MCP。适合接入网关、自动化工具和其他业务系统。"
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 

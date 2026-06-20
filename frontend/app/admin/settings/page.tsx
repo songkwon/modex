@@ -162,7 +162,7 @@ export default function AdminSettingsPage() {
             multiple={false}
             placeholder="选择 API 格式…"
           />
-          <span className="field-hint">决定请求的端点与报文格式。大多数国产/开源服务用 <code className="code-chip">OpenAI Chat Completions</code>。</span>
+          <span className="field-hint">决定请求的端点与报文格式。大多数兼容服务用 <code className="code-chip">OpenAI Chat Completions</code>。</span>
         </div>
 
         <div className="field">
