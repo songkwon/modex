@@ -18,12 +18,15 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
   const [asking, setAsking] = useState(false);
   const [active, setActive] = useState(0);
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchSeq = useRef(0);
 
   const { moduleKey, categoryId } = scope;
 
   useEffect(() => {
     clearTimeout(debounce.current);
-    if (!query.trim()) {
+    const seq = ++searchSeq.current;
+    const q = query.trim();
+    if (!q) {
       setResults([]);
       setLoading(false);
       setActive(0);
@@ -36,15 +39,17 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
         const filters: Record<string, unknown> = {};
         if (moduleKey) filters.modules = [moduleKey];
         if (categoryId) filters.category_ids = [categoryId];
-        const body: Record<string, unknown> = { query, mode: "hybrid", page_size: 8 };
+        const body: Record<string, unknown> = { query: q, mode: "hybrid", page_size: 8 };
         if (Object.keys(filters).length) body.filters = filters;
         const res = await searchDocs(body);
+        if (seq !== searchSeq.current) return;
         setResults(res.results || []);
         setActive(0);
       } catch {
+        if (seq !== searchSeq.current) return;
         setResults([]);
       } finally {
-        setLoading(false);
+        if (seq === searchSeq.current) setLoading(false);
       }
     }, 200);
     return () => clearTimeout(debounce.current);
