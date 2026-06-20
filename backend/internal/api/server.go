@@ -28,11 +28,11 @@ type Server struct {
 	limiter     *requestLimiter
 }
 
-func New(st *store.Store) *Server {
+func New(st store.DataStore) *Server {
 	return NewWithVectorStore(st, nil)
 }
 
-func NewWithVectorStore(st *store.Store, vectors search.VectorStore) *Server {
+func NewWithVectorStore(st store.DataStore, vectors search.VectorStore) *Server {
 	return NewWithApplication(application.New(st, vectors, nil))
 }
 
@@ -48,8 +48,7 @@ func NewWithApplication(app *application.Service) *Server {
 		secure := strings.HasPrefix(strings.ToLower(endpoint), "https://")
 		// minio-go expects a bare host:port; strip any scheme/trailing slash so
 		// MINIO_ENDPOINT=http://minio:9000 doesn't fail init ("Endpoint url
-		// cannot have fully qualified paths"), which would silently drop us to
-		// the in-memory fallback and never create the bucket.
+		// cannot have fully qualified paths") and fall back to database assets.
 		host := endpoint
 		if i := strings.Index(host, "://"); i >= 0 {
 			host = host[i+3:]
@@ -78,13 +77,6 @@ func NewWithApplication(app *application.Service) *Server {
 		} else {
 			log.Printf("minio client init failed: %v", err)
 		}
-	}
-	if s.minioClient != nil && s.migrateSiteAssetsToMinIO() {
-		s.app.Store().ClearSiteAssets()
-	}
-	if app.Search().Vectors != nil {
-		// A legacy snapshot may still contain vectors from an older release.
-		app.Store().ClearEmbeddings()
 	}
 	return s
 }
@@ -150,7 +142,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/admin/entries/", s.handleAdminEntryByID)
 	mux.HandleFunc("/api/admin/users", s.handleAdminUsers)
 	mux.HandleFunc("/api/admin/users/", s.handleAdminUserByID)
-	mux.HandleFunc("/api/admin/groups", s.handleAdminGroups)
 	mux.HandleFunc("/api/admin/teams", s.handleAdminTeams)
 	mux.HandleFunc("/api/admin/teams/", s.handleAdminTeamRoutes)
 	mux.HandleFunc("/api/admin/", s.handleAdminAccepted)
@@ -177,10 +168,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":  status,
 		"service": "modex-api",
 		"dependencies": map[string]any{
-			"repository": map[string]any{"configured": s.app.HasRepository()},
+			"repository": map[string]any{"configured": true},
 			"sessions":   map[string]any{"status": ternary(sessionErr == nil, "ok", "unavailable"), "error": errorString(sessionErr)},
 			"object_storage": map[string]any{
-				"mode":   ternary(s.minioClient != nil, "minio", "memory"),
+				"mode":   ternary(s.minioClient != nil, "minio", "postgres"),
 				"bucket": s.minioBucket,
 			},
 			"search": map[string]any{
@@ -226,6 +217,18 @@ func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = decodeBody(r, &req)
 	user := s.app.Store().CurrentUser()
+	if user.Username == "" {
+		created, err := s.app.Store().CreateUser(store.User{
+			ID: "u-dev", Username: "dev", DisplayName: "Dev User",
+			Email: "dev@example.com", Source: "mock", Status: "active",
+			Roles: []string{"admin"}, SuperAdmin: true,
+		})
+		if err != nil {
+			writeResult(w, nil, err)
+			return
+		}
+		user = created
+	}
 	if req.Username != "" {
 		for _, u := range s.app.Store().Users("") {
 			if strings.EqualFold(u.Username, req.Username) {
@@ -239,7 +242,6 @@ func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "session_failed", err.Error())
 		return
 	}
-	s.persistStore("mock login")
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
@@ -262,9 +264,8 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, frontend+"/?login_error="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
-	// Sync the SSO identity (and its groups) into the user directory.
+	// Sync the SSO identity into the user directory.
 	s.app.Store().UpsertUser(user)
-	s.persistStore("oidc login")
 	http.Redirect(w, r, frontend, http.StatusFound)
 }
 
@@ -420,7 +421,7 @@ func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, modul
 			}
 		}
 	}
-	// fallback to in-memory
+	// Without MinIO, static assets are read from PostgreSQL.
 	f, err := s.app.Store().SiteFile(moduleKey, docsVersion, entryKey, name)
 	if err != nil {
 		writeResult(w, nil, err)
@@ -502,7 +503,6 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		filters, _ := json.Marshal(req.Filters)
 		user, _ := s.currentUser(r)
 		s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
-		s.persistStore("search log")
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -545,7 +545,6 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	answer, provider := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
 	user, _ := s.currentUser(r)
 	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
-	s.persistStore("ask log")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"query":    req.Query,
 		"answer":   answer,
@@ -982,10 +981,7 @@ func (s *Server) handleEmbeddingReindex(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
 		return
 	}
-	if user, ok := s.requireUser(w, r); !ok {
-		return
-	} else if !isAdmin(user) && !s.app.Auth().IsSuperAdmin(user) {
-		writeError(w, http.StatusForbidden, "forbidden", "admin required")
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
 		return
 	}
 	count, err := s.app.Search().Reindex(r.Context())
@@ -1011,14 +1007,11 @@ func (s *Server) handleSearchReindex(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
 		return
 	}
-	if user, ok := s.requireUser(w, r); !ok {
-		return
-	} else if !isAdmin(user) && !s.app.Auth().IsSuperAdmin(user) {
-		writeError(w, http.StatusForbidden, "forbidden", "admin required")
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
 		return
 	}
-	// The keyword index is computed from the in-memory page set, so reindexing
-	// primarily (re)builds the embedding cache used by semantic/hybrid search.
+	// Keyword scoring reads the current PostgreSQL page set; reindexing rebuilds
+	// the embedding data used by semantic and hybrid search.
 	count, err := s.app.Search().Reindex(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "search_reindex_failed", err.Error())

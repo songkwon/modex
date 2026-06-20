@@ -33,12 +33,19 @@ func NewService(cfg Config) *Service {
 }
 
 func NewConfiguredService(cfg Config) (*Service, error) {
-	if cfg.RedisURL == "" {
-		return NewService(cfg), nil
+	if cfg.RedisURL != "" {
+		sessions, err := newRedisSessionStore(cfg.RedisURL)
+		if err != nil {
+			return nil, fmt.Errorf("connect Redis session store: %w", err)
+		}
+		return newService(cfg, sessions), nil
 	}
-	sessions, err := newRedisSessionStore(cfg.RedisURL)
+	if cfg.DatabaseURL == "" {
+		return nil, errors.New("DATABASE_URL is required when REDIS_URL is not configured")
+	}
+	sessions, err := newPostgresSessionStore(cfg.DatabaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("connect Redis session store: %w", err)
+		return nil, fmt.Errorf("connect PostgreSQL session store: %w", err)
 	}
 	return newService(cfg, sessions), nil
 }
@@ -298,7 +305,6 @@ func (s *Service) fetchUserInfo(ctx context.Context, accessToken string, claims 
 
 	avatar := pickClaim(claims, m.AvatarClaim, "picture", "avatar", "photo", "wxPhotoURL")
 
-	groups := extractStringSlice(claims, "groups")
 	roles := extractStringSlice(claims, "roles")
 
 	return store.User{
@@ -308,7 +314,6 @@ func (s *Service) fetchUserInfo(ctx context.Context, accessToken string, claims 
 		Email:       email,
 		Department:  secondary,
 		Avatar:      avatar,
-		Groups:      groups,
 		Roles:       roles,
 	}, nil
 }
@@ -439,7 +444,7 @@ func mergeInto(dst, src map[string]any) {
 	}
 }
 
-// extractStringSlice returns a []string for common group/role claims that may be string or []string.
+// extractStringSlice returns a []string for claims (e.g. roles) that may be string or []string.
 func extractStringSlice(m map[string]any, key string) []string {
 	if m == nil {
 		return nil

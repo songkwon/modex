@@ -65,3 +65,9 @@ npx playwright install chromium
 
 Keep E2E tests focused on user journeys. Use backend Go tests for API edge cases
 and docsctl/MCP Go tests for protocol and CLI behavior.
+
+`store.MemoryStore` is an explicit unit-test fake only. Production assembly
+injects `PostgresRepository`. Set `TEST_DATABASE_URL` to run the repository
+integration test, which covers request-level CRUD, publishing, analytics,
+OAuth token rotation, static assets, and visibility across two repository
+instances.

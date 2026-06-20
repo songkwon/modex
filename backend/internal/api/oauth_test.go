@@ -16,7 +16,7 @@ func TestConnectedAppOAuthAuthorizationCodeFlow(t *testing.T) {
 	t.Setenv("SUPER_ADMIN_USERS", "dev")
 	t.Setenv("APP_BASE_URL", "http://modex.test")
 
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	handler := srv.Handler()
 
 	login := httptest.NewRecorder()

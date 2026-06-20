@@ -12,7 +12,7 @@ type Snippet struct {
 }
 
 // SnippetData returns the snippet library and the global variable map.
-func (s *Store) SnippetData() ([]Snippet, map[string]string) {
+func (s *MemoryStore) SnippetData() ([]Snippet, map[string]string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	snips := make([]Snippet, len(s.settings.Snippets))
@@ -27,7 +27,7 @@ func (s *Store) SnippetData() ([]Snippet, map[string]string) {
 // SaveSnippetData replaces the snippet library and variables. Snippets with a
 // blank key are dropped; keys are trimmed and de-duplicated (last wins). Blank
 // variable keys are dropped and keys/values trimmed.
-func (s *Store) SaveSnippetData(snips []Snippet, vars map[string]string) ([]Snippet, map[string]string) {
+func (s *MemoryStore) SaveSnippetData(snips []Snippet, vars map[string]string) ([]Snippet, map[string]string) {
 	cleanSnips := make([]Snippet, 0, len(snips))
 	seen := map[string]int{}
 	for _, sn := range snips {

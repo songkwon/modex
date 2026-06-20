@@ -13,7 +13,7 @@ func TestDocAnalyticsFallsBackToBuiltinWithoutPostHog(t *testing.T) {
 	t.Setenv("POSTHOG_PERSONAL_API_KEY", "")
 	t.Setenv("POSTHOG_PROJECT_ID", "")
 
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	viewReq := httptest.NewRequest(http.MethodPost, "/api/analytics/page-view", strings.NewReader(`{"doc_id":"DemoModule:latest:guide","session_id":"s1","read_id":"r1"}`))
 	viewReq.Header.Set("Content-Type", "application/json")
 	viewRR := httptest.NewRecorder()
@@ -43,7 +43,7 @@ func TestDocAnalyticsFallsBackToBuiltinWithoutPostHog(t *testing.T) {
 }
 
 func TestAdminPageAnalyticsRouteIsNotPublic(t *testing.T) {
-	srv := New(store.New())
+	srv := New(store.NewTestStore())
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/analytics/pages", nil)
 	rr := httptest.NewRecorder()
 

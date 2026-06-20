@@ -27,7 +27,7 @@ func TestRerankUsesAdminSettings(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st := store.New()
+	st := store.NewTestStore()
 	st.SaveAISettings(store.AISettings{
 		RerankBaseURL: server.URL + "/v1",
 		RerankModel:   "rerank-v1",
@@ -93,7 +93,7 @@ func (f *fakeVectorStore) Count(context.Context) (int, error) { return len(f.vec
 
 func newService() Service {
 	return Service{
-		Store:          store.NewSeeded(),
+		Store:          store.NewSeededTestStore(),
 		Embedder:       embedding.MockProvider{Dim: 256},
 		KeywordWeight:  0.6,
 		SemanticWeight: 0.4,
@@ -171,7 +171,7 @@ func TestKeywordModeSkipsEmbeddingButStillMatches(t *testing.T) {
 }
 
 func TestDefaultVersionsOnlyFiltersDuplicateOldVersions(t *testing.T) {
-	st := store.New()
+	st := store.NewTestStore()
 	ingest := func(version, body string) {
 		t.Helper()
 		_, err := st.IngestArtifact(store.DeployArtifact{

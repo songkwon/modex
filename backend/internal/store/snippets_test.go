@@ -3,7 +3,7 @@ package store
 import "testing"
 
 func TestSaveSnippetDataCleansAndDedupes(t *testing.T) {
-	st := New()
+	st := NewTestStore()
 	snips, vars := st.SaveSnippetData(
 		[]Snippet{
 			{Key: " intro ", Name: " 介绍 ", Content: "hello {{product}}"},

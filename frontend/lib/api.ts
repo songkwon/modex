@@ -1,4 +1,4 @@
-import type { AskResponse, AuthConfig, Category, Group, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
+import type { AskResponse, AuthConfig, Category, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
 
 const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
 const SERVER_API_BASE = process.env.INTERNAL_API_BASE_URL || PUBLIC_API_BASE;
@@ -89,7 +89,6 @@ export const getUsers = (keyword = "") => api<User[]>(`/api/admin/users${keyword
 export const createUser = (body: Partial<User>) => api<User>("/api/admin/users", { method: "POST", body: JSON.stringify(body) });
 export const updateUser = (id: string, body: Partial<User>) => api<User>(`/api/admin/users/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const deleteUser = (id: string) => api<{ status: string }>(`/api/admin/users/${id}`, { method: "DELETE" });
-export const getGroups = () => api<Group[]>("/api/admin/groups");
 
 export const getTeams = () => api<Team[]>("/api/admin/teams");
 export const createTeam = (body: Partial<Team>) => api<Team>("/api/admin/teams", { method: "POST", body: JSON.stringify(body) });

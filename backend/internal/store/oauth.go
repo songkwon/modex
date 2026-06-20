@@ -7,14 +7,14 @@ import (
 	"time"
 )
 
-func (s *Store) ConnectedApps() []ConnectedApp {
+func (s *MemoryStore) ConnectedApps() []ConnectedApp {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := append([]ConnectedApp{}, s.apps...)
 	return out
 }
 
-func (s *Store) ConnectedAppByClientID(clientID string) (ConnectedApp, error) {
+func (s *MemoryStore) ConnectedAppByClientID(clientID string) (ConnectedApp, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, app := range s.apps {
@@ -25,7 +25,7 @@ func (s *Store) ConnectedAppByClientID(clientID string) (ConnectedApp, error) {
 	return ConnectedApp{}, ErrNotFound
 }
 
-func (s *Store) CreateConnectedApp(app ConnectedApp, clientSecret string) (ConnectedApp, error) {
+func (s *MemoryStore) CreateConnectedApp(app ConnectedApp, clientSecret string) (ConnectedApp, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(app.Name) == "" || strings.TrimSpace(app.ClientID) == "" || len(app.RedirectURIs) == 0 {
@@ -54,7 +54,7 @@ func (s *Store) CreateConnectedApp(app ConnectedApp, clientSecret string) (Conne
 	return app, nil
 }
 
-func (s *Store) UpdateConnectedApp(id string, patch ConnectedApp) (ConnectedApp, error) {
+func (s *MemoryStore) UpdateConnectedApp(id string, patch ConnectedApp) (ConnectedApp, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.apps {
@@ -84,7 +84,7 @@ func (s *Store) UpdateConnectedApp(id string, patch ConnectedApp) (ConnectedApp,
 	return ConnectedApp{}, ErrNotFound
 }
 
-func (s *Store) DeleteConnectedApp(id string) error {
+func (s *MemoryStore) DeleteConnectedApp(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.apps {
@@ -103,7 +103,7 @@ func (s *Store) DeleteConnectedApp(id string) error {
 	return ErrNotFound
 }
 
-func (s *Store) VerifyConnectedAppSecret(clientID, clientSecret string) (ConnectedApp, error) {
+func (s *MemoryStore) VerifyConnectedAppSecret(clientID, clientSecret string) (ConnectedApp, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	h := hashToken(clientSecret)
@@ -115,7 +115,7 @@ func (s *Store) VerifyConnectedAppSecret(clientID, clientSecret string) (Connect
 	return ConnectedApp{}, ErrNotFound
 }
 
-func (s *Store) CreateOAuthCode(appID, userID, redirectURI string, scopes []string, code string, ttl time.Duration) (OAuthGrant, error) {
+func (s *MemoryStore) CreateOAuthCode(appID, userID, redirectURI string, scopes []string, code string, ttl time.Duration) (OAuthGrant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if appID == "" || userID == "" || redirectURI == "" || code == "" {
@@ -137,7 +137,7 @@ func (s *Store) CreateOAuthCode(appID, userID, redirectURI string, scopes []stri
 	return g, nil
 }
 
-func (s *Store) RedeemOAuthCode(clientID, code, redirectURI, accessToken, refreshToken string, accessTTL, refreshTTL time.Duration) (OAuthGrant, ConnectedApp, User, error) {
+func (s *MemoryStore) RedeemOAuthCode(clientID, code, redirectURI, accessToken, refreshToken string, accessTTL, refreshTTL time.Duration) (OAuthGrant, ConnectedApp, User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -166,7 +166,7 @@ func (s *Store) RedeemOAuthCode(clientID, code, redirectURI, accessToken, refres
 	return OAuthGrant{}, ConnectedApp{}, User{}, ErrNotFound
 }
 
-func (s *Store) RefreshOAuthToken(clientID, refreshToken, accessToken, nextRefreshToken string, accessTTL, refreshTTL time.Duration) (OAuthGrant, ConnectedApp, User, error) {
+func (s *MemoryStore) RefreshOAuthToken(clientID, refreshToken, accessToken, nextRefreshToken string, accessTTL, refreshTTL time.Duration) (OAuthGrant, ConnectedApp, User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -194,7 +194,7 @@ func (s *Store) RefreshOAuthToken(clientID, refreshToken, accessToken, nextRefre
 	return OAuthGrant{}, ConnectedApp{}, User{}, ErrNotFound
 }
 
-func (s *Store) UserByOAuthAccessToken(token string) (User, ConnectedApp, OAuthGrant, error) {
+func (s *MemoryStore) UserByOAuthAccessToken(token string) (User, ConnectedApp, OAuthGrant, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -219,7 +219,7 @@ func (s *Store) UserByOAuthAccessToken(token string) (User, ConnectedApp, OAuthG
 	return User{}, ConnectedApp{}, OAuthGrant{}, ErrNotFound
 }
 
-func (s *Store) RevokeOAuthToken(clientID, token string) bool {
+func (s *MemoryStore) RevokeOAuthToken(clientID, token string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
@@ -240,7 +240,7 @@ func (s *Store) RevokeOAuthToken(clientID, token string) bool {
 	return revoked
 }
 
-func (s *Store) appByIDLocked(id string) (ConnectedApp, bool) {
+func (s *MemoryStore) appByIDLocked(id string) (ConnectedApp, bool) {
 	for _, app := range s.apps {
 		if app.ID == id {
 			return app, true
@@ -249,7 +249,7 @@ func (s *Store) appByIDLocked(id string) (ConnectedApp, bool) {
 	return ConnectedApp{}, false
 }
 
-func (s *Store) touchAppLocked(id string, at time.Time) {
+func (s *MemoryStore) touchAppLocked(id string, at time.Time) {
 	for i := range s.apps {
 		if s.apps[i].ID == id {
 			s.apps[i].LastUsedAt = at

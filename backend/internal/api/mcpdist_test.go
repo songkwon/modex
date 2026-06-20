@@ -12,7 +12,7 @@ import (
 )
 
 func TestSkillDiscoveryIndexMatchesTarballDigest(t *testing.T) {
-	srv := New(store.New())
+	srv := New(store.NewTestStore())
 
 	idxReq := httptest.NewRequest(http.MethodGet, "/.well-known/agent-skills/index.json", nil)
 	idxRec := httptest.NewRecorder()

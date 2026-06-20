@@ -49,7 +49,6 @@ export type User = {
   email: string;
   department: string;
   avatar?: string;
-  groups?: string[];
   roles?: string[];
   managed_categories?: string[];
   is_super_admin?: boolean;
@@ -59,13 +58,6 @@ export type User = {
   last_login_at?: string;
   created_at?: string;
   updated_at?: string;
-};
-
-export type Group = {
-  id: string;
-  group_key: string;
-  name: string;
-  source: string;
 };
 
 // Team = 文档维护团队. Leader (负责人) can add/remove members ("拉人").

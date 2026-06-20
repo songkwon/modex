@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"modex/backend/internal/embedding"
 )
 
 type Postgres struct {
@@ -68,6 +70,9 @@ func (p *Postgres) Similarities(ctx context.Context, query []float32, docIDs []s
 	if len(query) == 0 || len(docIDs) == 0 || limit <= 0 {
 		return out, nil
 	}
+	if len(query) != embedding.Dim {
+		return nil, fmt.Errorf("query embedding dimension mismatch: got %d, want %d", len(query), embedding.Dim)
+	}
 	rows, err := p.pool.Query(ctx, `
 		SELECT doc_id, 1 - ((embedding <=> $1::vector) / 2.0) AS score
 		FROM docs_embedding
@@ -90,6 +95,9 @@ func (p *Postgres) Similarities(ctx context.Context, query []float32, docIDs []s
 }
 
 func (p *Postgres) Upsert(ctx context.Context, docID string, vector []float32) error {
+	if len(vector) != embedding.Dim {
+		return fmt.Errorf("embedding dimension mismatch: model produced %d dims but the vector store requires %d; configure an embedding model with %d-dimensional output", len(vector), embedding.Dim, embedding.Dim)
+	}
 	raw, err := json.Marshal(vector)
 	if err != nil {
 		return err

@@ -13,7 +13,8 @@ import (
 
 func (s *Server) currentUser(r *http.Request) (store.User, bool) {
 	if user, ok := s.app.Auth().CurrentUser(r); ok {
-		return user, true
+		fresh, err := s.app.Store().UserByID(user.ID)
+		return fresh, err == nil
 	}
 	if tok := bearerToken(r); tok != "" {
 		if user, _, _, err := s.app.Store().UserByOAuthAccessToken(tok); err == nil {
@@ -454,7 +455,6 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 				writeResult(w, nil, err)
 				return
 			}
-			s.persistStore("deploy token rotation")
 			m.DeployToken = token
 		} else if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
@@ -685,26 +685,6 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 		s.writeMutation(w, map[string]any{"status": "deleted", "id": id}, http.StatusOK, nil)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET, PUT or DELETE")
-	}
-}
-
-func (s *Server) handleAdminGroups(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.requireSuperAdmin(w, r); !ok {
-		return
-	}
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.app.Store().Groups())
-	case http.MethodPost:
-		var g store.Group
-		if err := decodeBody(r, &g); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
-			return
-		}
-		created, err := s.app.Store().CreateGroup(g)
-		s.writeMutation(w, created, http.StatusCreated, err)
-	default:
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 	}
 }
 

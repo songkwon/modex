@@ -9,7 +9,6 @@ type User struct {
 	Email       string   `json:"email"`
 	Department  string   `json:"department"`
 	Avatar      string   `json:"avatar,omitempty"`
-	Groups      []string `json:"groups"`
 	Roles       []string `json:"roles"`
 	// ManagedCategories lists the platform/category IDs this user may manage.
 	// Super admins manage everything regardless of this list.
@@ -27,15 +26,6 @@ type User struct {
 	LastLoginAt time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   time.Time `json:"created_at,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at,omitempty"`
-}
-
-type Group struct {
-	ID        string    `json:"id"`
-	GroupKey  string    `json:"group_key"`
-	Name      string    `json:"name"`
-	Source    string    `json:"source"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ConnectedApp struct {
@@ -75,7 +65,7 @@ type OAuthGrant struct {
 // A team has a leader (负责人) who can add/remove members. Teams can be
 // assigned as responsible_party for one or more Categories (领域/分类),
 // owning the doc structure and maintenance under those domains.
-// Team.Key can be used as owner_group / group reference for compatibility.
+// Team.Key is also used as the module/page owner_group string.
 type Team struct {
 	ID          string `json:"id"`
 	Key         string `json:"key"`
@@ -243,7 +233,7 @@ type AISettings struct {
 	EmbeddingBaseURL string `json:"embedding_base_url,omitempty"`
 	EmbeddingModel   string `json:"embedding_model,omitempty"`
 	EmbeddingAPIKey  string `json:"embedding_api_key,omitempty"` // secret; masked when read back
-	EmbeddingDim     int    `json:"embedding_dim,omitempty"`
+	EmbeddingDim     int    `json:"embedding_dim,omitempty"`     // fixed at embedding.Dim (1024); the configured model must output this many dims
 
 	RerankBaseURL string `json:"rerank_base_url,omitempty"`
 	RerankModel   string `json:"rerank_model,omitempty"`

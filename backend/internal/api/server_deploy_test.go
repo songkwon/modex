@@ -13,7 +13,7 @@ import (
 )
 
 func TestHealthIncludesOperationalSnapshot(t *testing.T) {
-	srv := New(store.NewSeeded())
+	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rr := httptest.NewRecorder()
 
@@ -31,7 +31,7 @@ func TestHealthIncludesOperationalSnapshot(t *testing.T) {
 }
 
 func TestDeployErrorIncludesStageReport(t *testing.T) {
-	st := store.NewSeeded()
+	st := store.NewSeededTestStore()
 	if _, err := st.UpdateModule("DemoModule", store.Module{DeployToken: "secret"}); err != nil {
 		t.Fatalf("UpdateModule: %v", err)
 	}

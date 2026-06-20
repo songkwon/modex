@@ -80,8 +80,20 @@ type Response struct {
 	Facets   map[string]map[string]int `json:"facets"`
 }
 
+// ContentStore is the search-facing data boundary. Production uses the
+// PostgreSQL repository; tests may use MemoryStore as an explicit fake.
+type ContentStore interface {
+	Pages() []store.Page
+	Modules(categoryID, keyword string) []store.Module
+	Settings() store.Settings
+	Embedding(docID string) ([]float32, bool)
+	SetEmbedding(docID string, vector []float32)
+	ClearEmbeddings()
+	EmbeddingCount() int
+}
+
 type Service struct {
-	Store          *store.Store
+	Store          ContentStore
 	Embedder       embedding.Provider
 	Vectors        VectorStore
 	KeywordWeight  float64

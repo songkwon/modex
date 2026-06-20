@@ -1,7 +1,6 @@
 package application
 
 import (
-	"context"
 	"os"
 	"strconv"
 
@@ -15,23 +14,22 @@ import (
 // Implementations can be backed by pgx, an ORM, or a test double without
 // leaking database details into HTTP controllers.
 type Repository interface {
-	Save(ctx context.Context, st *store.Store) error
 	Close()
 }
 
 // Service owns the business-facing dependencies used by controllers.
 type Service struct {
-	store      *store.Store
+	store      store.DataStore
 	auth       *auth.Service
 	search     search.Service
 	repository Repository
 }
 
-func New(st *store.Store, vectors search.VectorStore, repository Repository) *Service {
+func New(st store.DataStore, vectors search.VectorStore, repository Repository) *Service {
 	return newService(st, vectors, repository, auth.NewService(auth.FromEnv()))
 }
 
-func NewConfigured(st *store.Store, vectors search.VectorStore, repository Repository) (*Service, error) {
+func NewConfigured(st store.DataStore, vectors search.VectorStore, repository Repository) (*Service, error) {
 	authService, err := auth.NewConfiguredService(auth.FromEnv())
 	if err != nil {
 		return nil, err
@@ -39,9 +37,10 @@ func NewConfigured(st *store.Store, vectors search.VectorStore, repository Repos
 	return newService(st, vectors, repository, authService), nil
 }
 
-func newService(st *store.Store, vectors search.VectorStore, repository Repository, authService *auth.Service) *Service {
+func newService(st store.DataStore, vectors search.VectorStore, repository Repository, authService *auth.Service) *Service {
+	contentStore := search.ContentStore(st)
 	provider := embedding.SettingsProvider{Load: func() embedding.Settings {
-		ai := st.Settings().AI
+		ai := contentStore.Settings().AI
 		return embedding.Settings{
 			BaseURL: ai.EmbeddingBaseURL,
 			Model:   ai.EmbeddingModel,
@@ -54,7 +53,7 @@ func newService(st *store.Store, vectors search.VectorStore, repository Reposito
 		auth:       authService,
 		repository: repository,
 		search: search.Service{
-			Store:          st,
+			Store:          contentStore,
 			Embedder:       provider,
 			Vectors:        vectors,
 			KeywordWeight:  envFloat("HYBRID_KEYWORD_WEIGHT", 0.6),
@@ -63,7 +62,7 @@ func newService(st *store.Store, vectors search.VectorStore, repository Reposito
 	}
 }
 
-func (s *Service) Store() *store.Store {
+func (s *Service) Store() store.DataStore {
 	return s.store
 }
 
@@ -73,17 +72,6 @@ func (s *Service) Auth() *auth.Service {
 
 func (s *Service) Search() *search.Service {
 	return &s.search
-}
-
-func (s *Service) HasRepository() bool {
-	return s.repository != nil
-}
-
-func (s *Service) Save(ctx context.Context) error {
-	if s.repository == nil {
-		return nil
-	}
-	return s.repository.Save(ctx, s.store)
 }
 
 func (s *Service) Close() {

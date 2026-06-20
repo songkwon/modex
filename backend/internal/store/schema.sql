@@ -1,5 +1,12 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
+CREATE TABLE IF NOT EXISTS auth_session (
+  key TEXT PRIMARY KEY,
+  value_json JSONB NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -7,7 +14,6 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT,
   department TEXT,
   avatar TEXT,
-  groups_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   roles_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   managed_categories_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   source TEXT,
@@ -15,15 +21,6 @@ CREATE TABLE IF NOT EXISTS users (
   is_super_admin BOOLEAN NOT NULL DEFAULT false,
   mcp_token TEXT,
   last_login_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS groups (
-  id TEXT PRIMARY KEY,
-  group_key TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  source TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -40,12 +37,6 @@ CREATE TABLE IF NOT EXISTS teams (
   members JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS user_groups (
-  user_id TEXT REFERENCES users(id),
-  group_id TEXT REFERENCES groups(id),
-  PRIMARY KEY (user_id, group_id)
 );
 
 CREATE TABLE IF NOT EXISTS connected_app (
@@ -281,7 +272,7 @@ CREATE TABLE IF NOT EXISTS docs_embedding (
   version_id TEXT REFERENCES docs_version(id),
   entry_id TEXT REFERENCES docs_entry(id),
   content TEXT,
-  embedding vector(384),
+  embedding vector(1024),
   embedding_json JSONB,
   metadata_json JSONB,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -321,22 +312,28 @@ CREATE TABLE IF NOT EXISTS docs_nav (
   PRIMARY KEY (module_key, docs_version)
 );
 
+CREATE TABLE IF NOT EXISTS docs_site_file (
+  module_key TEXT NOT NULL,
+  docs_version TEXT NOT NULL,
+  entry_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  content BYTEA NOT NULL,
+  content_type TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (module_key, docs_version, entry_key, name)
+);
+
 CREATE TABLE IF NOT EXISTS platform_settings (
   key TEXT PRIMARY KEY,
   value_json JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS store_metadata (
-  key TEXT PRIMARY KEY,
-  value_bigint BIGINT,
-  value_text TEXT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+DROP TABLE IF EXISTS store_metadata;
+DROP TABLE IF EXISTS modex_store_snapshot;
 -- Upgrade databases created by earlier releases. CREATE TABLE IF NOT EXISTS
 -- does not add or change columns on an existing installation.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS groups_json JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS roles_json JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_categories_json JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS source TEXT;
@@ -344,6 +341,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS mcp_token TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+-- Drop the legacy Keycloak group mirror. Team membership (teams + responsible_team)
+-- is the only authorization model; SSO groups were never consulted for access.
+DROP TABLE IF EXISTS user_groups;
+DROP TABLE IF EXISTS groups;
+ALTER TABLE users DROP COLUMN IF EXISTS groups_json;
 
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS leaders JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS members JSONB NOT NULL DEFAULT '[]'::jsonb;
@@ -384,7 +387,6 @@ ALTER TABLE docs_mcp_log ALTER COLUMN id TYPE TEXT USING id::text;
 -- Remove JSON mirrors from development builds. Rows are reconstructed only
 -- from typed columns and foreign-key relationships.
 ALTER TABLE users DROP COLUMN IF EXISTS record_json;
-ALTER TABLE groups DROP COLUMN IF EXISTS record_json;
 ALTER TABLE teams DROP COLUMN IF EXISTS record_json;
 ALTER TABLE connected_app DROP COLUMN IF EXISTS record_json;
 ALTER TABLE oauth_grant DROP COLUMN IF EXISTS record_json;

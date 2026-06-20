@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (s *Store) IngestArtifact(a DeployArtifact) (DeployResult, error) {
+func (s *MemoryStore) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 	if strings.TrimSpace(a.ModuleKey) == "" || strings.TrimSpace(a.DocsVersion) == "" || len(a.Entries) == 0 || len(a.Documents) == 0 {
 		return DeployResult{}, ErrInvalid
 	}

@@ -13,6 +13,13 @@ import (
 	"time"
 )
 
+// Dim is the system-wide embedding vector dimension. It must match the
+// docs_embedding.embedding column (vector(1024)) in schema.sql and the
+// admin settings UI. Changing it requires a column migration and a full
+// reindex, since pgvector columns are fixed-width and vectors of different
+// dimensions cannot coexist or be compared.
+const Dim = 1024
+
 type Provider interface {
 	Name() string
 	EmbedText(ctx context.Context, text string) ([]float32, error)
@@ -28,7 +35,7 @@ func (p MockProvider) Name() string { return "mock" }
 func (p MockProvider) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	dim := p.Dim
 	if dim <= 0 {
-		dim = 384
+		dim = Dim
 	}
 	vec := make([]float32, dim)
 	seed := sha256.Sum256([]byte(text))
@@ -137,11 +144,11 @@ func (p SettingsProvider) EmbedBatch(ctx context.Context, texts []string) ([][]f
 
 func (p SettingsProvider) settings() Settings {
 	if p.Load == nil {
-		return Settings{Dim: 384}
+		return Settings{Dim: Dim}
 	}
 	cfg := p.Load()
 	if cfg.Dim <= 0 {
-		cfg.Dim = 384
+		cfg.Dim = Dim
 	}
 	return cfg
 }

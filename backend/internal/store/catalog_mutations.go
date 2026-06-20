@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (s *Store) CreateCategory(c Category) (Category, error) {
+func (s *MemoryStore) CreateCategory(c Category) (Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Key is system-generated from the name (dotted under the parent's key) so
@@ -58,7 +58,7 @@ func slugifyKey(name string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-func (s *Store) generateCategoryKeyLocked(name, parentID string) string {
+func (s *MemoryStore) generateCategoryKeyLocked(name, parentID string) string {
 	base := slugifyKey(name)
 	if base == "" {
 		base = "d" + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36)
@@ -85,7 +85,7 @@ func (s *Store) generateCategoryKeyLocked(name, parentID string) string {
 	return key
 }
 
-func (s *Store) generateTeamKeyLocked(name string) string {
+func (s *MemoryStore) generateTeamKeyLocked(name string) string {
 	base := slugifyKey(name)
 	if base == "" {
 		base = "team-" + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36)
@@ -108,7 +108,7 @@ func (s *Store) generateTeamKeyLocked(name string) string {
 // MoveCategory reparents a category and positions it at `index` among its new
 // siblings, renumbering sibling SortOrder so the tree order is stable. Rejects
 // moves that would create a cycle (into the node's own subtree).
-func (s *Store) MoveCategory(id, parentID string, index int) (Category, error) {
+func (s *MemoryStore) MoveCategory(id, parentID string, index int) (Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -181,7 +181,7 @@ func (s *Store) MoveCategory(id, parentID string, index int) (Category, error) {
 	return out, nil
 }
 
-func (s *Store) UpdateCategory(id string, c Category) (Category, error) {
+func (s *MemoryStore) UpdateCategory(id string, c Category) (Category, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.categories {
@@ -214,7 +214,7 @@ func (s *Store) UpdateCategory(id string, c Category) (Category, error) {
 	return Category{}, ErrNotFound
 }
 
-func (s *Store) DeleteCategory(id string) error {
+func (s *MemoryStore) DeleteCategory(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, c := range s.categories {
@@ -231,7 +231,7 @@ func (s *Store) DeleteCategory(id string) error {
 	return ErrNotFound
 }
 
-func (s *Store) moduleKeyTakenLocked(key string) bool {
+func (s *MemoryStore) moduleKeyTakenLocked(key string) bool {
 	for _, m := range s.modules {
 		if strings.EqualFold(m.ModuleKey, key) {
 			return true
@@ -240,7 +240,7 @@ func (s *Store) moduleKeyTakenLocked(key string) bool {
 	return false
 }
 
-func (s *Store) CreateModule(m Module) (Module, error) {
+func (s *MemoryStore) CreateModule(m Module) (Module, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Auto-generate module_key from the name (slug, unique) so admins never type one.
@@ -286,7 +286,7 @@ func (s *Store) CreateModule(m Module) (Module, error) {
 	return m, nil
 }
 
-func (s *Store) UpdateModule(moduleKey string, patch Module) (Module, error) {
+func (s *MemoryStore) UpdateModule(moduleKey string, patch Module) (Module, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.modules {
@@ -365,7 +365,7 @@ func (s *Store) UpdateModule(moduleKey string, patch Module) (Module, error) {
 	return Module{}, ErrNotFound
 }
 
-func (s *Store) CreateVersion(moduleKey string, v Version) (Version, error) {
+func (s *MemoryStore) CreateVersion(moduleKey string, v Version) (Version, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.moduleIndexLocked(moduleKey); err != nil {
@@ -404,7 +404,7 @@ func (s *Store) CreateVersion(moduleKey string, v Version) (Version, error) {
 	return v, nil
 }
 
-func (s *Store) UpdateVersion(moduleKey, docsVersion string, patch Version) (Version, error) {
+func (s *MemoryStore) UpdateVersion(moduleKey, docsVersion string, patch Version) (Version, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.versions {
@@ -451,7 +451,7 @@ func (s *Store) UpdateVersion(moduleKey, docsVersion string, patch Version) (Ver
 	return Version{}, ErrNotFound
 }
 
-func (s *Store) CreateEntry(moduleKey, docsVersion string, e Entry) (Entry, error) {
+func (s *MemoryStore) CreateEntry(moduleKey, docsVersion string, e Entry) (Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.moduleIndexLocked(moduleKey); err != nil {
@@ -487,7 +487,7 @@ func (s *Store) CreateEntry(moduleKey, docsVersion string, e Entry) (Entry, erro
 	return e, nil
 }
 
-func (s *Store) UpdateEntry(entryID string, patch Entry) (Entry, error) {
+func (s *MemoryStore) UpdateEntry(entryID string, patch Entry) (Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.entries {
@@ -527,7 +527,7 @@ func (s *Store) UpdateEntry(entryID string, patch Entry) (Entry, error) {
 	return Entry{}, ErrNotFound
 }
 
-func (s *Store) DeleteEntry(entryID string) error {
+func (s *MemoryStore) DeleteEntry(entryID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.entries {
@@ -539,7 +539,7 @@ func (s *Store) DeleteEntry(entryID string) error {
 	return ErrNotFound
 }
 
-func (s *Store) Release(releaseID string) (Release, error) {
+func (s *MemoryStore) Release(releaseID string) (Release, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, r := range s.releases {
@@ -552,7 +552,7 @@ func (s *Store) Release(releaseID string) (Release, error) {
 
 // RollbackRelease marks the target release as rolled back. A real
 // implementation would also re-point storage and search to the prior artifact.
-func (s *Store) RollbackRelease(releaseID string) (Release, error) {
+func (s *MemoryStore) RollbackRelease(releaseID string) (Release, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.releases {
@@ -564,7 +564,7 @@ func (s *Store) RollbackRelease(releaseID string) (Release, error) {
 	return Release{}, ErrNotFound
 }
 
-func (s *Store) moduleIndexLocked(moduleKey string) (int, error) {
+func (s *MemoryStore) moduleIndexLocked(moduleKey string) (int, error) {
 	for i := range s.modules {
 		if strings.EqualFold(s.modules[i].ModuleKey, moduleKey) {
 			return i, nil
@@ -573,12 +573,12 @@ func (s *Store) moduleIndexLocked(moduleKey string) (int, error) {
 	return -1, ErrNotFound
 }
 
-func (s *Store) nextIDLocked(prefix string) string {
+func (s *MemoryStore) nextIDLocked(prefix string) string {
 	s.seq++
 	return prefix + "-" + strconv.FormatInt(s.seq, 10) + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 }
 
-func (s *Store) versionsForLocked(moduleKey string) []Version {
+func (s *MemoryStore) versionsForLocked(moduleKey string) []Version {
 	var out []Version
 	for _, v := range s.versions {
 		if strings.EqualFold(v.ModuleKey, moduleKey) {
