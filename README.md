@@ -3,7 +3,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/songkwon/modex?style=social)](https://github.com/songkwon/modex/stargazers)
 [![CI](https://github.com/songkwon/modex/actions/workflows/ci.yml/badge.svg)](https://github.com/songkwon/modex/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](backend/go.mod)
+[![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white)](backend/go.mod)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](frontend/package.json)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](frontend/package.json)
 [![Playwright](https://img.shields.io/badge/E2E-Playwright-45ba4b?logo=playwright)](frontend/playwright.config.ts)
@@ -176,6 +176,9 @@ npm run e2e
 - [国际化与 Weblate](docs/i18n-weblate.md)
 - [VuePress 迁移指南](docs/vuepress-migration.md)
 - [GitLab CI 模板](deploy/ci/modex-docs.gitlab-ci.yml)
+- [生产升级与回滚](docs/operations.md)
+- [贡献指南](CONTRIBUTING.md)
+- [安全策略](SECURITY.md)
 
 ### 许可协议
 
@@ -344,6 +347,9 @@ Frontend catalogs:
 - [Testing Guide](docs/testing.md)
 - [Internationalization and Weblate](docs/i18n-weblate.md)
 - [VuePress Migration](docs/vuepress-migration.md)
+- [Production upgrades and rollback](docs/operations.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 - [GitLab CI Template](deploy/ci/modex-docs.gitlab-ci.yml)
 
 ### License
