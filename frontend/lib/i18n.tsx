@@ -48,23 +48,36 @@ const originalText = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Map<string, string>>();
 const translatedAttributes = ["aria-label", "placeholder", "title"];
 
-function translateLegacyLiteral(value: string, locale: Locale) {
-  if (locale === "zh-CN") return value;
+// Resolve a rendered literal back to its legacy.* key (direct, or via a
+// {{valueN}} pattern). Returns null for anything the legacy catalog does not
+// own -- in particular text rendered through t(), which React controls and the
+// observer must never touch.
+function legacyMatch(value: string): { key: string; captures: string[] } | null {
   const direct = legacySourceToKey.get(value);
-  if (direct) return messages[locale][direct] || value;
+  if (direct) return { key: direct, captures: [] };
   for (const [source, key] of legacySourceToKey) {
     if (!source.includes("{{value")) continue;
     const parts = source.split(/\{\{value\d+\}\}/g);
     const pattern = new RegExp(`^${parts.map(escapeRegExp).join("(.+?)")}$`);
     const match = value.match(pattern);
-    if (!match) continue;
-    let translated = messages[locale][key] || value;
-    match.slice(1).forEach((capture, index) => {
-      translated = translated.replaceAll(`{{value${index + 1}}}`, capture);
-    });
-    return translated;
+    if (match) return { key, captures: match.slice(1) };
   }
-  return value;
+  return null;
+}
+
+function isLegacySource(value: string) {
+  return legacyMatch(value) !== null;
+}
+
+function translateLegacyLiteral(value: string, locale: Locale) {
+  if (locale === "zh-CN") return value;
+  const matched = legacyMatch(value);
+  if (!matched) return value;
+  let translated = messages[locale][matched.key] || value;
+  matched.captures.forEach((capture, index) => {
+    translated = translated.replaceAll(`{{value${index + 1}}}`, capture);
+  });
+  return translated;
 }
 
 function escapeRegExp(value: string) {
@@ -78,11 +91,17 @@ function applyLegacyTranslations(root: ParentNode, locale: Locale) {
     const parent = node.parentElement;
     if (parent && !parent.closest("pre, code, script, style, textarea, [data-i18n-ignore]")) {
       const source = originalText.get(node) ?? node.data;
-      originalText.set(node, source);
       const trimmed = source.trim();
-      const translated = translateLegacyLiteral(trimmed, locale);
-      const next = source.replace(trimmed, translated);
-      if (node.data !== next) node.data = next;
+      // Only manage nodes whose original text is a legacy literal. Text rendered
+      // by t() is React-owned; rewriting it here would clobber live translations
+      // (the bug this guard fixes). Once a node is adopted we keep managing it so
+      // switching back to zh-CN restores the original.
+      if (originalText.has(node) || isLegacySource(trimmed)) {
+        originalText.set(node, source);
+        const translated = translateLegacyLiteral(trimmed, locale);
+        const next = source.replace(trimmed, translated);
+        if (node.data !== next) node.data = next;
+      }
     }
     node = walker.nextNode() as Text | null;
   }
@@ -96,7 +115,11 @@ function applyLegacyTranslations(root: ParentNode, locale: Locale) {
     for (const attribute of translatedAttributes) {
       const current = element.getAttribute(attribute);
       if (current === null) continue;
-      if (!saved.has(attribute)) saved.set(attribute, current);
+      if (!saved.has(attribute)) {
+        // Same rule as text nodes: leave t()-provided attribute values alone.
+        if (!isLegacySource(current.trim())) continue;
+        saved.set(attribute, current);
+      }
       const next = translateLegacyLiteral(saved.get(attribute) || current, locale);
       if (current !== next) element.setAttribute(attribute, next);
     }

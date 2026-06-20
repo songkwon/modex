@@ -111,8 +111,9 @@ test("authenticated user can switch locale from the user menu", async ({ page })
   await page.getByRole("button", { name: /Dev User/ }).click();
   await page.getByRole("button", { name: "English" }).click();
 
-  // The user menu's language control drives the app locale.
+  // The switch takes effect live: html lang flips and t()-rendered UI re-renders.
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  await expect(page.getByRole("heading", { name: "Documentation Hub" })).toBeVisible();
 });
 
 test("authenticated admin sees the admin console entry", async ({ page }) => {
