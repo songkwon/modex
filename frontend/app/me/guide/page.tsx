@@ -19,7 +19,7 @@ export default async function ModexGuidePage() {
         <article className="panel prose doc-page">
           <p className="muted text-sm doc-breadcrumb">Modex / Guide</p>
           <div className="doc-title-row">
-            <h1 className="doc-title" id="overview">{t("legacy.0cf89cadff1b")}</h1>
+            <h1 className="doc-title" id="overview">{t("me.guide.modex_project_guide")}</h1>
           </div>
           <DocSourceToggle source={source}>
             <MdxContent source={source} />

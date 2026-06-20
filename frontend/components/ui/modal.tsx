@@ -47,7 +47,7 @@ export function Modal({
             <h2>{title}</h2>
             {subtitle ? <div className="modal-sub">{subtitle}</div> : null}
           </div>
-          <button className="icon-btn modal-close" onClick={onClose} aria-label={t("legacy.3fd47edce45b")}>
+          <button className="icon-btn modal-close" onClick={onClose} aria-label={t("component.searchResults.close")}>
             <X size={16} />
           </button>
         </div>

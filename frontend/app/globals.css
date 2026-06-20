@@ -2262,6 +2262,15 @@ select:focus {
 .table-card .data-table tr:hover td { background: hsl(var(--accent-soft) / 0.5); }
 
 /* Row actions that only reveal on hover, kept subtle otherwise. */
+.table-actions-col,
+.table-actions-cell {
+  text-align: center;
+}
+
+.table-actions-cell .row-actions {
+  justify-content: center;
+}
+
 .row-actions { display: inline-flex; gap: 6px; opacity: 0.5; transition: opacity 140ms ease; }
 tr:hover .row-actions { opacity: 1; }
 .icon-btn {

@@ -42,7 +42,7 @@ export function DocChatPanel({
       const res = await askAI(q, { module_key: moduleKey });
       setMessages((m) => [...m, { role: "assistant", text: res.answer, sources: res.sources }]);
     } catch (e) {
-      setMessages((m) => [...m, { role: "assistant", text: t("legacy.7481f4cbad36") + String(e) }]);
+      setMessages((m) => [...m, { role: "assistant", text: t("component.docChatPanel.error") + String(e) }]);
     } finally {
       setBusy(false);
     }
@@ -53,16 +53,16 @@ export function DocChatPanel({
       <div className={`doc-chat-scrim ${open ? "open" : ""}`} onClick={onClose} />
       <aside className={`doc-chat-drawer ${open ? "open" : ""}`} aria-hidden={!open}>
         <header className="doc-chat-head">
-          <span className="doc-chat-title"><Sparkles size={16} className="ds-ask-icon" /> {t("legacy.69d8ed1c70a6")}</span>
+          <span className="doc-chat-title"><Sparkles size={16} className="ds-ask-icon" /> {t("nav.askAI")}</span>
           <span className="doc-chat-sub muted">{moduleName}</span>
-          <button className="button icon-button" onClick={onClose} aria-label={t("legacy.3fd47edce45b")}><X size={16} /></button>
+          <button className="button icon-button" onClick={onClose} aria-label={t("component.searchResults.close")}><X size={16} /></button>
         </header>
 
         <div className="doc-chat-body" ref={bodyRef}>
           {messages.length === 0 ? (
             <div className="doc-chat-empty muted">
-              {t("legacy.4f49b6aa91cc")}{moduleName}{t("legacy.9c46aa549d19")}<br />
-              {t("legacy.f1a51d80d7a6")}
+              {t("component.docChatPanel.for")}{moduleName}{t("component.docChatPanel.s_documentation_e_g")}<br />
+              {t("component.docChatPanel.how_do_i_integrate_this_module_what_known")}
             </div>
           ) : null}
           {messages.map((m, i) => (
@@ -79,7 +79,7 @@ export function DocChatPanel({
               ) : null}
             </div>
           ))}
-          {busy ? <div className="doc-chat-msg assistant"><div className="doc-chat-bubble"><Loader2 size={15} className="ds-spin" /> {t("legacy.64088d8cd78a")}</div></div> : null}
+          {busy ? <div className="doc-chat-msg assistant"><div className="doc-chat-bubble"><Loader2 size={15} className="ds-spin" /> {t("component.docChatPanel.thinking")}</div></div> : null}
         </div>
 
         <div className="doc-chat-input">
@@ -92,10 +92,10 @@ export function DocChatPanel({
                 send();
               }
             }}
-            placeholder={t("legacy.b01115dc1577")}
+            placeholder={t("component.docChatPanel.ask_questions_about_this_document")}
             rows={1}
           />
-          <button className="button button-primary doc-chat-send" onClick={send} disabled={!input.trim() || busy} aria-label={t("legacy.edecf0ae6e51")}>
+          <button className="button button-primary doc-chat-send" onClick={send} disabled={!input.trim() || busy} aria-label={t("component.docChatPanel.send")}>
             <ArrowUp size={16} />
           </button>
         </div>

@@ -62,8 +62,8 @@ export function DocReadStats({ docId }: { docId: string }) {
       <button
         className="button icon-button read-stats-trigger"
         onClick={() => setOpen((v) => !v)}
-        title={t("legacy.99a1d5bd3348")}
-        aria-label={t("legacy.99a1d5bd3348")}
+        title={t("component.docReadStats.view_read_status")}
+        aria-label={t("component.docReadStats.view_read_status")}
         aria-expanded={open}
       >
         <Eye size={16} />
@@ -73,34 +73,34 @@ export function DocReadStats({ docId }: { docId: string }) {
       {open ? (
         <div className="read-stats-pop">
           <div className="read-stats-head">
-            <strong>{t("legacy.3f7111630e72")}</strong>
-            <span className="tag">{source === "posthog" ? "PostHog" : t("legacy.6ddee7759454")}</span>
+            <strong>{t("component.docReadStats.reading_stats")}</strong>
+            <span className="tag">{source === "posthog" ? "PostHog" : t("component.docReadStats.built_in_analytics")}</span>
             <select
               className="read-stats-range"
               value={days}
               onChange={(e) => setDays(Number(e.target.value) as RangeDays)}
-              aria-label={t("legacy.80ee5ade8132")}
+              aria-label={t("component.docReadStats.statistics_time_range")}
             >
-              <option value={7}>{t("legacy.2261b06712a3")}</option>
-              <option value={30}>{t("legacy.f729bb3d3f7e")}</option>
-              <option value={90}>{t("legacy.0909522d9092")}</option>
+              <option value={7}>{t("component.docReadStats.last_7_days")}</option>
+              <option value={30}>{t("component.docReadStats.last_30_days")}</option>
+              <option value={90}>{t("component.docReadStats.last_90_days")}</option>
             </select>
             <div className="read-stats-tabs">
               <button className={`read-stats-tab${tab === "trend" ? " active" : ""}`} onClick={() => setTab("trend")}>
-                <LineChartIcon size={14} /> {t("legacy.9b59e637c838")}
+                <LineChartIcon size={14} /> {t("component.docReadStats.trends")}
               </button>
               <button className={`read-stats-tab${tab === "readers" ? " active" : ""}`} onClick={() => setTab("readers")}>
-                <Users size={14} /> {t("legacy.b836711928b9")}
+                <Users size={14} /> {t("component.docReadStats.readers")}
               </button>
             </div>
           </div>
 
           {loading ? (
-            <div className="read-stats-empty"><Loader2 size={16} className="ds-spin" /> {t("legacy.4927a53bcc88")}</div>
+            <div className="read-stats-empty"><Loader2 size={16} className="ds-spin" /> {t("component.docReadStats.loading")}</div>
           ) : error ? (
-            <div className="read-stats-empty muted">{t("legacy.d1d044826a45")}</div>
+            <div className="read-stats-empty muted">{t("component.docReadStats.load_failed")}</div>
           ) : !data || data.total === 0 ? (
-            <div className="read-stats-empty muted">{t("legacy.5d7aa3d2bc79")}</div>
+            <div className="read-stats-empty muted">{t("component.docReadStats.no_reading_history")}</div>
           ) : tab === "trend" ? (
             <TrendChart stats={data} />
           ) : (
@@ -132,10 +132,10 @@ function TrendChart({ stats }: { stats: Stats }) {
   return (
     <div className="read-stats-body">
       <div className="read-stats-summary">
-        <span><strong>{stats.total}</strong><small>{t("legacy.301ded2a5a81")}</small></span>
-        <span><strong>{fmtDuration(stats.avg_duration_seconds, t)}</strong><small>{t("legacy.654e27cd53c2")}</small></span>
+        <span><strong>{stats.total}</strong><small>{t("component.docReadStats.total_reads")}</small></span>
+        <span><strong>{fmtDuration(stats.avg_duration_seconds, t)}</strong><small>{t("component.docReadStats.avg_duration")}</small></span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="read-stats-chart" role="img" aria-label={t("legacy.cb77993ee539")}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="read-stats-chart" role="img" aria-label={t("component.docReadStats.daily_reading_volume_trend")}>
         <path d={area} className="read-stats-area" />
         <path d={line} className="read-stats-line" fill="none" />
         {daily.map((d, i) =>
@@ -144,7 +144,7 @@ function TrendChart({ stats }: { stats: Stats }) {
       </svg>
       <div className="read-stats-axis muted">
         <span>{first}</span>
-        <span>{t("legacy.5fa34377ddca")} {peak?.count ?? 0}{t("legacy.bd6af0fbad9c")}</span>
+        <span>{t("component.docReadStats.peak")} {peak?.count ?? 0}{t("component.docReadStats.day")}</span>
         <span>{last}</span>
       </div>
     </div>
@@ -154,7 +154,7 @@ function TrendChart({ stats }: { stats: Stats }) {
 function ReadersTable({ readers }: { readers: Stats["readers"] }) {
   const { t } = useI18n();
   if (!readers || readers.length === 0) {
-    return <div className="read-stats-empty muted">{t("legacy.9b7af2319166")}</div>;
+    return <div className="read-stats-empty muted">{t("component.docReadStats.no_readers")}</div>;
   }
   return (
     <div className="read-stats-body">
@@ -162,7 +162,7 @@ function ReadersTable({ readers }: { readers: Stats["readers"] }) {
         {readers.map((r, i) => (
           <div className="read-stats-reader" key={`${r.user_id || r.reader}-${i}`}>
             <span className="read-stats-reader-name">{r.reader}</span>
-            <span className="read-stats-reader-count">{r.count} {t("legacy.0a3ad5392111")} {fmtDuration(r.avg_duration_seconds, t)}</span>
+            <span className="read-stats-reader-count">{r.count} {t("component.docReadStats.times_avg")} {fmtDuration(r.avg_duration_seconds, t)}</span>
             <span className="read-stats-reader-time muted">{fmtTime(r.last_read_at)}</span>
           </div>
         ))}
@@ -172,11 +172,11 @@ function ReadersTable({ readers }: { readers: Stats["readers"] }) {
 }
 
 function fmtDuration(seconds: number, t: TranslateFn) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return t("legacy.3db3bfd88e0a");
-  if (seconds < 60) return t("legacy.5e713c2f3240", { value1: Math.round(seconds) });
+  if (!Number.isFinite(seconds) || seconds <= 0) return t("component.docReadStats.0_sec");
+  if (seconds < 60) return t("component.docReadStats.value1_sec", { value1: Math.round(seconds) });
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
-  return rest ? t("legacy.c0a227e60381", { value1: minutes, value2: rest }) : t("legacy.418d220ecac4", { value1: minutes });
+  return rest ? t("component.docReadStats.value1_min_value2_sec", { value1: minutes, value2: rest }) : t("component.docReadStats.value1_min", { value1: minutes });
 }
 
 function fmtTime(iso: string) {

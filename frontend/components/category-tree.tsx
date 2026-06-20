@@ -11,7 +11,7 @@ export function CategoryTree({
   rootId,
   backHref,
   backLabel,
-  hrefFor,
+  hrefPrefix,
   onSelect
 }: {
   categories: Category[];
@@ -19,7 +19,7 @@ export function CategoryTree({
   rootId?: string;
   backHref?: string;
   backLabel?: string;
-  hrefFor?: (category: Category) => string;
+  hrefPrefix?: string;
   onSelect?: (category: Category | null) => void;
 }) {
   const { t } = useI18n();
@@ -28,16 +28,16 @@ export function CategoryTree({
     <aside className="cat-rail rail">
       {backHref ? (
         <Link href={backHref} className="button mb-3 w-full justify-start">
-          <ArrowLeft size={15} /> {backLabel || t("legacy.572cf45ba436")}
+          <ArrowLeft size={15} /> {backLabel || t("component.categoryTree.back")}
         </Link>
       ) : null}
       <div className="cat-rail-head">
-        <span className="cat-rail-title">{t("legacy.44bcd6594ceb")}</span>
-        {!backHref && activeID ? <button className="quiet-link" onClick={() => onSelect?.(null)}>{t("legacy.bce2377283c2")}</button> : null}
+        <span className="cat-rail-title">{t("component.categoryTree.documentation_category")}</span>
+        {!backHref && activeID ? <button className="quiet-link" onClick={() => onSelect?.(null)}>{t("component.categoryTree.clear")}</button> : null}
       </div>
       <nav className="cat-tree">
         {display.map((category) => (
-          <CategoryNode activeID={activeID} category={category} depth={0} key={category.id} hrefFor={hrefFor} onSelect={onSelect} />
+          <CategoryNode activeID={activeID} category={category} depth={0} key={category.id} hrefPrefix={hrefPrefix} onSelect={onSelect} />
         ))}
       </nav>
     </aside>
@@ -59,17 +59,17 @@ function CategoryNode({
   category,
   activeID,
   depth,
-  hrefFor,
+  hrefPrefix,
   onSelect
 }: {
   category: Category;
   activeID?: string;
   depth: number;
-  hrefFor?: (category: Category) => string;
+  hrefPrefix?: string;
   onSelect?: (category: Category) => void;
 }) {
   const hasChildren = !!category.children?.length;
-  const href = hrefFor?.(category);
+  const href = hrefPrefix ? `${hrefPrefix}/${category.id}` : undefined;
   const className = `cat-node${activeID === category.id ? " active" : ""}${depth === 0 ? " cat-node-root" : ""}`;
   const style = { paddingLeft: 10 + depth * 14 };
   const label = (
@@ -91,7 +91,7 @@ function CategoryNode({
       )}
       {hasChildren
         ? category.children!.map((child) => (
-            <CategoryNode activeID={activeID} category={child} depth={depth + 1} key={child.id} hrefFor={hrefFor} onSelect={onSelect} />
+            <CategoryNode activeID={activeID} category={child} depth={depth + 1} key={child.id} hrefPrefix={hrefPrefix} onSelect={onSelect} />
           ))
         : null}
     </>

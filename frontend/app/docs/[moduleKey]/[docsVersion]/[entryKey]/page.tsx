@@ -126,7 +126,7 @@ export default async function DocPage({
             {isMarkdown ? <DocToc /> : null}
             {module.repo_url ? (
               <a className="button doc-toc-source" href={module.repo_url}>
-                <GitBranch size={15} />{t("legacy.921c3b62f1f7")}
+                <GitBranch size={15} />{t("component.moduleDrawer.view_source_code")}
               </a>
             ) : null}
           </div>

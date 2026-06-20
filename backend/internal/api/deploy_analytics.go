@@ -99,7 +99,10 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	report.ok("clear_embeddings")
 
-	result, err := s.app.Store().IngestArtifact(toStoreArtifact(artifact))
+	storeArtifact := toStoreArtifact(artifact)
+	storeArtifact.SourceIP = clientIP(r)
+	storeArtifact.TriggerType = deployTriggerType(r)
+	result, err := s.app.Store().IngestArtifact(storeArtifact)
 	if err != nil {
 		report.fail("ingest_metadata", err)
 		if s.minioClient != nil {
@@ -110,6 +113,25 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	report.ok("ingest_metadata")
 	s.writeMutation(w, map[string]any{"status": "published", "result": result, "deploy": report}, http.StatusAccepted, nil)
+}
+
+func deployTriggerType(r *http.Request) string {
+	for _, name := range []string{
+		"X-Gitlab-Event",
+		"X-GitHub-Event",
+		"X-Circleci-Event-Type",
+		"X-Jenkins",
+		"X-Buildkite-Event",
+	} {
+		if strings.TrimSpace(r.Header.Get(name)) != "" {
+			return "pipeline"
+		}
+	}
+	if strings.TrimSpace(r.Header.Get("X-Modex-Deploy-Trigger")) == "pipeline" ||
+		strings.TrimSpace(r.Header.Get("X-CI")) != "" {
+		return "pipeline"
+	}
+	return "manual"
 }
 
 func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +152,14 @@ func (s *Server) handleReleases(w http.ResponseWriter, r *http.Request) {
 	if kw := keywordOf(r); kw != "" {
 		filtered := releases[:0:0]
 		for _, rel := range releases {
-			if containsFold(rel.ModuleKey, kw) || containsFold(rel.Publisher, kw) || containsFold(rel.DocsVersion, kw) || containsFold(rel.ReleaseID, kw) {
+			if containsFold(rel.ModuleKey, kw) ||
+				containsFold(rel.DocsVersion, kw) ||
+				containsFold(rel.PackageVersion, kw) ||
+				containsFold(rel.CommitSHA, kw) ||
+				containsFold(rel.Branch, kw) ||
+				containsFold(rel.SourceIP, kw) ||
+				containsFold(rel.TriggerType, kw) ||
+				containsFold(rel.ReleaseID, kw) {
 				filtered = append(filtered, rel)
 			}
 		}

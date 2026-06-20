@@ -14,10 +14,13 @@ type Release = {
   release_id: string;
   module_key: string;
   docs_version: string;
+  commit_sha: string;
   branch: string;
   publisher: string;
   build_system: string;
   build_id: string;
+  trigger_type: string;
+  source_ip: string;
   artifact_version: string;
   package_version: string;
   status: string;
@@ -30,14 +33,14 @@ export default function ReleasesPage() {
   const { items: pageRows, total, page, setPage, error } = usePaged<Release>("/api/admin/releases", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title={t("legacy.7290d89a6d74")} kicker="Releases" description={t("legacy.85135e8716b5")}>
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("legacy.01de8216e0d0")}{error}</div> : null}
+    <AdminShell title={t("component.adminShell.release_history")} kicker="Releases" description={t("admin.releases.track_the_source_build_system_version_and_status")}>
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("admin.mcpLogs.load_failed")}{error}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder={t("legacy.7ff56c80c8f0")}
+            placeholder={t("admin.releases.search_module_publisher_version")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -48,35 +51,38 @@ export default function ReleasesPage() {
         {total === 0 ? (
           <EmptyState
             icon={History}
-            title={keyword ? t("legacy.f3f06af0da9a") : t("legacy.f3208952b99f")}
-            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.d08269066815")}
+            title={keyword ? t("admin.releases.no_matching_release_records") : t("admin.releases.no_publish_records")}
+            hint={keyword ? t("admin.mcpLogs.try_a_different_keyword") : t("admin.releases.each_release_is_recorded_here_after_pushing_documentation")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>Release</th>
-                <th>{t("legacy.b07e5088eafa")}</th>
-                <th>{t("legacy.78d8ccff9b0b")}</th>
-                <th>{t("legacy.984d7eb384ea")}</th>
-                <th>{t("legacy.e80bc10ef28b")}</th>
-                <th>{t("legacy.6320b4a8722a")}</th>
-                <th>{t("legacy.e8ff4d335dee")}</th>
+                <th>{t("me.recent.module")}</th>
+                <th>{t("admin.releases.documentation_version")}</th>
+                <th>{t("admin.releases.trigger")}</th>
+                <th>{t("admin.releases.source_ip")}</th>
+                <th>{t("admin.releases.commit")}</th>
+                <th>{t("admin.releases.status")}</th>
+                <th>{t("admin.releases.published_at")}</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((r) => (
                 <tr key={r.release_id}>
                   <td>
-                    <span className="code-chip">{r.release_id}</span>
-                    <div className="muted mt-1 text-xs">{r.artifact_version}</div>
+                    <strong>{r.module_key}</strong>
+                    {r.branch ? <div className="muted mt-1 text-xs">{r.branch}</div> : null}
                   </td>
-                  <td>{r.module_key}</td>
-                  <td><span className="tag">{r.docs_version}</span></td>
-                  <td>{r.publisher}</td>
-                  <td>{r.build_system} #{r.build_id}</td>
+                  <td>
+                    <span className="tag">{r.docs_version}</span>
+                    {r.package_version ? <div className="muted mt-1 text-xs">{r.package_version}</div> : null}
+                  </td>
+                  <td>{triggerLabel(r.trigger_type, t)}</td>
+                  <td>{r.source_ip || "-"}</td>
+                  <td>{r.commit_sha ? <span className="code-chip">{r.commit_sha.slice(0, 8)}</span> : <span className="muted">-</span>}</td>
                   <td><span className="badge badge-success"><span className="badge-dot" />{r.status}</span></td>
-                  <td>{r.published_at?.slice(0, 10)}</td>
+                  <td>{r.published_at ? new Date(r.published_at).toLocaleString() : "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -86,4 +92,8 @@ export default function ReleasesPage() {
       </div>
     </AdminShell>
   );
+}
+
+function triggerLabel(value: string | undefined, t: (key: string) => string) {
+  return value === "pipeline" ? t("admin.releases.pipeline") : t("admin.releases.manual");
 }

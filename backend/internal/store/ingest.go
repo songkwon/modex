@@ -225,6 +225,8 @@ func (s *MemoryStore) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 		DocsVersion:     a.DocsVersion,
 		Publisher:       firstNonEmpty(firstString(a.Authors), "docsctl"),
 		BuildSystem:     "docsctl",
+		TriggerType:     firstNonEmpty(a.TriggerType, "manual"),
+		SourceIP:        a.SourceIP,
 		ArtifactVersion: now.Format("20060102.150405"),
 		PackageVersion:  a.PackageVersion,
 		StorageURI:      "memory://" + a.ModuleKey + "/" + a.DocsVersion + "/docs-artifact.zip",

@@ -35,7 +35,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       className="mdx-code__copy"
-      aria-label={t("legacy.420c20dd9fcc")}
+      aria-label={t("component.codeBlockCopy.copy_code")}
       onClick={() => {
         navigator.clipboard.writeText(text).then(() => {
           setDone(true);

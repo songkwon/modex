@@ -27,10 +27,10 @@ export default function MCPLogsPage() {
   const { items: pageRows, total, page, setPage, error, loading } = usePaged<MCPLog>("/api/admin/analytics/mcp", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title={t("legacy.795c8bbceda7")} kicker="AI Access" description={t("legacy.7bec6afb46a2")}>
+    <AdminShell title={t("component.adminShell.mcp_logs")} kicker="AI Access" description={t("admin.mcpLogs.log_ai_tool_behavior_via_mcp_reading_modules")}>
       {error ? (
         <div className="panel badge-danger" style={{ borderRadius: 12 }}>
-          {t("legacy.01de8216e0d0")}{error}{t("legacy.89a00d097403")}
+          {t("admin.mcpLogs.load_failed")}{error}{t("admin.mcpLogs.super_admin_privileges_may_be_required")}
         </div>
       ) : null}
 
@@ -38,7 +38,7 @@ export default function MCPLogsPage() {
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder={t("legacy.6771285bc08c")}
+            placeholder={t("admin.mcpLogs.search_tool_query_user")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -47,23 +47,23 @@ export default function MCPLogsPage() {
 
       <div className="table-card">
         {loading ? (
-          <div className="muted text-sm" style={{ padding: 18 }}>{t("legacy.9dc0825fba54")}</div>
+          <div className="muted text-sm" style={{ padding: 18 }}>{t("admin.mcpLogs.loading")}</div>
         ) : total === 0 ? (
           <EmptyState
             icon={MessageSquareText}
-            title={keyword ? t("legacy.e455f075d925") : t("legacy.179ffc21f317")}
-            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.fea7bb8c19f5")}
+            title={keyword ? t("admin.mcpLogs.no_matching_records") : t("admin.mcpLogs.no_mcp_calls")}
+            hint={keyword ? t("admin.mcpLogs.try_a_different_keyword") : t("admin.mcpLogs.after_configuring_and_connecting_an_mcp_service_ai")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>{t("legacy.5ca6730d4415")}</th>
-                <th>{t("legacy.bcd6771e08ec")}</th>
-                <th>{t("legacy.15c20d768e18")}</th>
-                <th>{t("legacy.0d0e1a86b3aa")}</th>
-                <th>{t("legacy.2087c777c06f")}</th>
-                <th>{t("legacy.8b6ff498515b")}</th>
+                <th>{t("admin.mcpLogs.tools")}</th>
+                <th>{t("admin.mcpLogs.search")}</th>
+                <th>{t("admin.mcpLogs.results")}</th>
+                <th>{t("admin.mcpLogs.user")}</th>
+                <th>{t("admin.mcpLogs.enter")}</th>
+                <th>{t("admin.mcpLogs.time")}</th>
               </tr>
             </thead>
             <tbody>

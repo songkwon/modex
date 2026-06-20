@@ -177,6 +177,8 @@ CREATE TABLE IF NOT EXISTS docs_release (
   pipeline_url TEXT,
   build_system TEXT,
   build_id TEXT,
+  trigger_type TEXT,
+  source_ip TEXT,
   artifact_version TEXT,
   package_version TEXT,
   storage_uri TEXT,
@@ -395,6 +397,8 @@ ALTER TABLE docs_module DROP COLUMN IF EXISTS record_json;
 ALTER TABLE docs_version DROP COLUMN IF EXISTS record_json;
 ALTER TABLE docs_entry DROP COLUMN IF EXISTS record_json;
 ALTER TABLE docs_release DROP COLUMN IF EXISTS record_json;
+ALTER TABLE docs_release ADD COLUMN IF NOT EXISTS trigger_type TEXT;
+ALTER TABLE docs_release ADD COLUMN IF NOT EXISTS source_ip TEXT;
 ALTER TABLE docs_page DROP COLUMN IF EXISTS record_json;
 ALTER TABLE docs_page_view DROP COLUMN IF EXISTS record_json;
 ALTER TABLE docs_search_log DROP COLUMN IF EXISTS record_json;

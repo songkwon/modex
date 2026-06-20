@@ -129,10 +129,10 @@ export function Combobox({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => toggle(query.trim())}
               >
-                {t("legacy.2a0593aa7255")}{query.trim()}”
+                {t("component.ui.combobox.add")}{query.trim()}”
               </button>
             ) : null}
-            {!filtered.length && !canCreate ? <div className="combo-empty">{t("legacy.336cba9a9241")}</div> : null}
+            {!filtered.length && !canCreate ? <div className="combo-empty">{t("component.ui.combobox.no_matches")}</div> : null}
           </div>,
           document.body,
         )
@@ -146,7 +146,7 @@ export function Combobox({
             {labelFor(v)}
             <button
               type="button"
-              aria-label={t("legacy.6135d4159e89")}
+              aria-label={t("component.ui.combobox.remove")}
               onClick={(e) => {
                 e.stopPropagation();
                 onChange(value.filter((x) => x !== v));
@@ -158,7 +158,7 @@ export function Combobox({
         ))}
         <input
           value={query}
-          placeholder={visibleChips.length ? "" : (placeholder ?? t("legacy.2fe6a18a82e9"))}
+          placeholder={visibleChips.length ? "" : (placeholder ?? t("component.ui.combobox.search_and_select"))}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

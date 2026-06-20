@@ -83,7 +83,7 @@ function dec(id){return decodeURIComponent(escape(atob(document.getElementById(i
   if (error) {
     return (
       <div className="mdx-plugin mdx-plugin--error">
-        <span className="mdx-plugin__tag">{t("legacy.c1918f8165fe")}</span>
+        <span className="mdx-plugin__tag">{t("component.mdx.sandboxedPlugin.third_party_plugin_error")}</span>
         <pre>{error}</pre>
       </div>
     );

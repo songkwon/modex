@@ -33,14 +33,14 @@ export function ReindexControls() {
 
   return (
     <section className="panel">
-      <h2 className="font-semibold">{t("legacy.676706b517e5")}</h2>
-      <p className="muted mt-1 text-sm">{t("legacy.b5ef8194c550")}</p>
+      <h2 className="font-semibold">{t("component.reindexControls.index_maintenance")}</h2>
+      <p className="muted mt-1 text-sm">{t("component.reindexControls.rebuild_keyword_index_and_semantic_vector_cache_can")}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="button" disabled={busy !== ""} onClick={() => run("search")}>
-          <RefreshCw size={16} />{busy === "search" ? t("legacy.977350126f6b") : t("legacy.a71015b71f25")}
+          <RefreshCw size={16} />{busy === "search" ? t("component.reindexControls.rebuilding") : t("component.reindexControls.rebuild_search_index")}
         </button>
         <button className="button" disabled={busy !== ""} onClick={() => run("embeddings")}>
-          <RefreshCw size={16} />{busy === "embeddings" ? t("legacy.977350126f6b") : t("legacy.6abfc57f651e")}
+          <RefreshCw size={16} />{busy === "embeddings" ? t("component.reindexControls.rebuilding") : t("component.reindexControls.rebuild_vector_index")}
         </button>
       </div>
       {result ? <pre className="muted mt-3 overflow-auto text-xs">{result}</pre> : null}

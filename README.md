@@ -131,8 +131,7 @@ npx skills add https://modex.example.com
 
 常用配置文件：
 
-- [deploy/.env.example](deploy/.env.example)：本地开发环境变量模板。
-- [deploy/prod.env.example](deploy/prod.env.example)：生产环境变量模板。
+- [deploy/.env.example](deploy/.env.example)：统一环境变量模板，本地开发可直接复制，生产部署请替换所有 secret 和公网 URL。
 - [deploy/config.example.yaml](deploy/config.example.yaml)：应用级配置示例，例如 OIDC claim 映射。
 - [deploy/docker-compose.yml](deploy/docker-compose.yml)：本地/单机部署编排。
 
@@ -303,8 +302,7 @@ See [mcp/npx/README.md](mcp/npx/README.md) for more client examples.
 
 Common configuration files:
 
-- [deploy/.env.example](deploy/.env.example): local development environment template.
-- [deploy/prod.env.example](deploy/prod.env.example): production environment template.
+- [deploy/.env.example](deploy/.env.example): the unified environment template. Copy it for local development, and replace all secrets and public URLs for production.
 - [deploy/config.example.yaml](deploy/config.example.yaml): application-level config such as OIDC claim mapping.
 - [deploy/docker-compose.yml](deploy/docker-compose.yml): local and single-node deployment stack.
 

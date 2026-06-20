@@ -23,7 +23,7 @@ export function DocSourceToggle({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      alert(t("legacy.cbc8618279a5"));
+      alert(t("component.docSourceToggle.copy_failed_please_manually_select_and_copy"));
     }
   }
 
@@ -33,16 +33,16 @@ export function DocSourceToggle({
         <button
           className={`doc-view-toggle__btn${mode === "rendered" ? " active" : ""}`}
           onClick={() => setMode("rendered")}
-          title={t("legacy.4390fa32fde0")}
+          title={t("component.docSourceToggle.render_view")}
         >
-          <Eye size={14} /> {t("legacy.c990c85989ec")}
+          <Eye size={14} /> {t("component.docSourceToggle.view_results")}
         </button>
         <button
           className={`doc-view-toggle__btn${mode === "source" ? " active" : ""}`}
           onClick={() => setMode("source")}
-          title={t("legacy.7d8081dad59b")}
+          title={t("component.docSourceToggle.original_markdown")}
         >
-          <FileCode size={14} /> {t("legacy.a57a3a44d9c3")}
+          <FileCode size={14} /> {t("component.docSourceToggle.view_original_document")}
         </button>
       </div>
 
@@ -51,10 +51,10 @@ export function DocSourceToggle({
       ) : (
         <div className="doc-source">
           <div className="doc-source__head">
-            <span className="doc-source__label">{t("legacy.7d8081dad59b")}</span>
+            <span className="doc-source__label">{t("component.docSourceToggle.original_markdown")}</span>
             <button className="doc-source__copy" onClick={copySource}>
               {copied ? <Check size={14} /> : <Copy size={14} />}
-              {copied ? t("legacy.8f6f8d979c98") : t("legacy.63d90d977348")}
+              {copied ? t("component.ui.copyButton.copied") : t("component.ui.copyButton.copy")}
             </button>
           </div>
           <pre className="doc-source__pre">{source}</pre>

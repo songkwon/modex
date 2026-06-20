@@ -54,7 +54,7 @@ export function UserSelect({
   const groups = useMemo(() => {
     const m: Record<string, User[]> = {};
     for (const u of filtered) {
-      const dept = (u.department || "").trim() || t("legacy.d2909f1647e7");
+      const dept = (u.department || "").trim() || t("component.ui.userSelect.others");
       (m[dept] ||= []).push(u);
     }
     return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0], "zh"));
@@ -78,7 +78,7 @@ export function UserSelect({
             return (
               <span className="user-select__chip" key={uname}>
                 {u?.display_name || uname}
-                <button type="button" onClick={() => toggle(uname)} aria-label={t("legacy.6135d4159e89")}>
+                <button type="button" onClick={() => toggle(uname)} aria-label={t("component.ui.combobox.remove")}>
                   <X size={12} />
                 </button>
               </span>
@@ -89,12 +89,12 @@ export function UserSelect({
 
       <div className="user-select__search">
         <Search size={15} />
-        <input value={keyword} placeholder={placeholder ?? t("legacy.220c1f9da6c4")} onChange={(e) => setKeyword(e.target.value)} />
+        <input value={keyword} placeholder={placeholder ?? t("component.ui.userSelect.search_name_username_email_department")} onChange={(e) => setKeyword(e.target.value)} />
       </div>
 
       <div className="user-select__list">
         {groups.length === 0 ? (
-          <p className="muted" style={{ fontSize: 13, padding: "8px 4px" }}>{t("legacy.656a2b2ccb64")}</p>
+          <p className="muted" style={{ fontSize: 13, padding: "8px 4px" }}>{t("component.ui.userSelect.no_matching_users")}</p>
         ) : (
           groups.map(([dept, members]) => {
             const isCollapsed = q ? false : collapsed[dept];

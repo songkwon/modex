@@ -28,19 +28,19 @@ export function AdminShell({
   // level "super" links are only visible to super admins; "all" links are shared
   // with team admins (the team-scoped console tier).
   const adminLinks: [string, string, typeof FolderTree, "super" | "all"][] = [
-    ["/admin", t("legacy.fea405f9b01d"), BarChart3, "super"],
-    ["/admin/categories", t("legacy.62f8edc30321"), FolderTree, "all"],
-    ["/admin/teams", t("legacy.95a792201917"), UsersRound, "super"],
-    ["/admin/modules", t("legacy.608c2486d555"), Boxes, "all"],
-    ["/admin/users", t("legacy.fbf413d429bd"), Users, "super"],
-    ["/admin/settings", t("legacy.082a738ae620"), Settings, "super"],
-    ["/admin/connected-apps", t("legacy.213f5505bd1a"), Link2, "super"],
-    ["/admin/plugins", t("legacy.35fcbd57d58a"), Plug, "super"],
-    ["/admin/snippets", t("legacy.149f545ffeb8"), Puzzle, "super"],
-    ["/admin/releases", t("legacy.7290d89a6d74"), History, "all"],
-    ["/admin/feedback", t("legacy.5f5b94f329bf"), MessageCircleQuestion, "all"],
-    ["/admin/search-logs", t("legacy.1b9b75f51d20"), Search, "all"],
-    ["/admin/mcp-logs", t("legacy.795c8bbceda7"), MessageSquareText, "all"],
+    ["/admin", t("component.adminShell.overview"), BarChart3, "super"],
+    ["/admin/categories", t("component.adminShell.category_management"), FolderTree, "all"],
+    ["/admin/teams", t("component.adminShell.team_management"), UsersRound, "super"],
+    ["/admin/modules", t("component.adminShell.document_source_management"), Boxes, "all"],
+    ["/admin/users", t("component.adminShell.user_management"), Users, "super"],
+    ["/admin/settings", t("component.adminShell.model_settings"), Settings, "super"],
+    ["/admin/connected-apps", t("component.adminShell.app_link"), Link2, "super"],
+    ["/admin/plugins", t("component.adminShell.plugin_management"), Plug, "super"],
+    ["/admin/snippets", t("component.adminShell.reused_snippet"), Puzzle, "super"],
+    ["/admin/releases", t("component.adminShell.release_history"), History, "all"],
+    ["/admin/feedback", t("component.adminShell.documentation_feedback"), MessageCircleQuestion, "all"],
+    ["/admin/search-logs", t("component.adminShell.search_log"), Search, "all"],
+    ["/admin/mcp-logs", t("component.adminShell.mcp_logs"), MessageSquareText, "all"],
   ];
   const [isSuper, setIsSuper] = useState<boolean | null>(cachedIsSuper);
   const [pendingHref, setPendingHref] = useState<string | null>(null);

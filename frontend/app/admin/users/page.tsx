@@ -73,9 +73,9 @@ export default function AdminUsersPage() {
   // Identity is a single derived tier: super admin > team leader > member.
   const leaderUsernames = useMemo(() => new Set((teams || []).flatMap((t) => t.leaders || [])), [teams]);
   function identityOf(u: User): { label: string; cls: string } {
-    if (u.is_super_admin) return { label: t("legacy.56db248412ff"), cls: "badge-danger" };
-    if (leaderUsernames.has(u.username)) return { label: t("legacy.d59c8cdb38a5"), cls: "badge-success" };
-    return { label: t("legacy.6e6d6ddbb7c1"), cls: "" };
+    if (u.is_super_admin) return { label: t("admin.users.superAdmin"), cls: "badge-danger" };
+    if (leaderUsernames.has(u.username)) return { label: t("admin.users.team_lead"), cls: "badge-success" };
+    return { label: t("admin.teams.members"), cls: "" };
   }
 
   // Team membership is owned by the Team (leader + members), so a user's teams
@@ -136,7 +136,7 @@ export default function AdminUsersPage() {
   }
 
   async function remove(user: User) {
-    if (!confirm(t("legacy.5d1e06d73d56", { value1: user.username }))) return;
+    if (!confirm(t("admin.users.confirm_deletion_of_user_value1", { value1: user.username }))) return;
     try {
       await deleteUser(user.id);
       reload();
@@ -146,21 +146,21 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <AdminShell title={t("legacy.fbf413d429bd")} kicker="Users" description={t("legacy.f40dbd142ee2")}>
+    <AdminShell title={t("component.adminShell.user_management")} kicker="Users" description={t("admin.users.manage_user_profiles_and_permissions_team_membership_is")}>
       {(error || loadError) ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error || loadError}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder={t("legacy.dbff39a5e9ba")}
+            placeholder={t("admin.users.search_display_name_email_department")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}>
-            <Plus size={16} /> {t("legacy.ebabc83b6830")}
+            <Plus size={16} /> {t("admin.users.add_user")}
           </button>
         </div>
       </div>
@@ -170,13 +170,13 @@ export default function AdminUsersPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t("legacy.0d0e1a86b3aa")}</th>
-                <th>{t("legacy.73075237fd0f")}</th>
-                <th>{t("legacy.f128cdf1dae2")}</th>
-                <th>{t("legacy.2a9c9e997642")}</th>
-                <th>{t("legacy.acdf17f4e9c4")}</th>
-                <th>{t("legacy.6320b4a8722a")}</th>
-                <th style={{ textAlign: "right" }}>{t("legacy.ed31fbb483ee")}</th>
+                <th>{t("admin.mcpLogs.user")}</th>
+                <th>{t("admin.users.email")}</th>
+                <th>{t("admin.users.department")}</th>
+                <th>{t("admin.users.identity")}</th>
+                <th>{t("admin.teams.team")}</th>
+                <th>{t("admin.releases.status")}</th>
+                <th className="table-actions-col">{t("admin.modules.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -192,13 +192,13 @@ export default function AdminUsersPage() {
                   <td>{userTeams.length ? userTeams.map((t) => <span className="tag" key={t} style={{ marginRight: 4 }}>{t}</span>) : <span className="muted" style={{ fontSize: 12 }}>—</span>}</td>
                   <td>
                     <span className={`badge ${u.status === "disabled" ? "badge-danger" : "badge-success"}`}>
-                      <span className="badge-dot" />{u.status === "disabled" ? t("legacy.a8c3698b5b8c") : t("legacy.f4f0ead1116b")}
+                      <span className="badge-dot" />{u.status === "disabled" ? t("admin.users.disabled") : t("admin.connectedApps.enable")}
                     </span>
                   </td>
-                  <td>
-                    <div className="row-actions" style={{ justifyContent: "flex-end" }}>
-                      <button className="icon-btn" onClick={() => openEdit(u)} aria-label={t("legacy.051836569928")}><Pencil size={14} /></button>
-                      <button className="icon-btn danger" onClick={() => remove(u)} aria-label={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
+                  <td className="table-actions-cell">
+                    <div className="row-actions">
+                      <button className="icon-btn" onClick={() => openEdit(u)} aria-label={t("admin.categories.edit")}><Pencil size={14} /></button>
+                      <button className="icon-btn danger" onClick={() => remove(u)} aria-label={t("admin.categories.delete")}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -208,8 +208,8 @@ export default function AdminUsersPage() {
                 <tr><td colSpan={7}>
                   <EmptyState
                     icon={UsersIcon}
-                    title={t("legacy.a56b93c27aec")}
-                    hint={t("legacy.5748c7aebb94")}
+                    title={t("admin.users.no_users")}
+                    hint={t("admin.users.click_add_user_top_right_to_create_your")}
                   />
                 </td></tr>
               ) : null}
@@ -222,49 +222,49 @@ export default function AdminUsersPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={isEdit ? t("legacy.67660891683d", { value1: draft.username }) : t("legacy.ebabc83b6830")}
-        subtitle={isEdit ? t("legacy.82243461e51b") : t("legacy.f57b5927ab88")}
+        title={isEdit ? t("admin.users.edit_user_value1", { value1: draft.username }) : t("admin.users.add_user")}
+        subtitle={isEdit ? t("admin.users.update_user_profile_and_permissions") : t("admin.users.create_new_user")}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>{t("legacy.2cd0f3be8738")}</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{t("admin.categories.cancel")}</button>
             <button className="button button-primary" onClick={submit} disabled={!isEdit && !draft.username.trim()}>
-              {isEdit ? t("legacy.a3030bf8f16d") : t("legacy.cde2cd071d25")}
+              {isEdit ? t("admin.modules.save") : t("admin.categories.create")}
             </button>
           </>
         }
       >
         <div className="field-row">
           <div className="field">
-            <label>{t("legacy.1a3f0617d6de")}{isEdit ? "" : " *"}</label>
-            <input value={draft.username} disabled={isEdit} placeholder={t("legacy.2599cb70de43")} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
+            <label>{t("admin.users.username")}{isEdit ? "" : " *"}</label>
+            <input value={draft.username} disabled={isEdit} placeholder={t("admin.users.e_g_alice")} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
           </div>
           <div className="field">
-            <label>{t("legacy.4587cc06a981")}</label>
-            <input value={draft.display_name} placeholder={t("legacy.7ffc934b2329")} onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} />
+            <label>{t("admin.users.display_name")}</label>
+            <input value={draft.display_name} placeholder={t("admin.users.e_g_alice_2")} onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} />
           </div>
         </div>
         <div className="field-row">
           <div className="field">
-            <label>{t("legacy.73075237fd0f")}</label>
+            <label>{t("admin.users.email")}</label>
             <input value={draft.email} placeholder="name@example.com" onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
           </div>
           <div className="field">
-            <label>{t("legacy.f128cdf1dae2")}</label>
-            <input value={draft.department} placeholder={t("legacy.26fc3414b9fd")} onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
+            <label>{t("admin.users.department")}</label>
+            <input value={draft.department} placeholder={t("admin.users.e_g_platform_group")} onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
           </div>
         </div>
         <div className="field">
-          <label>{t("legacy.2d5db2e77279")}</label>
-          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder={t("legacy.85e5f7b44180")} />
-          <span className="field-hint">{t("legacy.b3634089a140")}</span>
+          <label>{t("admin.users.manageable_categories")}</label>
+          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder={t("admin.users.search_category")} />
+          <span className="field-hint">{t("admin.users.this_user_can_manage_content_under_the_selected")}</span>
         </div>
         {isEdit ? (
           <div className="field">
             <Switch
               checked={draft.status !== "disabled"}
               onChange={(on) => setDraft({ ...draft, status: on ? "active" : "disabled" })}
-              label={t("legacy.10027ec29566")}
-              hint={t("legacy.40160bbaa368")}
+              label={t("admin.users.enable_account")}
+              hint={t("admin.users.after_deactivation_this_user_cannot_log_in")}
             />
           </div>
         ) : null}
@@ -273,8 +273,8 @@ export default function AdminUsersPage() {
             checked={draft.is_super_admin}
             onChange={(on) => setDraft({ ...draft, is_super_admin: on })}
             tone="danger"
-            label={t("legacy.56db248412ff")}
-            hint={t("legacy.f2d695d24fbe")}
+            label={t("admin.users.superAdmin")}
+            hint={t("admin.users.has_full_permissions_and_can_manage_all_users")}
           />
         </div>
       </Modal>

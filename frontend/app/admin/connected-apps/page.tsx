@@ -81,8 +81,8 @@ async function copy(text: string, done: (v: boolean) => void) {
 export default function AdminConnectedAppsPage() {
   const { t } = useI18n();
   const SCOPE_OPTIONS: ComboOption[] = [
-    { value: "modex:mcp:read", label: "modex:mcp:read", hint: t("legacy.17d06d4ffd09") },
-    { value: "modex:docs:read", label: "modex:docs:read", hint: t("legacy.9c0fa2f3543e") },
+    { value: "modex:mcp:read", label: "modex:mcp:read", hint: t("admin.connectedApps.allow_mcp_tools_to_read_documents") },
+    { value: "modex:docs:read", label: "modex:docs:read", hint: t("admin.connectedApps.allow_document_reading_api") },
   ];
   const [apps, setApps] = useState<ConnectedApp[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +127,7 @@ export default function AdminConnectedAppsPage() {
   async function submit() {
     const body = payload(draft);
     if (!body.name || !body.redirect_uris.length) {
-      setError(t("legacy.c73a818cda52"));
+      setError(t("admin.connectedApps.name_and_redirect_uri_are_required"));
       return;
     }
     setSaving(true);
@@ -150,7 +150,7 @@ export default function AdminConnectedAppsPage() {
   }
 
   async function remove(app: ConnectedApp) {
-    if (!confirm(t("legacy.11d1cfc0b20f", { value1: app.name }))) return;
+    if (!confirm(t("admin.connectedApps.delete_app_value1_existing_authorizations_will_be_revoked", { value1: app.name }))) return;
     setError("");
     try {
       await deleteConnectedApp(app.id);
@@ -162,9 +162,9 @@ export default function AdminConnectedAppsPage() {
 
   return (
     <AdminShell
-      title={t("legacy.213f5505bd1a")}
+      title={t("component.adminShell.app_link")}
       kicker="Connected Apps"
-      description={t("legacy.7d008287b514")}
+      description={t("admin.connectedApps.description")}
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
@@ -172,12 +172,12 @@ export default function AdminConnectedAppsPage() {
         <div>
           <div className="page-kicker">OAuth Applications</div>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {t("legacy.900e9dc7b94b")}<code className="code-chip">modex:mcp:read</code>、<code className="code-chip">modex:docs:read</code>
+            {t("admin.connectedApps.recommended_scope")}<code className="code-chip">modex:mcp:read</code>、<code className="code-chip">modex:docs:read</code>
           </p>
         </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}>
-            <Plus size={16} /> {t("legacy.8974b8d346cb")}
+            <Plus size={16} /> {t("admin.connectedApps.create_application")}
           </button>
         </div>
       </div>
@@ -187,12 +187,12 @@ export default function AdminConnectedAppsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t("legacy.63c73c4730f4")}</th>
+                <th>{t("admin.connectedApps.apply")}</th>
                 <th>Client ID</th>
                 <th>Scopes</th>
-                <th>{t("legacy.6320b4a8722a")}</th>
-                <th>{t("legacy.39a9046f9c8c")}</th>
-                <th style={{ textAlign: "right" }}>{t("legacy.ed31fbb483ee")}</th>
+                <th>{t("admin.releases.status")}</th>
+                <th>{t("admin.connectedApps.recently_used")}</th>
+                <th className="table-actions-col">{t("admin.modules.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -210,17 +210,17 @@ export default function AdminConnectedAppsPage() {
                   </td>
                   <td>
                     <span className={`badge ${app.enabled ? "badge-success" : "badge-danger"}`}>
-                      {app.enabled ? t("legacy.f4f0ead1116b") : t("legacy.4e6fd0e28c55")}
+                      {app.enabled ? t("admin.connectedApps.enable") : t("admin.connectedApps.deactivate")}
                     </span>
                     {app.trusted ? <span className="badge" style={{ marginLeft: 4 }}>Trusted</span> : null}
                   </td>
                   <td className="muted" style={{ fontSize: 12 }}>
                     {app.last_used_at ? new Date(app.last_used_at).toLocaleString() : "—"}
                   </td>
-                  <td>
-                    <div className="row-actions" style={{ justifyContent: "flex-end" }}>
-                      <button className="icon-btn" onClick={() => openEdit(app)} aria-label={t("legacy.051836569928")}><Pencil size={14} /></button>
-                      <button className="icon-btn" onClick={() => remove(app)} aria-label={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
+                  <td className="table-actions-cell">
+                    <div className="row-actions">
+                      <button className="icon-btn" onClick={() => openEdit(app)} aria-label={t("admin.categories.edit")}><Pencil size={14} /></button>
+                      <button className="icon-btn" onClick={() => remove(app)} aria-label={t("admin.categories.delete")}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -228,13 +228,13 @@ export default function AdminConnectedAppsPage() {
               {!apps.length && !loading ? (
                 <tr>
                   <td colSpan={6}>
-                    <EmptyState icon={Link2} title={t("legacy.f225c5556445")} hint={t("legacy.ddaf636a33c1")} />
+                    <EmptyState icon={Link2} title={t("admin.connectedApps.no_app_links_yet")} hint={t("admin.connectedApps.create_a_new_oauth_application_to_allow_external")} />
                   </td>
                 </tr>
               ) : null}
               {loading ? (
                 <tr>
-                  <td colSpan={6}><span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Loader2 size={15} className="ds-spin" /> {t("legacy.4927a53bcc88")}</span></td>
+                  <td colSpan={6}><span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Loader2 size={15} className="ds-spin" /> {t("component.docReadStats.loading")}</span></td>
                 </tr>
               ) : null}
             </tbody>
@@ -242,61 +242,51 @@ export default function AdminConnectedAppsPage() {
         </div>
       </div>
 
-      <section className="card" style={{ display: "grid", gap: 10 }}>
-        <div className="page-kicker">OAuth endpoints</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <code className="code-chip">/.well-known/oauth-authorization-server</code>
-          <code className="code-chip">/oauth/authorize</code>
-          <code className="code-chip">/oauth/token</code>
-          <code className="code-chip">/oauth/revoke</code>
-        </div>
-      </section>
-
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={draft.id ? t("legacy.c624c6ca40d9", { value1: draft.name }) : t("legacy.ce99c2ee524c")}
-        subtitle={t("legacy.cee6703ce528")}
+        title={draft.id ? t("admin.connectedApps.edit_app_value1", { value1: draft.name }) : t("admin.connectedApps.create_application_link")}
+        subtitle={t("admin.connectedApps.the_client_secret_is_displayed_only_once_upon")}
         width={720}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>{createdSecret ? t("legacy.c0b3fbff51cc") : t("legacy.2cd0f3be8738")}</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{createdSecret ? t("admin.modules.done") : t("admin.categories.cancel")}</button>
             <button className="button button-primary" onClick={submit} disabled={saving || !draft.name.trim() || !draft.redirect_text.trim()}>
-              {saving ? <Loader2 size={16} className="ds-spin" /> : <KeyRound size={16} />} {draft.id ? t("legacy.a3030bf8f16d") : t("legacy.cde2cd071d25")}
+              {saving ? <Loader2 size={16} className="ds-spin" /> : <KeyRound size={16} />} {draft.id ? t("admin.modules.save") : t("admin.categories.create")}
             </button>
           </>
         }
       >
         {createdSecret ? (
           <div className="field" style={{ border: "1px solid hsl(var(--accent-border))", borderRadius: 14, padding: 12, background: "hsl(var(--accent-soft))" }}>
-            <label>{t("legacy.1f810545799c")}</label>
+            <label>{t("admin.connectedApps.client_secret_shown_only_once")}</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input readOnly value={createdSecret} style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} />
               <button className="button" onClick={() => copy(createdSecret, (v) => setCopied(v ? "secret" : ""))}>
                 {copied === "secret" ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
-            <span className="field-hint">{t("legacy.a7a4d24d4e85")}</span>
+            <span className="field-hint">{t("admin.connectedApps.save_this_securely_in_your_external_application_immediately")}</span>
           </div>
         ) : null}
 
         <div className="field">
-          <label>{t("legacy.c871bddf3633")}</label>
-          <input value={draft.name} autoFocus placeholder={t("legacy.4bc9b4d2219a")} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          <span className="field-hint">{t("legacy.445bae65f5fa")}</span>
+          <label>{t("admin.connectedApps.app_name")}</label>
+          <input value={draft.name} autoFocus placeholder={t("admin.connectedApps.e_g_internal_mcp_gateway")} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          <span className="field-hint">{t("admin.connectedApps.client_id_is_auto_generated_and_displayed_in")}</span>
         </div>
 
         {draft.id ? (
           <div className="field">
             <label>Client ID</label>
             <input value={draft.client_id || ""} readOnly style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} />
-            <span className="field-hint">{t("legacy.3232f160da88")}</span>
+            <span className="field-hint">{t("admin.connectedApps.client_id_cannot_be_modified_after_app_creation")}</span>
           </div>
         ) : null}
 
         <div className="field">
-          <label>{t("legacy.dc2ba467fc7a")}</label>
-          <input value={draft.description || ""} placeholder={t("legacy.a428f7c3d4b5")} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+          <label>{t("admin.categories.description")}</label>
+          <input value={draft.description || ""} placeholder={t("admin.connectedApps.describe_how_this_app_accesses_modex")} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
         </div>
 
         <div className="field">
@@ -307,7 +297,7 @@ export default function AdminConnectedAppsPage() {
             style={{ minHeight: 84, fontFamily: "ui-monospace, monospace", fontSize: 13 }}
             onChange={(e) => setDraft({ ...draft, redirect_text: e.target.value })}
           />
-          <span className="field-hint">{t("legacy.007dcf4c2a4c")}</span>
+          <span className="field-hint">{t("admin.connectedApps.one_uri_per_line_exact_match_required_for")}</span>
         </div>
 
         <div className="field">
@@ -316,23 +306,23 @@ export default function AdminConnectedAppsPage() {
             options={SCOPE_OPTIONS}
             value={draft.scopes}
             onChange={(scopes) => setDraft({ ...draft, scopes })}
-            placeholder={t("legacy.862aa2cfad14")}
+            placeholder={t("admin.connectedApps.select_authorization_scope")}
           />
-          <span className="field-hint">{t("legacy.af793bf18819")}</span>
+          <span className="field-hint">{t("admin.connectedApps.mcp_integration_should_include_at_least_modex_mcp")}</span>
         </div>
 
         <div className="field-row">
           <Switch
             checked={draft.enabled}
             onChange={(enabled) => setDraft({ ...draft, enabled })}
-            label={t("legacy.aa50aae6ada8")}
-            hint={t("legacy.e76e77cb411f")}
+            label={t("admin.connectedApps.enable_app")}
+            hint={t("admin.connectedApps.after_closing_token_exchange_and_bearer_access_will")}
           />
           <Switch
             checked={draft.trusted}
             onChange={(trusted) => setDraft({ ...draft, trusted })}
             label="Trusted"
-            hint={t("legacy.b3bf0cf5def6")}
+            hint={t("admin.connectedApps.trusted_apps_can_skip_the_user_authorization_confirmation")}
           />
         </div>
       </Modal>

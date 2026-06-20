@@ -23,7 +23,7 @@ export default function McpUsagePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const displayToken = token || t("legacy.c3725c6f9ffa");
+  const displayToken = token || t("me.mcp.your_token");
 
   const claudeCmd = `claude mcp add modex \\
   --env MODEX_API_BASE_URL=${API_BASE} \\
@@ -74,34 +74,34 @@ export default function McpUsagePage() {
     <main className="main">
       <section className="grid" style={{ maxWidth: 860, margin: "0 auto" }}>
         <header className="hero-panel">
-          <div className="page-kicker">{t("legacy.96ea668f0340")}</div>
-          <h1 className="page-title">{t("legacy.e5d0b332a643")}</h1>
+          <div className="page-kicker">{t("me.mcp.ai_tool_integration")}</div>
+          <h1 className="page-title">{t("me.mcp.integrate_modex_into_your_ai_workspace")}</h1>
           <p className="hero-copy">
-            {t("legacy.41cb16b7f958")}
-            <code className="code-chip" style={{ margin: "0 4px" }}>npx</code> {t("legacy.5cf4f6c8999e")}
+            {t("me.mcp.this_mcp_and_skill_are_designed_for_modex")}
+            <code className="code-chip" style={{ margin: "0 4px" }}>npx</code> {t("me.mcp.launched_on_demand_locally_and_connects_to_the")}
           </p>
         </header>
 
         <section className="card">
           <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.1944022afe3d")}</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.your_mcp_token")}</h2>
             <button className="button button-primary" onClick={handleRotate} disabled={loading}>
-              <RefreshCw size={14} /> {token ? t("legacy.3221a042ea36") : t("legacy.f9e0988907b1")}
+              <RefreshCw size={14} /> {token ? t("admin.modules.regenerate") : t("me.mcp.generate_token")}
             </button>
           </div>
           <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-            {t("legacy.99da96d9cc60")}
+            {t("me.mcp.each_user_has_a_unique_token_the_server")}
           </p>
           <div className="mcp-code" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {loading ? t("legacy.4927a53bcc88") : displayToken}
+              {loading ? t("component.docReadStats.loading") : displayToken}
             </code>
             {token && (
               <button
                 className="icon-btn"
                 onClick={() => copyText(token, setCopiedCmd)}
-                aria-label={t("legacy.9541f4a07849")}
-                title={t("legacy.9541f4a07849")}
+                aria-label={t("me.mcp.copy_token")}
+                title={t("me.mcp.copy_token")}
               >
                 {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
               </button>
@@ -111,14 +111,14 @@ export default function McpUsagePage() {
 
         <section className="card">
           <h2 style={{ fontSize: 16, fontWeight: 720 }}>Claude Code</h2>
-          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>{t("legacy.c3e840cc5817")}</p>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>{t("me.mcp.run_in_terminal_token_is_auto_filled_with")}</p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{claudeCmd}</pre>
             <button
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(claudeCmd, setCopiedCmd)}
-              aria-label={t("legacy.605c82dd96bc")}
+              aria-label={t("me.mcp.copy_command")}
             >
               {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
             </button>
@@ -126,15 +126,15 @@ export default function McpUsagePage() {
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.d4db4558fdd4")}</h2>
-          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>{t("legacy.aa141ab924f9")} <code className="code-chip">~/.cursor/mcp.json</code>）：</p>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.cursor_windsurf_etc")}</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>{t("me.mcp.add_to_mcp_configuration_file_e_g")} <code className="code-chip">~/.cursor/mcp.json</code>）：</p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{cursorJson}</pre>
             <button
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(cursorJson, setCopiedJson)}
-              aria-label={t("legacy.6bf7933df3bb")}
+              aria-label={t("me.mcp.copy_configuration")}
             >
               {copiedJson ? <Check size={14} /> : <Copy size={14} />}
             </button>
@@ -142,9 +142,9 @@ export default function McpUsagePage() {
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.0b57f8fcc9d2")}</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.offline_intranet_installation_no_public_npm_required")}</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {t("legacy.45a14bc557f9")}
+            {t("me.mcp.mcp_packages_are_released_alongside_modex_and_also")}
           </p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{offlineCmd}</pre>
@@ -152,28 +152,28 @@ export default function McpUsagePage() {
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(offlineCmd, setCopiedOffline)}
-              aria-label={t("legacy.605c82dd96bc")}
+              aria-label={t("me.mcp.copy_command")}
             >
               {copiedOffline ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            {t("legacy.fc8479135d5b")} <code className="code-chip">npx</code> {t("legacy.2334c248bed2")}
+            {t("me.mcp.also_supported_if_you_split_your_mcp_packages")} <code className="code-chip">npx</code> {t("me.mcp.install_directly_from_git")}
           </p>
           <pre className="mcp-code" style={{ marginTop: 8 }}>{gitCmd}</pre>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            {t("legacy.45cba98c6caf")}
+            {t("me.mcp.or_download_the_tool_output_directly")}
             <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-mcp.tgz</a>
-            {t("legacy.5a2c57dc4d25")}
+            {t("me.mcp.also_available_for_download")}
             <a href={`${API_BASE}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
-            用 <code className="code-chip">node index.mjs</code> {t("legacy.c21137d45ca1")}
+            用 <code className="code-chip">node index.mjs</code> {t("me.mcp.run_directly")}
           </p>
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.3e8ad9fe8b24")}</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.install_modex_skill")}</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {t("legacy.73f21d4d035f")}
+            {t("me.mcp.skills_provide_modex_usage_guidelines_retrieval_preferences_and")}
           </p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{skillCmd}</pre>
@@ -181,38 +181,38 @@ export default function McpUsagePage() {
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(skillCmd, setCopiedSkill)}
-              aria-label={t("legacy.605c82dd96bc")}
+              aria-label={t("me.mcp.copy_command")}
             >
               {copiedSkill ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            {t("legacy.52776e43b2c6")} <code className="code-chip">npx skills add https://github.com/your-org/modex/tree/main/mcp/skill</code>。
+            {t("me.mcp.also_supported_if_the_skill_is_maintained_in")} <code className="code-chip">npx skills add https://github.com/your-org/modex/tree/main/mcp/skill</code>。
           </p>
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.d249cdf8bc64")}</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.available_tools")}</h2>
           <ul className="mcp-tool-list" style={{ marginTop: 10 }}>
             <li>
               <span className="tag">list_modules</span>
-              <span className="mcp-tool-desc">{t("legacy.b31ee4dade3a")}</span>
+              <span className="mcp-tool-desc">{t("me.mcp.list_document_sources_by_category_keyword")}</span>
             </li>
             <li>
               <span className="tag">list_versions</span>
-              <span className="mcp-tool-desc">{t("legacy.127f8a6a8026")}</span>
+              <span className="mcp-tool-desc">{t("me.mcp.list_versions_of_a_document_source")}</span>
             </li>
             <li>
               <span className="tag">search_docs</span>
-              <span className="mcp-tool-desc">{t("legacy.34ae19c383c7")}</span>
+              <span className="mcp-tool-desc">{t("me.mcp.keyword_semantic_hybrid_search")}</span>
             </li>
             <li>
               <span className="tag">get_doc_page</span>
-              <span className="mcp-tool-desc">{t("legacy.0d1c3a645729")}</span>
+              <span className="mcp-tool-desc">{t("me.mcp.read_document_body_by_doc_id")}</span>
             </li>
           </ul>
           <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-            {t("legacy.86bcd08e4b03")}
+            {t("me.mcp.note_mcp_shares_the_same_search_capability_with")}
           </p>
         </section>
       </section>

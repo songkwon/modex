@@ -40,11 +40,11 @@ export function ThemeToggle() {
     apply(next);
   }
 
-  const label = choice === "system" ? t("legacy.217cfe7db1e3") : choice === "dark" ? t("legacy.df2cedace72a") : t("legacy.6fa7e15a01ab");
+  const label = choice === "system" ? t("component.themeToggle.follow_system") : choice === "dark" ? t("component.themeToggle.night_mode") : t("component.themeToggle.day");
   const Icon = choice === "system" ? Monitor : choice === "dark" ? Moon : Sun;
 
   return (
-    <button className="button icon-button" onClick={cycle} title={t("legacy.fc175993cd37", { value1: label })} aria-label={t("legacy.fc83a6ca6db4", { value1: label })}>
+    <button className="button icon-button" onClick={cycle} title={t("component.themeToggle.subject_value1_click_to_toggle", { value1: label })} aria-label={t("component.themeToggle.subject_value1", { value1: label })}>
       <Icon size={18} />
     </button>
   );
