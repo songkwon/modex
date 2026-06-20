@@ -2,6 +2,7 @@
 
 import { ArrowRight, BookOpen, Box, Boxes, Cpu, Layers, Layout, Package, Wrench } from "lucide-react";
 import type { Category, ModuleInfo } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 const ICONS: Record<string, typeof Boxes> = {
   wrench: Wrench,
@@ -34,6 +35,7 @@ export function PlatformCards({
   modules: ModuleInfo[];
   onSelect: (category: Category) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="platform-grid">
       {categories.map((cat) => {
@@ -46,7 +48,7 @@ export function PlatformCards({
               <span className="platform-icon"><Icon size={20} /></span>
               <div className="platform-titles">
                 <div className="platform-name">{cat.name}</div>
-                <div className="platform-count">{total} 个文档集合</div>
+                <div className="platform-count">{total} {t("legacy.5522d93cb7a1")}</div>
               </div>
             </div>
             {cat.description ? <p className="platform-desc muted">{cat.description}</p> : null}
@@ -75,7 +77,7 @@ export function PlatformCards({
                 ))}
               </div>
             ) : null}
-            <span className="platform-cta">浏览文档 <ArrowRight size={14} /></span>
+            <span className="platform-cta">{t("legacy.f590c32742cd")} <ArrowRight size={14} /></span>
           </button>
         );
       })}

@@ -2,18 +2,20 @@
 
 import { ExternalLink, X } from "lucide-react";
 import type { ModuleInfo } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; onClose: () => void }) {
+  const { t } = useI18n();
   if (!module) return null;
   const rows = [
-    ["分类", module.category_path],
+    [t("legacy.515559957fd3"), module.category_path],
     ["Owner", module.owner_group],
     ["maintainers", module.maintainers.join(", ")],
-    ["默认文档版本", module.default_version],
+    [t("legacy.c68acbc684f6"), module.default_version],
     ["package_version", module.package_version],
     ["channel", module.channel],
     ["edition", module.edition],
-    ["最近发布", module.updated_at.slice(0, 10)]
+    [t("legacy.c71895a3aa4b"), module.updated_at.slice(0, 10)]
   ];
   return (
     <aside className="drawer">
@@ -22,7 +24,7 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
           <h2 className="text-xl font-semibold">{module.name}</h2>
           <p className="muted mt-2 text-sm leading-6">{module.description}</p>
         </div>
-        <button className="button icon-button" onClick={onClose} aria-label="关闭">
+        <button className="button icon-button" onClick={onClose} aria-label={t("legacy.3fd47edce45b")}>
           <X size={16} />
         </button>
       </div>
@@ -41,7 +43,7 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
       </div>
       <a className="button mt-5" href={module.repo_url}>
         <ExternalLink size={16} />
-        查看源码
+        {t("legacy.921c3b62f1f7")}
       </a>
     </aside>
   );

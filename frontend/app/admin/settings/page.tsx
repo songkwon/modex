@@ -5,41 +5,41 @@ import { Check, KeyRound, ListChecks, Loader2, RotateCcw, Sparkles } from "lucid
 import { AdminShell } from "@/components/admin-shell";
 import { Combobox } from "@/components/ui/combobox";
 import { fetchModels, getSettings, runRecallTest, saveSettings, type AISettings, type RecallTestResult } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 // Supported chat API formats. "openai-chat" covers OpenAI and every
 // OpenAI-compatible vendor (DeepSeek, Qwen, GLM, Moonshot, Ollama, vLLM, …);
 // the others are the native protocols of the major providers.
-const PROTOCOLS: { value: string; label: string }[] = [
-  { value: "openai-chat", label: "OpenAI Chat Completions" },
-  { value: "anthropic", label: "Anthropic Messages（原生）" },
-  { value: "gemini", label: "Gemini generateContent（原生）" },
-  { value: "openai-responses", label: "OpenAI Responses API" },
-];
-
-// Provider presets only fill the API format + Base URL — the model is always
-// fetched from the endpoint, never hardcoded. Both fields stay editable.
-const PRESETS: { label: string; base: string; protocol: string }[] = [
-  { label: "OpenAI", base: "https://api.openai.com/v1", protocol: "openai-chat" },
-  { label: "Anthropic Claude", base: "https://api.anthropic.com", protocol: "anthropic" },
-  { label: "Google Gemini", base: "https://generativelanguage.googleapis.com", protocol: "gemini" },
-  { label: "DeepSeek", base: "https://api.deepseek.com/v1", protocol: "openai-chat" },
-  { label: "通义千问 Qwen", base: "https://dashscope.aliyuncs.com/compatible-mode/v1", protocol: "openai-chat" },
-  { label: "智谱 GLM", base: "https://open.bigmodel.cn/api/paas/v4", protocol: "openai-chat" },
-  { label: "Kimi (Moonshot)", base: "https://api.moonshot.cn/v1", protocol: "openai-chat" },
-  { label: "SiliconFlow", base: "https://api.siliconflow.cn/v1", protocol: "openai-chat" },
-  { label: "Ollama（本地）", base: "http://localhost:11434/v1", protocol: "openai-chat" },
-  { label: "vLLM（自托管）", base: "http://localhost:8000/v1", protocol: "openai-chat" },
-];
-
 const DEFAULT_AI: AISettings = { ask_protocol: "openai-chat", ask_base_url: "", ask_model: "", ask_api_key: "", ask_system_prompt: "" };
-const CHUNK_STRATEGIES = [
-  { value: "markdown", label: "Markdown 标题优先" },
-  { value: "heading", label: "标题层级" },
-  { value: "fixed", label: "固定长度" },
-  { value: "semantic", label: "语义分段" },
-];
 
 export default function AdminSettingsPage() {
+  const { t } = useI18n();
+  const PROTOCOLS: { value: string; label: string }[] = [
+    { value: "openai-chat", label: "OpenAI Chat Completions" },
+    { value: "anthropic", label: t("legacy.d4030608fc9d") },
+    { value: "gemini", label: t("legacy.5436dfa7256d") },
+    { value: "openai-responses", label: "OpenAI Responses API" },
+  ];
+  // Provider presets only fill the API format + Base URL — the model is always
+  // fetched from the endpoint, never hardcoded. Both fields stay editable.
+  const PRESETS: { label: string; base: string; protocol: string }[] = [
+    { label: "OpenAI", base: "https://api.openai.com/v1", protocol: "openai-chat" },
+    { label: "Anthropic Claude", base: "https://api.anthropic.com", protocol: "anthropic" },
+    { label: "Google Gemini", base: "https://generativelanguage.googleapis.com", protocol: "gemini" },
+    { label: "DeepSeek", base: "https://api.deepseek.com/v1", protocol: "openai-chat" },
+    { label: t("legacy.b2e4f4b07a03"), base: "https://dashscope.aliyuncs.com/compatible-mode/v1", protocol: "openai-chat" },
+    { label: t("legacy.3777d3667de2"), base: "https://open.bigmodel.cn/api/paas/v4", protocol: "openai-chat" },
+    { label: "Kimi (Moonshot)", base: "https://api.moonshot.cn/v1", protocol: "openai-chat" },
+    { label: "SiliconFlow", base: "https://api.siliconflow.cn/v1", protocol: "openai-chat" },
+    { label: t("legacy.5680cae9fb6e"), base: "http://localhost:11434/v1", protocol: "openai-chat" },
+    { label: t("legacy.e0be05c80ca4"), base: "http://localhost:8000/v1", protocol: "openai-chat" },
+  ];
+  const CHUNK_STRATEGIES = [
+    { value: "markdown", label: t("legacy.8e5f107f6b1d") },
+    { value: "heading", label: t("legacy.51f3e00a19a8") },
+    { value: "fixed", label: t("legacy.c55a5a68d5f9") },
+    { value: "semantic", label: t("legacy.594f1e850c4c") },
+  ];
   const [ai, setAI] = useState<AISettings>(DEFAULT_AI);
   const [keySet, setKeySet] = useState(false);
   const [embeddingKeySet, setEmbeddingKeySet] = useState(false);
@@ -56,13 +56,13 @@ export default function AdminSettingsPage() {
   const protocol = ai.ask_protocol || "openai-chat";
 
   async function loadModels() {
-    if (!ai.ask_base_url) { setError("请先填写 API Base URL"); return; }
+    if (!ai.ask_base_url) { setError(t("legacy.9250789d08a7")); return; }
     setLoadingModels(true);
     setError("");
     try {
       const r = await fetchModels(ai.ask_base_url, ai.ask_api_key, protocol);
       setModels(r.models || []);
-      if (!r.models?.length) setError("该端点未返回模型列表，请确认地址、密钥和 API 格式是否匹配。");
+      if (!r.models?.length) setError(t("legacy.cbb74d64d1e7"));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -133,16 +133,16 @@ export default function AdminSettingsPage() {
 
   return (
     <AdminShell
-      title="模型设置"
+      title={t("legacy.082a738ae620")}
       kicker="AI Model"
-      description="配置对话、嵌入、重排序模型，以及 RAG 召回测试和文档分段策略。"
+      description={t("legacy.ae0a8bc19bf9")}
       contentClassName="admin-settings-content"
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <section className="card" style={{ display: "grid", gap: 18 }}>
         <div className="field">
-          <label>快速预设</label>
+          <label>{t("legacy.774abe01308a")}</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {PRESETS.map((p) => (
               <button key={p.label} className="shelf-tab" onClick={() => { setModels([]); setAI({ ...ai, ask_base_url: p.base, ask_protocol: p.protocol, ask_model: "" }); }}>
@@ -150,25 +150,25 @@ export default function AdminSettingsPage() {
               </button>
             ))}
           </div>
-          <span className="field-hint">选择预设只填入 API 格式与 Base URL，模型请点「获取模型列表」从接口拉取。</span>
+          <span className="field-hint">{t("legacy.1c03666d5421")}</span>
         </div>
 
         <div className="field">
-          <label>API 格式</label>
+          <label>{t("legacy.6e8df53870d9")}</label>
           <Combobox
             options={PROTOCOLS}
             value={[protocol]}
             onChange={(v) => { setModels([]); setAI({ ...ai, ask_protocol: v[0] || "openai-chat", ask_model: "" }); }}
             multiple={false}
-            placeholder="选择 API 格式…"
+            placeholder={t("legacy.802c7a7a616c")}
           />
-          <span className="field-hint">决定请求的端点与报文格式。大多数兼容服务用 <code className="code-chip">OpenAI Chat Completions</code>。</span>
+          <span className="field-hint">{t("legacy.0ac0b795b3d9")} <code className="code-chip">OpenAI Chat Completions</code>。</span>
         </div>
 
         <div className="field">
           <label>API Base URL</label>
           <input value={ai.ask_base_url || ""} placeholder="https://api.openai.com/v1" onChange={(e) => setAI({ ...ai, ask_base_url: e.target.value })} />
-          <span className="field-hint">服务的根地址；不同 API 格式会自动追加各自的路径（如 <code className="code-chip">/chat/completions</code>、<code className="code-chip">/v1/messages</code>）。</span>
+          <span className="field-hint">{t("legacy.bc7a7d38b333")} <code className="code-chip">/chat/completions</code>、<code className="code-chip">/v1/messages</code>）。</span>
         </div>
 
         <div className="field">
@@ -179,15 +179,15 @@ export default function AdminSettingsPage() {
               type="password"
               style={{ paddingLeft: 34 }}
               value={ai.ask_api_key || ""}
-              placeholder={keySet ? "已配置（留空则保持不变）" : "sk-…"}
+              placeholder={keySet ? t("legacy.1b34ab64cb4c") : "sk-…"}
               onChange={(e) => setAI({ ...ai, ask_api_key: e.target.value })}
             />
           </div>
-          {keySet ? <span className="field-hint" style={{ color: "hsl(var(--accent-strong))" }}>已保存密钥；如需更换请输入新值。</span> : null}
+          {keySet ? <span className="field-hint" style={{ color: "hsl(var(--accent-strong))" }}>{t("legacy.fcd5a8a4f116")}</span> : null}
         </div>
 
         <div className="field">
-          <label>模型</label>
+          <label>{t("legacy.c98e118e0a43")}</label>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
               <Combobox
@@ -196,68 +196,68 @@ export default function AdminSettingsPage() {
                 onChange={(v) => setAI({ ...ai, ask_model: v[0] || "" })}
                 multiple={false}
                 allowCreate
-                placeholder={models.length ? "选择模型…" : "点右侧「获取模型列表」从接口拉取"}
+                placeholder={models.length ? t("legacy.13a1ec97c00b") : t("legacy.81b332916aca")}
               />
             </div>
             <button className="button" onClick={loadModels} disabled={loadingModels} style={{ flex: "none", height: 42 }}>
-              {loadingModels ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 获取模型列表
+              {loadingModels ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} {t("legacy.370174b64fed")}
             </button>
           </div>
-          <span className="field-hint">模型从接口实时获取；填好 Base URL 与 Key 后点击拉取。</span>
+          <span className="field-hint">{t("legacy.10e1f3c4399f")}</span>
         </div>
 
         <div style={{ display: "flex", gap: 16 }}>
           <div className="field" style={{ flex: 1 }}>
-            <label>最大回复 Tokens（可选）</label>
+            <label>{t("legacy.1e60c0ddf4bf")}</label>
             <input
               type="number"
               min={1}
               value={ai.ask_max_tokens ?? ""}
-              placeholder="默认 4096（Anthropic 必填，其它留空不限）"
+              placeholder={t("legacy.11cb7ad4c567")}
               onChange={(e) => setAI({ ...ai, ask_max_tokens: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
             />
-            <span className="field-hint">控制单次回答长度上限，避免长回答被截断。</span>
+            <span className="field-hint">{t("legacy.2793f5c020db")}</span>
           </div>
           <div className="field" style={{ flex: 1 }}>
-            <label>采样温度 Temperature（可选）</label>
+            <label>{t("legacy.a9ec1c08515f")}</label>
             <input
               type="number"
               min={0}
               max={2}
               step={0.1}
               value={ai.ask_temperature ?? ""}
-              placeholder="默认 0.2"
+              placeholder={t("legacy.390e62264453")}
               onChange={(e) => setAI({ ...ai, ask_temperature: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
             />
-            <span className="field-hint">越低越确定、越贴合文档；越高越发散。</span>
+            <span className="field-hint">{t("legacy.a2d1c9e11272")}</span>
           </div>
         </div>
 
         <div className="field">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <label style={{ margin: 0 }}>系统提示词</label>
+            <label style={{ margin: 0 }}>{t("legacy.0894b78b866e")}</label>
             <button
               type="button"
               className="shelf-tab"
               onClick={() => setAI({ ...ai, ask_system_prompt: promptDefault })}
               disabled={!promptDefault || ai.ask_system_prompt === promptDefault}
-              title="恢复为内置默认提示词"
+              title={t("legacy.0e1291fd3454")}
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              <RotateCcw size={13} /> 重置为默认
+              <RotateCcw size={13} /> {t("legacy.08a815d9ce91")}
             </button>
           </div>
           <textarea
             style={{ minHeight: 120, padding: "10px 12px", lineHeight: 1.6 }}
             value={ai.ask_system_prompt || ""}
-            placeholder={promptDefault || "留空使用内置中文 RAG 提示词"}
+            placeholder={promptDefault || t("legacy.01a66986ddcb")}
             onChange={(e) => setAI({ ...ai, ask_system_prompt: e.target.value })}
           />
-          <span className="field-hint">已预填内置默认提示词，可在此基础上修改；点「重置为默认」可还原。留空保存则回退到内置版本。</span>
+          <span className="field-hint">{t("legacy.3c86d2b2decd")}</span>
         </div>
 
         <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>嵌入模型</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.11497d72d8d8")}</h2>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>
               <label>Embedding Base URL</label>
@@ -266,16 +266,16 @@ export default function AdminSettingsPage() {
                 placeholder="https://api.example.com/v1"
                 onChange={(e) => setAI({ ...ai, embedding_base_url: e.target.value })}
               />
-              <span className="field-hint">用于语义检索和混合检索的向量生成接口。</span>
+              <span className="field-hint">{t("legacy.2dfb5037af44")}</span>
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>Embedding 模型</label>
+              <label>{t("legacy.6ac9d692b3a5")}</label>
               <input
                 value={ai.embedding_model || ""}
                 placeholder="text-embedding-3-large / bge-m3"
                 onChange={(e) => setAI({ ...ai, embedding_model: e.target.value })}
               />
-              <span className="field-hint">模型名按供应商接口填写。</span>
+              <span className="field-hint">{t("legacy.bda9b59f36e9")}</span>
             </div>
           </div>
           <div style={{ display: "flex", gap: 16 }}>
@@ -284,21 +284,21 @@ export default function AdminSettingsPage() {
               <input
                 type="password"
                 value={ai.embedding_api_key || ""}
-                placeholder={embeddingKeySet ? "已配置（留空则保持不变）" : "sk-…"}
+                placeholder={embeddingKeySet ? t("legacy.1b34ab64cb4c") : "sk-…"}
                 onChange={(e) => setAI({ ...ai, embedding_api_key: e.target.value })}
               />
-              <span className="field-hint">嵌入接口的访问密钥；留空保持原有配置不变。</span>
+              <span className="field-hint">{t("legacy.c0988d287a6f")}</span>
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>向量维度（固定）</label>
+              <label>{t("legacy.9a9ec48b54a6")}</label>
               <input type="number" value={1024} readOnly disabled />
-              <span className="field-hint">系统固定为 1024 维，请选用输出 1024 维的模型（如 bge-m3）。</span>
+              <span className="field-hint">{t("legacy.6548e49aedc6")}</span>
             </div>
           </div>
         </div>
 
         <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>重排序与召回测试</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.94f35bc53fe7")}</h2>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>
               <label>Rerank Base URL</label>
@@ -309,7 +309,7 @@ export default function AdminSettingsPage() {
               />
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>Rerank 模型</label>
+              <label>{t("legacy.384705c5fe9d")}</label>
               <input
                 value={ai.rerank_model || ""}
                 placeholder="bge-reranker-v2-m3"
@@ -323,12 +323,12 @@ export default function AdminSettingsPage() {
               <input
                 type="password"
                 value={ai.rerank_api_key || ""}
-                placeholder={rerankKeySet ? "已配置（留空则保持不变）" : "sk-…"}
+                placeholder={rerankKeySet ? t("legacy.1b34ab64cb4c") : "sk-…"}
                 onChange={(e) => setAI({ ...ai, rerank_api_key: e.target.value })}
               />
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>重排 TopK</label>
+              <label>{t("legacy.790772caedba")}</label>
               <input
                 type="number"
                 min={1}
@@ -340,16 +340,16 @@ export default function AdminSettingsPage() {
           </div>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>
-              <label>召回测试 Query</label>
+              <label>{t("legacy.c3b28603f37a")}</label>
               <input
                 value={ai.recall_test_query || ""}
-                placeholder="构建缓存怎么清理"
+                placeholder={t("legacy.bc0a4c4b3e24")}
                 onChange={(e) => setAI({ ...ai, recall_test_query: e.target.value })}
               />
-              <span className="field-hint">保存一条基准问题，后续用于对比不同分段、向量和重排配置。</span>
+              <span className="field-hint">{t("legacy.91a8a39cced9")}</span>
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>召回测试 TopK</label>
+              <label>{t("legacy.99c19036e70a")}</label>
               <input
                 type="number"
                 min={1}
@@ -360,18 +360,18 @@ export default function AdminSettingsPage() {
             </div>
           </div>
           <div className="field">
-            <label>期望命中文档 ID</label>
+            <label>{t("legacy.3555c8aa3d59")}</label>
             <textarea
               style={{ minHeight: 78, padding: "10px 12px", lineHeight: 1.6 }}
               value={ai.recall_test_doc_ids || ""}
               placeholder="DemoModule:latest:guide"
               onChange={(e) => setAI({ ...ai, recall_test_doc_ids: e.target.value })}
             />
-            <span className="field-hint">一行一个 doc_id，后续召回测试按命中率、MRR、nDCG 展示效果。</span>
+            <span className="field-hint">{t("legacy.1daaf401584f")}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button className="button" onClick={handleRecallTest} disabled={recallLoading}>
-              {recallLoading ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 运行召回测试
+              {recallLoading ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} {t("legacy.ffe7c281276a")}
             </button>
             {recallResult ? (
               <span className="badge badge-success">
@@ -384,7 +384,7 @@ export default function AdminSettingsPage() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <span className="tag">MRR {recallResult.mrr.toFixed(3)}</span>
                 <span className="tag">nDCG {recallResult.ndcg.toFixed(3)}</span>
-                <span className="tag">命中 {recallResult.actual_doc_ids.filter((id) => recallResult.expected_doc_ids.includes(id)).length}/{recallResult.expected_doc_ids.length}</span>
+                <span className="tag">{t("legacy.393df9bb13ea")} {recallResult.actual_doc_ids.filter((id) => recallResult.expected_doc_ids.includes(id)).length}/{recallResult.expected_doc_ids.length}</span>
               </div>
               <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 6 }}>
                 {(recallResult.results || []).slice(0, recallResult.top_k).map((r) => (
@@ -401,20 +401,20 @@ export default function AdminSettingsPage() {
         </div>
 
         <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>分段策略</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.fe1084a76375")}</h2>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>
-              <label>策略</label>
+              <label>{t("legacy.9c8eb75c7e58")}</label>
               <Combobox
                 options={CHUNK_STRATEGIES}
                 value={ai.chunk_strategy ? [ai.chunk_strategy] : []}
                 onChange={(v) => setAI({ ...ai, chunk_strategy: v[0] || "" })}
                 multiple={false}
-                placeholder="选择分段策略…"
+                placeholder={t("legacy.b1b25cf38535")}
               />
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>分段长度</label>
+              <label>{t("legacy.bffabb2cdf5d")}</label>
               <input
                 type="number"
                 min={1}
@@ -424,7 +424,7 @@ export default function AdminSettingsPage() {
               />
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>重叠长度</label>
+              <label>{t("legacy.be8a228b6ee0")}</label>
               <input
                 type="number"
                 min={0}
@@ -438,14 +438,14 @@ export default function AdminSettingsPage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button className="button button-primary" onClick={submit} disabled={saving}>
-            {saving ? <Loader2 size={16} className="ds-spin" /> : ''} 保存设置
+            {saving ? <Loader2 size={16} className="ds-spin" /> : ''} {t("legacy.c8550237ba70")}
           </button>
-          {saved ? <span className="badge badge-success"><Check size={13} /> 已保存</span> : null}
+          {saved ? <span className="badge badge-success"><Check size={13} /> {t("legacy.1bd91a7d0c53")}</span> : null}
         </div>
       </section>
 
       <p className="muted" style={{ fontSize: 12 }}>
-        提示：对话模型保存后立即用于 AI 问答；嵌入、重排序、分段和召回测试配置会随平台设置持久化，索引链路接入后直接复用。
+        {t("legacy.455bb89e393f")}
       </p>
     </AdminShell>
   );

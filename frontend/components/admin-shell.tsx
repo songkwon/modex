@@ -5,27 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { BarChart3, Boxes, FolderTree, History, Link2, MessageCircleQuestion, MessageSquareText, Plug, Puzzle, Search, Settings, Users, UsersRound } from "lucide-react";
 import { getMe } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 let cachedIsSuper: boolean | null = null;
 let pendingIsSuper: Promise<boolean> | null = null;
-
-// level "super" links are only visible to super admins; "all" links are shared
-// with team admins (the team-scoped console tier).
-const adminLinks: [string, string, typeof FolderTree, "super" | "all"][] = [
-  ["/admin", "概览", BarChart3, "super"],
-  ["/admin/categories", "分类管理", FolderTree, "all"],
-  ["/admin/teams", "团队管理", UsersRound, "super"],
-  ["/admin/modules", "文档源管理", Boxes, "all"],
-  ["/admin/users", "用户管理", Users, "super"],
-  ["/admin/settings", "模型设置", Settings, "super"],
-  ["/admin/connected-apps", "应用链接", Link2, "super"],
-  ["/admin/plugins", "插件管理", Plug, "super"],
-  ["/admin/snippets", "复用片段", Puzzle, "super"],
-  ["/admin/releases", "发布记录", History, "all"],
-  ["/admin/feedback", "文档反馈", MessageCircleQuestion, "all"],
-  ["/admin/search-logs", "搜索日志", Search, "all"],
-  ["/admin/mcp-logs", "MCP 日志", MessageSquareText, "all"],
-];
 
 export function AdminShell({
   title,
@@ -40,7 +23,25 @@ export function AdminShell({
   contentClassName?: string;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const pathname = usePathname();
+  // level "super" links are only visible to super admins; "all" links are shared
+  // with team admins (the team-scoped console tier).
+  const adminLinks: [string, string, typeof FolderTree, "super" | "all"][] = [
+    ["/admin", t("legacy.fea405f9b01d"), BarChart3, "super"],
+    ["/admin/categories", t("legacy.62f8edc30321"), FolderTree, "all"],
+    ["/admin/teams", t("legacy.95a792201917"), UsersRound, "super"],
+    ["/admin/modules", t("legacy.608c2486d555"), Boxes, "all"],
+    ["/admin/users", t("legacy.fbf413d429bd"), Users, "super"],
+    ["/admin/settings", t("legacy.082a738ae620"), Settings, "super"],
+    ["/admin/connected-apps", t("legacy.213f5505bd1a"), Link2, "super"],
+    ["/admin/plugins", t("legacy.35fcbd57d58a"), Plug, "super"],
+    ["/admin/snippets", t("legacy.149f545ffeb8"), Puzzle, "super"],
+    ["/admin/releases", t("legacy.7290d89a6d74"), History, "all"],
+    ["/admin/feedback", t("legacy.5f5b94f329bf"), MessageCircleQuestion, "all"],
+    ["/admin/search-logs", t("legacy.1b9b75f51d20"), Search, "all"],
+    ["/admin/mcp-logs", t("legacy.795c8bbceda7"), MessageSquareText, "all"],
+  ];
   const [isSuper, setIsSuper] = useState<boolean | null>(cachedIsSuper);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
 

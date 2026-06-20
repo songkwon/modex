@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Loader2, Send } from "lucide-react";
 import { usePluginConfig, pluginEnabled, pluginValue } from "./mdx-config";
+import { useI18n } from "@/lib/i18n";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
@@ -35,6 +36,7 @@ export function ApiPlayground({
   headers?: unknown;
   body?: unknown;
 }) {
+  const { t } = useI18n();
   const cfg = usePluginConfig();
   const [m, setM] = useState(method.toUpperCase());
   const [u, setU] = useState(url);
@@ -61,7 +63,7 @@ export function ApiPlayground({
         try {
           hdrs = JSON.parse(headersText);
         } catch {
-          throw new Error("请求头不是合法 JSON");
+          throw new Error(t("legacy.ec6c6aa43ffb"));
         }
       }
       const init: RequestInit = { method: m, headers: hdrs };
@@ -76,7 +78,7 @@ export function ApiPlayground({
       }
       setResp({ status: r.status, ms: Math.round(performance.now() - t0), text: pretty });
     } catch (e) {
-      setResp({ error: e instanceof Error ? e.message : "请求失败" });
+      setResp({ error: e instanceof Error ? e.message : t("legacy.126fbf59cf04") });
     } finally {
       setLoading(false);
     }
@@ -93,11 +95,11 @@ export function ApiPlayground({
         </select>
         <input className="mdx-apiplay__url" value={u} placeholder="https://api.example.com/v1/resource" onChange={(e) => setU(e.target.value)} />
         <button className="mdx-apiplay__send" onClick={send} disabled={loading || !fullUrl}>
-          {loading ? <Loader2 size={14} className="ds-spin" /> : <Send size={14} />} 发送
+          {loading ? <Loader2 size={14} className="ds-spin" /> : <Send size={14} />} {t("legacy.edecf0ae6e51")}
         </button>
       </div>
       <details className="mdx-apiplay__opt">
-        <summary>请求头 / 请求体</summary>
+        <summary>{t("legacy.4a16b15e8914")}</summary>
         <label className="mdx-apiplay__lbl">Headers（JSON）</label>
         <textarea className="mdx-apiplay__ta" value={headersText} placeholder='{"Authorization": "Bearer …"}' onChange={(e) => setHeadersText(e.target.value)} />
         {m !== "GET" && m !== "HEAD" ? (
@@ -110,7 +112,7 @@ export function ApiPlayground({
       {resp ? (
         <div className="mdx-apiplay__resp">
           {"error" in resp ? (
-            <div className="mdx-apiplay__status mdx-apiplay__status--err">请求失败：{resp.error}</div>
+            <div className="mdx-apiplay__status mdx-apiplay__status--err">{t("legacy.01a48c17c5bc")}{resp.error}</div>
           ) : (
             <>
               <div className={`mdx-apiplay__status${resp.status >= 400 ? " mdx-apiplay__status--err" : ""}`}>
@@ -127,17 +129,19 @@ export function ApiPlayground({
 
 // Passive Mintlify-compat containers for hand-authored samples.
 export function RequestExample({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="mdx-apix mdx-apix--req">
-      <div className="mdx-apix__label">请求示例</div>
+      <div className="mdx-apix__label">{t("legacy.5f6c9c309eff")}</div>
       {children}
     </div>
   );
 }
 export function ResponseExample({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="mdx-apix mdx-apix--res">
-      <div className="mdx-apix__label">响应示例</div>
+      <div className="mdx-apix__label">{t("legacy.45105c854fa2")}</div>
       {children}
     </div>
   );
@@ -164,6 +168,7 @@ type Param = { name?: string; in?: string; required?: boolean; schema?: { type?:
 // Renders one OpenAPI operation: summary, parameters, response codes, and a
 // prefilled <ApiPlayground>. JSON specs only; $ref schemas are shown shallowly.
 export function OpenApi({ spec, operation, title }: { spec?: string; operation?: string; title?: string }) {
+  const { t } = useI18n();
   const cfg = usePluginConfig();
   const specUrl = spec || pluginValue(cfg, "openapi", "default_spec_url") || "";
   const [data, setData] = useState<any>(null);
@@ -172,7 +177,7 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
   useEffect(() => {
     if (!pluginEnabled(cfg, "openapi")) return;
     if (!specUrl) {
-      setErr("未配置 OpenAPI 规范地址（spec 属性或插件默认地址）。");
+      setErr(t("legacy.9423fa728535"));
       return;
     }
     let cancelled = false;
@@ -191,11 +196,11 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
   const path = rawPath || "";
 
   if (err) return <div className="mdx-apiplay__status mdx-apiplay__status--err">{err}</div>;
-  if (!data) return <div className="mdx-openapi__loading">加载 OpenAPI 规范…</div>;
+  if (!data) return <div className="mdx-openapi__loading">{t("legacy.a8cdf832ad5c")}</div>;
 
   const op = data?.paths?.[path]?.[method];
   if (!op) {
-    return <div className="mdx-apiplay__status mdx-apiplay__status--err">规范中未找到操作：{method.toUpperCase()} {path}</div>;
+    return <div className="mdx-apiplay__status mdx-apiplay__status--err">{t("legacy.46018705252f")}{method.toUpperCase()} {path}</div>;
   }
   const server = (data.servers?.[0]?.url || "").replace(/\/+$/, "");
   const params: Param[] = op.parameters || [];
@@ -211,14 +216,14 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
 
       {params.length ? (
         <div className="mdx-openapi__section">
-          <h4>参数</h4>
+          <h4>{t("legacy.9634fb0832be")}</h4>
           {params.map((p, i) => (
             <div className="mdx-field" key={i}>
               <div className="mdx-field__head">
                 {p.name ? <code className="mdx-field__name">{p.name}</code> : null}
                 {p.in ? <span className="mdx-field__type">{p.in}</span> : null}
                 {p.schema?.type ? <span className="mdx-field__type">{p.schema.type}</span> : null}
-                {p.required ? <span className="mdx-field__req">必填</span> : null}
+                {p.required ? <span className="mdx-field__req">{t("legacy.11da9dc44285")}</span> : null}
               </div>
               {p.description ? <div className="mdx-field__body">{p.description}</div> : null}
             </div>
@@ -228,7 +233,7 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
 
       {Object.keys(responses).length ? (
         <div className="mdx-openapi__section">
-          <h4>响应</h4>
+          <h4>{t("legacy.3b1f210d39e3")}</h4>
           {Object.entries(responses).map(([code, r]) => (
             <div className="mdx-field" key={code}>
               <div className="mdx-field__head">
@@ -240,7 +245,7 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
         </div>
       ) : null}
 
-      <ApiPlayground method={method} url={`${server}${path}`} title="调试" />
+      <ApiPlayground method={method} url={`${server}${path}`} title={t("legacy.a3ba53fadbae")} />
     </div>
   );
 }

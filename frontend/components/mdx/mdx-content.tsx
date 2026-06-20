@@ -26,6 +26,7 @@ import sql from "highlight.js/lib/languages/sql";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
+import { getServerI18n } from "@/lib/i18n-server";
 import { mdxComponents } from "./index";
 import { remarkCodeMeta, remarkGithubAlerts, rehypeToc } from "./remark-plugins";
 import { MdxConfigProvider, UploadedFencesProvider } from "./mdx-config";
@@ -69,6 +70,7 @@ async function loadUploadedPlugins(): Promise<UploadedPlugin[]> {
 const on = (cfg: PluginConfig, key: string) => !(key in cfg) || cfg[key].enabled;
 
 export async function MdxContent({ source, assetBase }: { source: string; assetBase?: string }) {
+  const { t } = await getServerI18n();
   // Drop a leading Confluence-style [TOC]/[[toc]] macro (and stray leading
   // <br/>) — the right-rail "本页目录" replaces an inline table of contents.
   source = source
@@ -184,7 +186,7 @@ export async function MdxContent({ source, assetBase }: { source: string; assetB
     } catch {
       return (
         <div className="mdx mdx--error">
-          <p className="muted text-sm">文档渲染失败，已回退为纯文本。</p>
+          <p className="muted text-sm">{t("legacy.90394e52e026")}</p>
           <pre className="mdx-code__pre">{source}</pre>
         </div>
       );

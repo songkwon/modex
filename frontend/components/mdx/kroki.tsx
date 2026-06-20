@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePluginConfig, pluginValue } from "./mdx-config";
+import { useI18n } from "@/lib/i18n";
 
 // Diagram-as-code rendered via a Kroki server (https://kroki.io). One HTTP API
 // covers PlantUML, Graphviz, C4, DITAA, BPMN, Excalidraw, Vega, D2 and more.
@@ -47,6 +48,7 @@ export function isKrokiLang(lang: string): boolean {
 }
 
 export function Kroki({ lang, code }: { lang: string; code: string }) {
+  const { t } = useI18n();
   const type = KROKI_TYPES[lang.toLowerCase()] || lang.toLowerCase();
   const cfg = usePluginConfig();
   const base = (pluginValue(cfg, "kroki", "base_url") || ENV_KROKI_BASE).replace(/\/+$/, "");
@@ -79,7 +81,7 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
   if (error) {
     return (
       <div className="mdx-diagram mdx-diagram--error">
-        <span className="mdx-diagram__tag">{type} 渲染失败</span>
+        <span className="mdx-diagram__tag">{type} {t("legacy.55ad71e74ffb")}</span>
         <pre>{source}</pre>
       </div>
     );

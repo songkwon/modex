@@ -15,12 +15,9 @@ import {
   type ConnectedApp,
   type ConnectedAppDraft,
 } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 const DEFAULT_SCOPES = ["modex:mcp:read", "modex:docs:read"];
-const SCOPE_OPTIONS: ComboOption[] = [
-  { value: "modex:mcp:read", label: "modex:mcp:read", hint: "允许 MCP 工具读取文档" },
-  { value: "modex:docs:read", label: "modex:docs:read", hint: "允许读取文档 API" },
-];
 
 type Draft = ConnectedAppDraft & {
   id?: string;
@@ -82,6 +79,11 @@ async function copy(text: string, done: (v: boolean) => void) {
 }
 
 export default function AdminConnectedAppsPage() {
+  const { t } = useI18n();
+  const SCOPE_OPTIONS: ComboOption[] = [
+    { value: "modex:mcp:read", label: "modex:mcp:read", hint: t("legacy.17d06d4ffd09") },
+    { value: "modex:docs:read", label: "modex:docs:read", hint: t("legacy.9c0fa2f3543e") },
+  ];
   const [apps, setApps] = useState<ConnectedApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -125,7 +127,7 @@ export default function AdminConnectedAppsPage() {
   async function submit() {
     const body = payload(draft);
     if (!body.name || !body.redirect_uris.length) {
-      setError("名称和 Redirect URI 必填。");
+      setError(t("legacy.c73a818cda52"));
       return;
     }
     setSaving(true);
@@ -148,7 +150,7 @@ export default function AdminConnectedAppsPage() {
   }
 
   async function remove(app: ConnectedApp) {
-    if (!confirm(`删除应用「${app.name}」？已有授权会被撤销。`)) return;
+    if (!confirm(t("legacy.11d1cfc0b20f", { value1: app.name }))) return;
     setError("");
     try {
       await deleteConnectedApp(app.id);
@@ -160,9 +162,9 @@ export default function AdminConnectedAppsPage() {
 
   return (
     <AdminShell
-      title="应用链接"
+      title={t("legacy.213f5505bd1a")}
       kicker="Connected Apps"
-      description="注册外部应用，让它们通过 OAuth 授权访问 Modex API 与 MCP。适合接入网关、自动化工具和其他业务系统。"
+      description={t("legacy.7d008287b514")}
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
@@ -170,12 +172,12 @@ export default function AdminConnectedAppsPage() {
         <div>
           <div className="page-kicker">OAuth Applications</div>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            推荐 scope：<code className="code-chip">modex:mcp:read</code>、<code className="code-chip">modex:docs:read</code>
+            {t("legacy.900e9dc7b94b")}<code className="code-chip">modex:mcp:read</code>、<code className="code-chip">modex:docs:read</code>
           </p>
         </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}>
-            <Plus size={16} /> 新建应用
+            <Plus size={16} /> {t("legacy.8974b8d346cb")}
           </button>
         </div>
       </div>
@@ -185,12 +187,12 @@ export default function AdminConnectedAppsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>应用</th>
+                <th>{t("legacy.63c73c4730f4")}</th>
                 <th>Client ID</th>
                 <th>Scopes</th>
-                <th>状态</th>
-                <th>最近使用</th>
-                <th style={{ textAlign: "right" }}>操作</th>
+                <th>{t("legacy.6320b4a8722a")}</th>
+                <th>{t("legacy.39a9046f9c8c")}</th>
+                <th style={{ textAlign: "right" }}>{t("legacy.ed31fbb483ee")}</th>
               </tr>
             </thead>
             <tbody>
@@ -208,7 +210,7 @@ export default function AdminConnectedAppsPage() {
                   </td>
                   <td>
                     <span className={`badge ${app.enabled ? "badge-success" : "badge-danger"}`}>
-                      {app.enabled ? "启用" : "停用"}
+                      {app.enabled ? t("legacy.f4f0ead1116b") : t("legacy.4e6fd0e28c55")}
                     </span>
                     {app.trusted ? <span className="badge" style={{ marginLeft: 4 }}>Trusted</span> : null}
                   </td>
@@ -217,8 +219,8 @@ export default function AdminConnectedAppsPage() {
                   </td>
                   <td>
                     <div className="row-actions" style={{ justifyContent: "flex-end" }}>
-                      <button className="icon-btn" onClick={() => openEdit(app)} aria-label="编辑"><Pencil size={14} /></button>
-                      <button className="icon-btn" onClick={() => remove(app)} aria-label="删除"><Trash2 size={14} /></button>
+                      <button className="icon-btn" onClick={() => openEdit(app)} aria-label={t("legacy.051836569928")}><Pencil size={14} /></button>
+                      <button className="icon-btn" onClick={() => remove(app)} aria-label={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -226,13 +228,13 @@ export default function AdminConnectedAppsPage() {
               {!apps.length && !loading ? (
                 <tr>
                   <td colSpan={6}>
-                    <EmptyState icon={Link2} title="还没有应用链接" hint="新建一个 OAuth 应用，外部系统即可通过授权码流程接入 Modex。" />
+                    <EmptyState icon={Link2} title={t("legacy.f225c5556445")} hint={t("legacy.ddaf636a33c1")} />
                   </td>
                 </tr>
               ) : null}
               {loading ? (
                 <tr>
-                  <td colSpan={6}><span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Loader2 size={15} className="ds-spin" /> 加载中…</span></td>
+                  <td colSpan={6}><span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><Loader2 size={15} className="ds-spin" /> {t("legacy.4927a53bcc88")}</span></td>
                 </tr>
               ) : null}
             </tbody>
@@ -253,48 +255,48 @@ export default function AdminConnectedAppsPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={draft.id ? `编辑应用 · ${draft.name}` : "新建应用链接"}
-        subtitle="Client Secret 只会在创建成功后显示一次"
+        title={draft.id ? t("legacy.c624c6ca40d9", { value1: draft.name }) : t("legacy.ce99c2ee524c")}
+        subtitle={t("legacy.cee6703ce528")}
         width={720}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>{createdSecret ? "完成" : "取消"}</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{createdSecret ? t("legacy.c0b3fbff51cc") : t("legacy.2cd0f3be8738")}</button>
             <button className="button button-primary" onClick={submit} disabled={saving || !draft.name.trim() || !draft.redirect_text.trim()}>
-              {saving ? <Loader2 size={16} className="ds-spin" /> : <KeyRound size={16} />} {draft.id ? "保存" : "创建"}
+              {saving ? <Loader2 size={16} className="ds-spin" /> : <KeyRound size={16} />} {draft.id ? t("legacy.a3030bf8f16d") : t("legacy.cde2cd071d25")}
             </button>
           </>
         }
       >
         {createdSecret ? (
           <div className="field" style={{ border: "1px solid hsl(var(--accent-border))", borderRadius: 14, padding: 12, background: "hsl(var(--accent-soft))" }}>
-            <label>Client Secret（仅显示一次）</label>
+            <label>{t("legacy.1f810545799c")}</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input readOnly value={createdSecret} style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} />
               <button className="button" onClick={() => copy(createdSecret, (v) => setCopied(v ? "secret" : ""))}>
                 {copied === "secret" ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
-            <span className="field-hint">请立即保存到外部应用的安全配置中，关闭弹窗后无法再次查看。</span>
+            <span className="field-hint">{t("legacy.a7a4d24d4e85")}</span>
           </div>
         ) : null}
 
         <div className="field">
-          <label>应用名称 *</label>
-          <input value={draft.name} autoFocus placeholder="如 Internal MCP Gateway" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          <span className="field-hint">Client ID 会自动生成，创建后在列表和编辑弹窗里展示。</span>
+          <label>{t("legacy.c871bddf3633")}</label>
+          <input value={draft.name} autoFocus placeholder={t("legacy.4bc9b4d2219a")} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          <span className="field-hint">{t("legacy.445bae65f5fa")}</span>
         </div>
 
         {draft.id ? (
           <div className="field">
             <label>Client ID</label>
             <input value={draft.client_id || ""} readOnly style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }} />
-            <span className="field-hint">已创建应用不可修改 Client ID。</span>
+            <span className="field-hint">{t("legacy.3232f160da88")}</span>
           </div>
         ) : null}
 
         <div className="field">
-          <label>描述</label>
-          <input value={draft.description || ""} placeholder="说明这个应用会如何访问 Modex" onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+          <label>{t("legacy.dc2ba467fc7a")}</label>
+          <input value={draft.description || ""} placeholder={t("legacy.a428f7c3d4b5")} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
         </div>
 
         <div className="field">
@@ -305,7 +307,7 @@ export default function AdminConnectedAppsPage() {
             style={{ minHeight: 84, fontFamily: "ui-monospace, monospace", fontSize: 13 }}
             onChange={(e) => setDraft({ ...draft, redirect_text: e.target.value })}
           />
-          <span className="field-hint">每行一个 URI，授权时必须完全匹配。</span>
+          <span className="field-hint">{t("legacy.007dcf4c2a4c")}</span>
         </div>
 
         <div className="field">
@@ -314,23 +316,23 @@ export default function AdminConnectedAppsPage() {
             options={SCOPE_OPTIONS}
             value={draft.scopes}
             onChange={(scopes) => setDraft({ ...draft, scopes })}
-            placeholder="选择授权范围…"
+            placeholder={t("legacy.862aa2cfad14")}
           />
-          <span className="field-hint">MCP 集成建议至少包含 modex:mcp:read。</span>
+          <span className="field-hint">{t("legacy.af793bf18819")}</span>
         </div>
 
         <div className="field-row">
           <Switch
             checked={draft.enabled}
             onChange={(enabled) => setDraft({ ...draft, enabled })}
-            label="启用应用"
-            hint="关闭后 token 兑换和 bearer 访问都会失效。"
+            label={t("legacy.aa50aae6ada8")}
+            hint={t("legacy.e76e77cb411f")}
           />
           <Switch
             checked={draft.trusted}
             onChange={(trusted) => setDraft({ ...draft, trusted })}
             label="Trusted"
-            hint="受信任应用可跳过用户授权确认页。"
+            hint={t("legacy.b3bf0cf5def6")}
           />
         </div>
       </Modal>

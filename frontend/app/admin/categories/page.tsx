@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CategoryIcon, IconPicker } from "@/components/ui/icon-picker";
 import { getManagedCategories, getMe, getTeams, createCategory, updateCategory, deleteCategory, moveCategory } from "@/lib/api";
 import type { Category, Team } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 type FlatRow = { category: Category; depth: number };
 type DropPos = "before" | "after" | "into";
@@ -50,6 +51,7 @@ function TreeNode({
     onDrop: (e: React.DragEvent, id: string) => void;
   };
 }) {
+  const { t } = useI18n();
   const hasChildren = !!category.children?.length;
   const open = expanded.has(category.id);
   const dt = drag.dropTarget;
@@ -67,7 +69,7 @@ function TreeNode({
         onDragOver={(e) => drag.onDragOver(e, category.id)}
         onDrop={(e) => drag.onDrop(e, category.id)}
       >
-        <span className="tree-grip" title="拖动排序 / 调整层级"><GripVertical size={14} /></span>
+        <span className="tree-grip" title={t("legacy.13084b6a4ce9")}><GripVertical size={14} /></span>
         {hasChildren ? (
           <span className={`tree-twist${open ? " open" : ""}`} onClick={() => toggle(category.id)}>
             <ChevronRight size={15} />
@@ -79,9 +81,9 @@ function TreeNode({
         <span className="tree-label">{category.name}</span>
         <span className="tree-spacer" />
         <div className="row-actions">
-          <button className="icon-btn" onClick={() => onAddSub(category.id)} title="新增子分类"><Plus size={14} /></button>
-          <button className="icon-btn" onClick={() => onEdit(category)} title="编辑"><Pencil size={14} /></button>
-          <button className="icon-btn danger" onClick={() => onDelete(category.id, category.name)} title="删除"><Trash2 size={14} /></button>
+          <button className="icon-btn" onClick={() => onAddSub(category.id)} title={t("legacy.447e2db4681e")}><Plus size={14} /></button>
+          <button className="icon-btn" onClick={() => onEdit(category)} title={t("legacy.051836569928")}><Pencil size={14} /></button>
+          <button className="icon-btn danger" onClick={() => onDelete(category.id, category.name)} title={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
         </div>
       </div>
       {hasChildren && open ? (
@@ -96,6 +98,7 @@ function TreeNode({
 }
 
 export default function AdminCategoriesPage() {
+  const { t } = useI18n();
   const [categories, setCategories] = useState<Category[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [error, setError] = useState("");
@@ -218,7 +221,7 @@ export default function AdminCategoriesPage() {
   }
 
   async function remove(id: string, name: string) {
-    if (!confirm(`删除分类「${name}」？子分类必须先删除。`)) return;
+    if (!confirm(t("legacy.b4976b17b23a", { value1: name }))) return;
     try {
       await deleteCategory(id);
       await refresh();
@@ -238,16 +241,16 @@ export default function AdminCategoriesPage() {
 
   return (
     <AdminShell
-      title="分类管理"
+      title={t("legacy.62f8edc30321")}
       kicker="Categories"
-      description="层级分类支持任意嵌套。直接在树上拖动即可调整顺序与层级；可为分类指定负责团队，成员自动获得该分类下的管理权限。"
+      description={t("legacy.f0315110a4b8")}
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <div className="admin-toolbar">
-        <div className="muted" style={{ fontSize: 13 }}>{flatten(categories).length} 个分类节点 · 拖动卡片排序或改层级</div>
+        <div className="muted" style={{ fontSize: 13 }}>{flatten(categories).length} {t("legacy.4f2370f5e386")}</div>
         <div className="admin-toolbar-actions">
-          {isSuper ? <button className="button button-primary" onClick={openCreate}><Plus size={16} /> 新增顶级分类</button> : null}
+          {isSuper ? <button className="button button-primary" onClick={openCreate}><Plus size={16} /> {t("legacy.ffabe4e5b684")}</button> : null}
         </div>
       </div>
 
@@ -255,8 +258,8 @@ export default function AdminCategoriesPage() {
         {categories.length === 0 && !error ? (
           <EmptyState
             icon={FolderTree}
-            title="暂无分类"
-            hint="点击右上角「新增顶级分类」开始创建层级结构。支持任意嵌套，可绑定负责团队。"
+            title={t("legacy.3eeb3b76eef2")}
+            hint={t("legacy.0fe8c5284dd5")}
           />
         ) : (
           <div className="tree">
@@ -270,35 +273,35 @@ export default function AdminCategoriesPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={data.id ? "编辑分类" : data.parent_id ? "新增子分类" : "新增顶级分类"}
-        subtitle="顶层分类需超管权限，子分类可由父分类管理员或负责团队创建"
+        title={data.id ? t("legacy.182a0480aae8") : data.parent_id ? t("legacy.447e2db4681e") : t("legacy.ffabe4e5b684")}
+        subtitle={t("legacy.c1eab53f8cfb")}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>取消</button>
-            <button className="button button-primary" onClick={submit} disabled={!data.name?.trim()}>{data.id ? "保存修改" : "创建"}</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{t("legacy.2cd0f3be8738")}</button>
+            <button className="button button-primary" onClick={submit} disabled={!data.name?.trim()}>{data.id ? t("legacy.991bb7cfe5a8") : t("legacy.cde2cd071d25")}</button>
           </>
         }
       >
         <div className="field">
-          <label>名称 *</label>
-          <input value={data.name || ""} placeholder="如 工具规范" autoFocus onChange={(e) => setData({ ...data, name: e.target.value })} />
-          {data.id ? <span className="field-hint">标识 <span className="tree-keytag">{data.key}</span>（系统生成，不可修改）</span> : <span className="field-hint">标识由系统自动生成。</span>}
+          <label>{t("legacy.909712f2847d")}</label>
+          <input value={data.name || ""} placeholder={t("legacy.494b23115e71")} autoFocus onChange={(e) => setData({ ...data, name: e.target.value })} />
+          {data.id ? <span className="field-hint">{t("legacy.301c9461c1d0")} <span className="tree-keytag">{data.key}</span>{t("legacy.e7d3ed9636ac")}</span> : <span className="field-hint">{t("legacy.de9b50b07a8c")}</span>}
         </div>
         <div className="field">
-          <label>描述</label>
-          <input value={data.description || ""} placeholder="一句话说明该分类" onChange={(e) => setData({ ...data, description: e.target.value })} />
+          <label>{t("legacy.dc2ba467fc7a")}</label>
+          <input value={data.description || ""} placeholder={t("legacy.52b4136bf071")} onChange={(e) => setData({ ...data, description: e.target.value })} />
         </div>
         <div className="field">
-          <label>父分类</label>
-          <Combobox options={[...(isSuper ? [{ value: "", label: "（顶级分类）" }] : []), ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder="选择父分类…" />
+          <label>{t("legacy.e77b87e5b8e7")}</label>
+          <Combobox options={[...(isSuper ? [{ value: "", label: t("legacy.76362d22d383") }] : []), ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder={t("legacy.6f6d88776984")} />
         </div>
         <div className="field">
-          <label>图标</label>
+          <label>{t("legacy.0d720eeea264")}</label>
           <IconPicker value={data.icon} onChange={(icon) => setData({ ...data, icon })} />
         </div>
         <div className="field">
-          <label>负责团队</label>
-          <Combobox options={[{ value: "", label: "（无）" }, ...teamOptions]} value={[data.responsible_team || ""]} onChange={(v) => setData({ ...data, responsible_team: v[0] || "" })} multiple={false} placeholder="选择负责团队…" />
+          <label>{t("legacy.21fa2b2c4376")}</label>
+          <Combobox options={[{ value: "", label: t("legacy.c7bcc6d27f3a") }, ...teamOptions]} value={[data.responsible_team || ""]} onChange={(v) => setData({ ...data, responsible_team: v[0] || "" })} multiple={false} placeholder={t("legacy.66c48e3b9eb2")} />
         </div>
       </Modal>
     </AdminShell>

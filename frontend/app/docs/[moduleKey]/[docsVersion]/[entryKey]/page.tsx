@@ -11,6 +11,7 @@ import { DocToc } from "@/components/doc-toc";
 import { VersionSwitcher } from "@/components/version-switcher";
 import { DocFooter, FloatingDocFeedback } from "@/components/doc-footer";
 import { DocSourceToggle } from "@/components/doc-source-toggle";
+import { getServerI18n } from "@/lib/i18n-server";
 
 export default async function DocPage({
   params,
@@ -21,6 +22,7 @@ export default async function DocPage({
 }) {
   const { moduleKey, docsVersion, entryKey } = await params;
   const { p: deepLink } = await searchParams;
+  const { t } = await getServerI18n();
   const [module, entries, versions, navTree, pagePayload] = await Promise.all([
     getModule(moduleKey),
     getEntries(moduleKey, docsVersion),
@@ -124,7 +126,7 @@ export default async function DocPage({
             {isMarkdown ? <DocToc /> : null}
             {module.repo_url ? (
               <a className="button doc-toc-source" href={module.repo_url}>
-                <GitBranch size={15} />查看源码
+                <GitBranch size={15} />{t("legacy.921c3b62f1f7")}
               </a>
             ) : null}
           </div>

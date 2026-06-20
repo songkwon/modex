@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Search, X } from "lucide-react";
 import { getUsers } from "@/lib/api";
 import type { User } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Reusable multi-select for picking users (by username). Supports keyword search
@@ -14,7 +15,7 @@ import type { User } from "@/types/modex";
 export function UserSelect({
   value,
   onChange,
-  placeholder = "搜索姓名 / 用户名 / 邮箱 / 部门",
+  placeholder,
   single = false,
 }: {
   value: string[];
@@ -22,6 +23,7 @@ export function UserSelect({
   placeholder?: string;
   single?: boolean;
 }) {
+  const { t } = useI18n();
   const [users, setUsers] = useState<User[]>([]);
   const [keyword, setKeyword] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -52,7 +54,7 @@ export function UserSelect({
   const groups = useMemo(() => {
     const m: Record<string, User[]> = {};
     for (const u of filtered) {
-      const dept = (u.department || "").trim() || "其他";
+      const dept = (u.department || "").trim() || t("legacy.d2909f1647e7");
       (m[dept] ||= []).push(u);
     }
     return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0], "zh"));
@@ -76,7 +78,7 @@ export function UserSelect({
             return (
               <span className="user-select__chip" key={uname}>
                 {u?.display_name || uname}
-                <button type="button" onClick={() => toggle(uname)} aria-label="移除">
+                <button type="button" onClick={() => toggle(uname)} aria-label={t("legacy.6135d4159e89")}>
                   <X size={12} />
                 </button>
               </span>
@@ -87,12 +89,12 @@ export function UserSelect({
 
       <div className="user-select__search">
         <Search size={15} />
-        <input value={keyword} placeholder={placeholder} onChange={(e) => setKeyword(e.target.value)} />
+        <input value={keyword} placeholder={placeholder ?? t("legacy.220c1f9da6c4")} onChange={(e) => setKeyword(e.target.value)} />
       </div>
 
       <div className="user-select__list">
         {groups.length === 0 ? (
-          <p className="muted" style={{ fontSize: 13, padding: "8px 4px" }}>没有匹配的用户</p>
+          <p className="muted" style={{ fontSize: 13, padding: "8px 4px" }}>{t("legacy.656a2b2ccb64")}</p>
         ) : (
           groups.map(([dept, members]) => {
             const isCollapsed = q ? false : collapsed[dept];

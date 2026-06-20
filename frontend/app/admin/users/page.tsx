@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { createUser, deleteUser, getCategories, getTeams, updateUser } from "@/lib/api";
 import { usePaged } from "@/lib/use-paged";
 import type { Category, Team, User } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 const PAGE_SIZE = 8;
 
@@ -47,6 +48,7 @@ function flattenCategories(tree: Category[]): ComboOption[] {
 }
 
 export default function AdminUsersPage() {
+  const { t } = useI18n();
   const [teams, setTeams] = useState<Team[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -71,9 +73,9 @@ export default function AdminUsersPage() {
   // Identity is a single derived tier: super admin > team leader > member.
   const leaderUsernames = useMemo(() => new Set((teams || []).flatMap((t) => t.leaders || [])), [teams]);
   function identityOf(u: User): { label: string; cls: string } {
-    if (u.is_super_admin) return { label: "超级管理员", cls: "badge-danger" };
-    if (leaderUsernames.has(u.username)) return { label: "团队负责人", cls: "badge-success" };
-    return { label: "成员", cls: "" };
+    if (u.is_super_admin) return { label: t("legacy.56db248412ff"), cls: "badge-danger" };
+    if (leaderUsernames.has(u.username)) return { label: t("legacy.d59c8cdb38a5"), cls: "badge-success" };
+    return { label: t("legacy.6e6d6ddbb7c1"), cls: "" };
   }
 
   // Team membership is owned by the Team (leader + members), so a user's teams
@@ -134,7 +136,7 @@ export default function AdminUsersPage() {
   }
 
   async function remove(user: User) {
-    if (!confirm(`确认删除用户 ${user.username}?`)) return;
+    if (!confirm(t("legacy.5d1e06d73d56", { value1: user.username }))) return;
     try {
       await deleteUser(user.id);
       reload();
@@ -144,21 +146,21 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <AdminShell title="用户管理" kicker="Users" description="管理用户资料与权限。团队归属在「团队管理」中维护；使用 OIDC 登录时用户会自动同步到此目录。">
+    <AdminShell title={t("legacy.fbf413d429bd")} kicker="Users" description={t("legacy.f40dbd142ee2")}>
       {(error || loadError) ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error || loadError}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder="搜索显示名 / 邮箱 / 部门"
+            placeholder={t("legacy.dbff39a5e9ba")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}>
-            <Plus size={16} /> 新增用户
+            <Plus size={16} /> {t("legacy.ebabc83b6830")}
           </button>
         </div>
       </div>
@@ -168,13 +170,13 @@ export default function AdminUsersPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>用户</th>
-                <th>邮箱</th>
-                <th>部门</th>
-                <th>身份</th>
-                <th>团队</th>
-                <th>状态</th>
-                <th style={{ textAlign: "right" }}>操作</th>
+                <th>{t("legacy.0d0e1a86b3aa")}</th>
+                <th>{t("legacy.73075237fd0f")}</th>
+                <th>{t("legacy.f128cdf1dae2")}</th>
+                <th>{t("legacy.2a9c9e997642")}</th>
+                <th>{t("legacy.acdf17f4e9c4")}</th>
+                <th>{t("legacy.6320b4a8722a")}</th>
+                <th style={{ textAlign: "right" }}>{t("legacy.ed31fbb483ee")}</th>
               </tr>
             </thead>
             <tbody>
@@ -190,13 +192,13 @@ export default function AdminUsersPage() {
                   <td>{userTeams.length ? userTeams.map((t) => <span className="tag" key={t} style={{ marginRight: 4 }}>{t}</span>) : <span className="muted" style={{ fontSize: 12 }}>—</span>}</td>
                   <td>
                     <span className={`badge ${u.status === "disabled" ? "badge-danger" : "badge-success"}`}>
-                      <span className="badge-dot" />{u.status === "disabled" ? "已停用" : "启用"}
+                      <span className="badge-dot" />{u.status === "disabled" ? t("legacy.a8c3698b5b8c") : t("legacy.f4f0ead1116b")}
                     </span>
                   </td>
                   <td>
                     <div className="row-actions" style={{ justifyContent: "flex-end" }}>
-                      <button className="icon-btn" onClick={() => openEdit(u)} aria-label="编辑"><Pencil size={14} /></button>
-                      <button className="icon-btn danger" onClick={() => remove(u)} aria-label="删除"><Trash2 size={14} /></button>
+                      <button className="icon-btn" onClick={() => openEdit(u)} aria-label={t("legacy.051836569928")}><Pencil size={14} /></button>
+                      <button className="icon-btn danger" onClick={() => remove(u)} aria-label={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -206,8 +208,8 @@ export default function AdminUsersPage() {
                 <tr><td colSpan={7}>
                   <EmptyState
                     icon={UsersIcon}
-                    title="暂无用户"
-                    hint="点击右上角「新增用户」创建第一个用户；使用 OIDC 登录时用户会自动出现在这里。"
+                    title={t("legacy.a56b93c27aec")}
+                    hint={t("legacy.5748c7aebb94")}
                   />
                 </td></tr>
               ) : null}
@@ -220,49 +222,49 @@ export default function AdminUsersPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={isEdit ? `编辑用户 · ${draft.username}` : "新增用户"}
-        subtitle={isEdit ? "更新用户资料与权限" : "创建一个新用户"}
+        title={isEdit ? t("legacy.67660891683d", { value1: draft.username }) : t("legacy.ebabc83b6830")}
+        subtitle={isEdit ? t("legacy.82243461e51b") : t("legacy.f57b5927ab88")}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>取消</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{t("legacy.2cd0f3be8738")}</button>
             <button className="button button-primary" onClick={submit} disabled={!isEdit && !draft.username.trim()}>
-              {isEdit ? "保存" : "创建"}
+              {isEdit ? t("legacy.a3030bf8f16d") : t("legacy.cde2cd071d25")}
             </button>
           </>
         }
       >
         <div className="field-row">
           <div className="field">
-            <label>用户名{isEdit ? "" : " *"}</label>
-            <input value={draft.username} disabled={isEdit} placeholder="如 alice" onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
+            <label>{t("legacy.1a3f0617d6de")}{isEdit ? "" : " *"}</label>
+            <input value={draft.username} disabled={isEdit} placeholder={t("legacy.2599cb70de43")} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
           </div>
           <div className="field">
-            <label>显示名</label>
-            <input value={draft.display_name} placeholder="如 Alice" onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} />
+            <label>{t("legacy.4587cc06a981")}</label>
+            <input value={draft.display_name} placeholder={t("legacy.7ffc934b2329")} onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} />
           </div>
         </div>
         <div className="field-row">
           <div className="field">
-            <label>邮箱</label>
+            <label>{t("legacy.73075237fd0f")}</label>
             <input value={draft.email} placeholder="name@example.com" onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
           </div>
           <div className="field">
-            <label>部门</label>
-            <input value={draft.department} placeholder="如 平台组" onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
+            <label>{t("legacy.f128cdf1dae2")}</label>
+            <input value={draft.department} placeholder={t("legacy.26fc3414b9fd")} onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
           </div>
         </div>
         <div className="field">
-          <label>可管理分类</label>
-          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder="搜索分类…" />
-          <span className="field-hint">该用户可管理所选分类下的内容。超级管理员可管理全部分类，无需在此指定。</span>
+          <label>{t("legacy.2d5db2e77279")}</label>
+          <Combobox options={categoryOptions} value={draft.managed_categories} onChange={(managed_categories) => setDraft({ ...draft, managed_categories })} placeholder={t("legacy.85e5f7b44180")} />
+          <span className="field-hint">{t("legacy.b3634089a140")}</span>
         </div>
         {isEdit ? (
           <div className="field">
             <Switch
               checked={draft.status !== "disabled"}
               onChange={(on) => setDraft({ ...draft, status: on ? "active" : "disabled" })}
-              label="启用账号"
-              hint="停用后该用户将无法登录。"
+              label={t("legacy.10027ec29566")}
+              hint={t("legacy.40160bbaa368")}
             />
           </div>
         ) : null}
@@ -271,8 +273,8 @@ export default function AdminUsersPage() {
             checked={draft.is_super_admin}
             onChange={(on) => setDraft({ ...draft, is_super_admin: on })}
             tone="danger"
-            label="超级管理员"
-            hint="拥有全部权限，可管理所有用户与分类。"
+            label={t("legacy.56db248412ff")}
+            hint={t("legacy.f2d695d24fbe")}
           />
         </div>
       </Modal>

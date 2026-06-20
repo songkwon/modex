@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export function Modal({
   open,
@@ -21,6 +22,7 @@ export function Modal({
   footer?: ReactNode;
   width?: number;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -45,7 +47,7 @@ export function Modal({
             <h2>{title}</h2>
             {subtitle ? <div className="modal-sub">{subtitle}</div> : null}
           </div>
-          <button className="icon-btn modal-close" onClick={onClose} aria-label="关闭">
+          <button className="icon-btn modal-close" onClick={onClose} aria-label={t("legacy.3fd47edce45b")}>
             <X size={16} />
           </button>
         </div>

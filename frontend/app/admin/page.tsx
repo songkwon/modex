@@ -2,23 +2,24 @@ import Link from "next/link";
 import { ArrowRight, Boxes, FolderTree, History, Link2, MessageCircleQuestion, MessageSquareText, Search, Settings, Users, UsersRound } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { ReindexControls } from "@/components/reindex-controls";
+import { getServerI18n } from "@/lib/i18n-server";
 
-const links = [
-  ["/admin/categories", "分类管理", "维护层级分类、排序、状态与负责团队", FolderTree],
-  ["/admin/teams", "团队管理", "维护文档团队的负责人与成员，并为分类指定负责方", UsersRound],
-  ["/admin/modules", "文档源", "接入文档仓库、绑定分类、生成 Deploy Token", Boxes],
-  ["/admin/users", "用户管理", "管理用户资料、状态与权限", Users],
-  ["/admin/settings", "模型设置", "对接对话 / 向量 / 重排序模型，启用 AI 问答", Settings],
-  ["/admin/connected-apps", "应用链接", "注册外部应用，通过 OAuth 授权访问 Modex API 与 MCP", Link2],
-  ["/admin/releases", "发布记录", "追踪每次文档发布的来源、构建与状态", History],
-  ["/admin/feedback", "文档反馈", "查看读者提交的有帮助 / 需改进反馈", MessageCircleQuestion],
-  ["/admin/search-logs", "搜索日志", "分析查询词、命中数与点击", Search],
-  ["/admin/mcp-logs", "MCP 日志", "查看 AI 工具读取文档的记录", MessageSquareText],
-] as const;
-
-export default function AdminPage() {
+export default async function AdminPage() {
+  const { t } = await getServerI18n();
+  const links = [
+    ["/admin/categories", t("legacy.62f8edc30321"), t("legacy.c379199f21fd"), FolderTree],
+    ["/admin/teams", t("legacy.95a792201917"), t("legacy.93a61c1faea7"), UsersRound],
+    ["/admin/modules", t("legacy.79963951e270"), t("legacy.edfc0242df6d"), Boxes],
+    ["/admin/users", t("legacy.fbf413d429bd"), t("legacy.825a96349864"), Users],
+    ["/admin/settings", t("legacy.082a738ae620"), t("legacy.ca45f732b35e"), Settings],
+    ["/admin/connected-apps", t("legacy.213f5505bd1a"), t("legacy.7a58eb329136"), Link2],
+    ["/admin/releases", t("legacy.7290d89a6d74"), t("legacy.cf320f403b63"), History],
+    ["/admin/feedback", t("legacy.5f5b94f329bf"), t("legacy.44bc7f387b74"), MessageCircleQuestion],
+    ["/admin/search-logs", t("legacy.1b9b75f51d20"), t("legacy.6a460742faa7"), Search],
+    ["/admin/mcp-logs", t("legacy.795c8bbceda7"), t("legacy.baa3b6782ce5"), MessageSquareText],
+  ] as const;
   return (
-    <AdminShell title="管理后台" kicker="Admin" description="管理分类、团队、用户、文档源、模型与发布。">
+    <AdminShell title={t("legacy.87354adb1c31")} kicker="Admin" description={t("legacy.517da0e94f26")}>
       <section className="card-grid">
         {links.map(([href, label, desc, Icon]) => (
           <Link className="admin-entry" href={href} key={href}>

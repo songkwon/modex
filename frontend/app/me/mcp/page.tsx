@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { Copy, RefreshCw, Check } from "lucide-react";
 import { getMCPToken, rotateMCPToken } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://modex.example.com";
 
 export default function McpUsagePage() {
+  const { t } = useI18n();
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [copiedCmd, setCopiedCmd] = useState(false);
@@ -21,7 +23,7 @@ export default function McpUsagePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const displayToken = token || "<你的 token>";
+  const displayToken = token || t("legacy.c3725c6f9ffa");
 
   const claudeCmd = `claude mcp add modex \\
   --env MODEX_API_BASE_URL=${API_BASE} \\
@@ -72,34 +74,34 @@ export default function McpUsagePage() {
     <main className="main">
       <section className="grid" style={{ maxWidth: 860, margin: "0 auto" }}>
         <header className="hero-panel">
-          <div className="page-kicker">AI 工具接入</div>
-          <h1 className="page-title">把 Modex 接入你的 AI 工作台</h1>
+          <div className="page-kicker">{t("legacy.96ea668f0340")}</div>
+          <h1 className="page-title">{t("legacy.e5d0b332a643")}</h1>
           <p className="hero-copy">
-            这里的 MCP 和 Skill 面向 Modex 使用者。配置后，Claude Code / Cursor 等工具可以检索并阅读本平台文档。MCP 工具通过
-            <code className="code-chip" style={{ margin: "0 4px" }}>npx</code> 在本地按需拉起，连接到平台后端 API。
+            {t("legacy.41cb16b7f958")}
+            <code className="code-chip" style={{ margin: "0 4px" }}>npx</code> {t("legacy.5cf4f6c8999e")}
           </p>
         </header>
 
         <section className="card">
           <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 720 }}>你的 MCP Token</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.1944022afe3d")}</h2>
             <button className="button button-primary" onClick={handleRotate} disabled={loading}>
-              <RefreshCw size={14} /> {token ? "重新生成" : "生成 Token"}
+              <RefreshCw size={14} /> {token ? t("legacy.3221a042ea36") : t("legacy.f9e0988907b1")}
             </button>
           </div>
           <p className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-            每个用户拥有独立 token，服务端可在 MCP 日志中追踪调用来源。
+            {t("legacy.99da96d9cc60")}
           </p>
           <div className="mcp-code" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {loading ? "加载中…" : displayToken}
+              {loading ? t("legacy.4927a53bcc88") : displayToken}
             </code>
             {token && (
               <button
                 className="icon-btn"
                 onClick={() => copyText(token, setCopiedCmd)}
-                aria-label="复制 token"
-                title="复制 token"
+                aria-label={t("legacy.9541f4a07849")}
+                title={t("legacy.9541f4a07849")}
               >
                 {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
               </button>
@@ -109,14 +111,14 @@ export default function McpUsagePage() {
 
         <section className="card">
           <h2 style={{ fontSize: 16, fontWeight: 720 }}>Claude Code</h2>
-          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>在终端执行（token 已自动填入上方生成的值）：</p>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>{t("legacy.c3e840cc5817")}</p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{claudeCmd}</pre>
             <button
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(claudeCmd, setCopiedCmd)}
-              aria-label="复制命令"
+              aria-label={t("legacy.605c82dd96bc")}
             >
               {copiedCmd ? <Check size={14} /> : <Copy size={14} />}
             </button>
@@ -124,15 +126,15 @@ export default function McpUsagePage() {
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>Cursor / Windsurf 等</h2>
-          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>加入 MCP 配置文件（如 <code className="code-chip">~/.cursor/mcp.json</code>）：</p>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.d4db4558fdd4")}</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>{t("legacy.aa141ab924f9")} <code className="code-chip">~/.cursor/mcp.json</code>）：</p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{cursorJson}</pre>
             <button
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(cursorJson, setCopiedJson)}
-              aria-label="复制配置"
+              aria-label={t("legacy.6bf7933df3bb")}
             >
               {copiedJson ? <Check size={14} /> : <Copy size={14} />}
             </button>
@@ -140,9 +142,9 @@ export default function McpUsagePage() {
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>离线 / 内网安装（无需公网 npm）</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.0b57f8fcc9d2")}</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            MCP 包会随 Modex release 一起发布，也会由本平台后端提供下载。适合内网环境，无需访问 npmjs.com：
+            {t("legacy.45a14bc557f9")}
           </p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{offlineCmd}</pre>
@@ -150,28 +152,28 @@ export default function McpUsagePage() {
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(offlineCmd, setCopiedOffline)}
-              aria-label="复制命令"
+              aria-label={t("legacy.605c82dd96bc")}
             >
               {copiedOffline ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            如果你们把 MCP 包拆到独立 Git 仓库，也可以让 <code className="code-chip">npx</code> 直接从 Git 安装：
+            {t("legacy.fc8479135d5b")} <code className="code-chip">npx</code> {t("legacy.2334c248bed2")}
           </p>
           <pre className="mcp-code" style={{ marginTop: 8 }}>{gitCmd}</pre>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            或直接下载工具产物：
+            {t("legacy.45cba98c6caf")}
             <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-mcp.tgz</a>
-            （也可下载
+            {t("legacy.5a2c57dc4d25")}
             <a href={`${API_BASE}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
-            用 <code className="code-chip">node index.mjs</code> 直接运行）。
+            用 <code className="code-chip">node index.mjs</code> {t("legacy.c21137d45ca1")}
           </p>
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>安装 Modex Skill</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.3e8ad9fe8b24")}</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            Skill 用于给支持 skills 的 AI 客户端补充 Modex 使用规范、检索偏好和回答约束；MCP 负责真正读取平台文档。
+            {t("legacy.73f21d4d035f")}
           </p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{skillCmd}</pre>
@@ -179,38 +181,38 @@ export default function McpUsagePage() {
               className="icon-btn"
               style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
               onClick={() => copyText(skillCmd, setCopiedSkill)}
-              aria-label="复制命令"
+              aria-label={t("legacy.605c82dd96bc")}
             >
               {copiedSkill ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            如果 Skill 在 Git 仓库维护，也可以使用 <code className="code-chip">npx skills add https://github.com/your-org/modex/tree/main/mcp/skill</code>。
+            {t("legacy.52776e43b2c6")} <code className="code-chip">npx skills add https://github.com/your-org/modex/tree/main/mcp/skill</code>。
           </p>
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>可用工具</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("legacy.d249cdf8bc64")}</h2>
           <ul className="mcp-tool-list" style={{ marginTop: 10 }}>
             <li>
               <span className="tag">list_modules</span>
-              <span className="mcp-tool-desc">按分类 / 关键词列出文档源</span>
+              <span className="mcp-tool-desc">{t("legacy.b31ee4dade3a")}</span>
             </li>
             <li>
               <span className="tag">list_versions</span>
-              <span className="mcp-tool-desc">列出某文档源的版本</span>
+              <span className="mcp-tool-desc">{t("legacy.127f8a6a8026")}</span>
             </li>
             <li>
               <span className="tag">search_docs</span>
-              <span className="mcp-tool-desc">keyword / semantic / hybrid 检索</span>
+              <span className="mcp-tool-desc">{t("legacy.34ae19c383c7")}</span>
             </li>
             <li>
               <span className="tag">get_doc_page</span>
-              <span className="mcp-tool-desc">按 doc_id 读取文档正文</span>
+              <span className="mcp-tool-desc">{t("legacy.0d1c3a645729")}</span>
             </li>
           </ul>
           <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-            说明：MCP 与平台搜索共用同一套检索能力。Skill 只提供客户端侧使用规范，不保存平台数据。
+            {t("legacy.86bcd08e4b03")}
           </p>
         </section>
       </section>

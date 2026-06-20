@@ -1,4 +1,7 @@
+"use client";
+
 import { ReactNode } from "react";
+import { useI18n } from "@/lib/i18n";
 
 function FieldRow({
   name,
@@ -15,14 +18,15 @@ function FieldRow({
   defaultValue?: string;
   children?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mdx-field">
       <div className="mdx-field__head">
         {name ? <code className="mdx-field__name">{name}</code> : null}
         {type ? <span className="mdx-field__type">{type}</span> : null}
-        {required ? <span className="mdx-field__req">必填</span> : null}
-        {deprecated ? <span className="mdx-field__dep">废弃</span> : null}
-        {defaultValue ? <span className="mdx-field__default">默认 {defaultValue}</span> : null}
+        {required ? <span className="mdx-field__req">{t("legacy.11da9dc44285")}</span> : null}
+        {deprecated ? <span className="mdx-field__dep">{t("legacy.ca0ff1e63793")}</span> : null}
+        {defaultValue ? <span className="mdx-field__default">{t("legacy.844b8cc8dff7")} {defaultValue}</span> : null}
       </div>
       {children ? <div className="mdx-field__body">{children}</div> : null}
     </div>

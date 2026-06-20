@@ -6,6 +6,7 @@ import { Mermaid } from "./mermaid";
 import { Kroki, isKrokiLang } from "./kroki";
 import { usePluginConfig, pluginEnabled, useUploadedFence } from "./mdx-config";
 import { SandboxedPlugin } from "./sandboxed-plugin";
+import { useI18n } from "@/lib/i18n";
 
 function extractText(node: unknown): string {
   if (node == null) return "";
@@ -28,12 +29,13 @@ function parseCodeEl(codeEl: any): Parsed {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = useI18n();
   const [done, setDone] = useState(false);
   return (
     <button
       type="button"
       className="mdx-code__copy"
-      aria-label="复制代码"
+      aria-label={t("legacy.420c20dd9fcc")}
       onClick={() => {
         navigator.clipboard.writeText(text).then(() => {
           setDone(true);

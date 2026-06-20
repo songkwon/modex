@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   value: string;
@@ -12,7 +13,9 @@ type Props = {
 };
 
 /** Icon button that copies `value` and briefly swaps to a checkmark. */
-export function CopyButton({ value, title = "复制", className = "icon-btn", size = 14, label }: Props) {
+export function CopyButton({ value, title, className = "icon-btn", size = 14, label }: Props) {
+  const { t } = useI18n();
+  const titleText = title ?? t("legacy.63d90d977348");
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -27,13 +30,13 @@ export function CopyButton({ value, title = "复制", className = "icon-btn", si
     <button
       type="button"
       className={className}
-      title={title}
-      aria-label={title}
+      title={titleText}
+      aria-label={titleText}
       onClick={copy}
       data-copied={copied || undefined}
     >
       {copied ? <Check size={size} /> : <Copy size={size} />}
-      {label ? <span>{copied ? "已复制" : label}</span> : null}
+      {label ? <span>{copied ? t("legacy.8f6f8d979c98") : label}</span> : null}
     </button>
   );
 }

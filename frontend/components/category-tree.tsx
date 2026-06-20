@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { Category } from "@/types/modex";
+import { useI18n } from "@/lib/i18n";
 
 export function CategoryTree({
   categories,
@@ -19,17 +22,18 @@ export function CategoryTree({
   hrefFor?: (category: Category) => string;
   onSelect?: (category: Category | null) => void;
 }) {
+  const { t } = useI18n();
   const display = rootId ? findSubtree(categories, rootId) : categories;
   return (
     <aside className="cat-rail rail">
       {backHref ? (
         <Link href={backHref} className="button mb-3 w-full justify-start">
-          <ArrowLeft size={15} /> {backLabel || "返回"}
+          <ArrowLeft size={15} /> {backLabel || t("legacy.572cf45ba436")}
         </Link>
       ) : null}
       <div className="cat-rail-head">
-        <span className="cat-rail-title">文档分类</span>
-        {!backHref && activeID ? <button className="quiet-link" onClick={() => onSelect?.(null)}>清除</button> : null}
+        <span className="cat-rail-title">{t("legacy.44bcd6594ceb")}</span>
+        {!backHref && activeID ? <button className="quiet-link" onClick={() => onSelect?.(null)}>{t("legacy.bce2377283c2")}</button> : null}
       </div>
       <nav className="cat-tree">
         {display.map((category) => (

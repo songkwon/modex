@@ -5,11 +5,13 @@ import { type PointerEvent, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripHorizontal, Send, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { capture, sessionId } from "@/lib/analytics";
 import { recordDocFeedback } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type NavLink = { title: string; href: string };
 type Point = { x: number; y: number };
 
 export function FloatingDocFeedback({ docId }: { docId: string }) {
+  const { t } = useI18n();
   const [closed, setClosed] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [position, setPosition] = useState<Point>({ x: 0, y: 0 });
@@ -74,13 +76,13 @@ export function FloatingDocFeedback({ docId }: { docId: string }) {
         onPointerCancel={stopDrag}
       >
         <GripHorizontal size={16} aria-hidden />
-        <strong>文档反馈</strong>
+        <strong>{t("legacy.5f5b94f329bf")}</strong>
         <button
           type="button"
           className="icon-btn doc-embed-feedback__action"
           onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? "展开反馈" : "收起反馈"}
-          title={collapsed ? "展开反馈" : "收起反馈"}
+          aria-label={collapsed ? t("legacy.d613dc2b47e2") : t("legacy.a5efe577647c")}
+          title={collapsed ? t("legacy.d613dc2b47e2") : t("legacy.a5efe577647c")}
         >
           {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
@@ -88,8 +90,8 @@ export function FloatingDocFeedback({ docId }: { docId: string }) {
           type="button"
           className="icon-btn doc-embed-feedback__action"
           onClick={() => setClosed(true)}
-          aria-label="关闭反馈"
-          title="关闭反馈"
+          aria-label={t("legacy.a7aa73da9350")}
+          title={t("legacy.a7aa73da9350")}
         >
           <X size={16} />
         </button>
@@ -112,6 +114,7 @@ export function DocFooter({
   prev?: NavLink;
   next?: NavLink;
 }) {
+  const { t } = useI18n();
   return (
     <div className="doc-footer">
       <DocFeedbackBox docId={docId} />
@@ -120,13 +123,13 @@ export function DocFooter({
         <nav className="doc-pager">
           {prev ? (
             <Link href={prev.href} className="doc-pager__card doc-pager__card--prev">
-              <span className="doc-pager__dir"><ChevronLeft size={14} /> 上一篇</span>
+              <span className="doc-pager__dir"><ChevronLeft size={14} /> {t("legacy.5e50d5184669")}</span>
               <span className="doc-pager__title">{prev.title}</span>
             </Link>
           ) : <span />}
           {next ? (
             <Link href={next.href} className="doc-pager__card doc-pager__card--next">
-              <span className="doc-pager__dir">下一篇 <ChevronRight size={14} /></span>
+              <span className="doc-pager__dir">{t("legacy.673ee5a5a418")} <ChevronRight size={14} /></span>
               <span className="doc-pager__title">{next.title}</span>
             </Link>
           ) : <span />}
@@ -137,6 +140,7 @@ export function DocFooter({
 }
 
 export function DocFeedbackBox({ docId, compact = false }: { docId: string; compact?: boolean }) {
+  const { t } = useI18n();
   const [rating, setRating] = useState<"good" | "bad" | null>(null);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -157,15 +161,15 @@ export function DocFeedbackBox({ docId, compact = false }: { docId: string; comp
   return (
     <div className={`doc-feedback${compact ? " doc-feedback--compact" : ""}`}>
       <div className="doc-feedback__top">
-        <span className="doc-feedback__label">这篇文档怎么样？</span>
-        <div className="doc-feedback__rating" aria-label="选择反馈类型">
+        <span className="doc-feedback__label">{t("legacy.e5c15acc5265")}</span>
+        <div className="doc-feedback__rating" aria-label={t("legacy.3d39e4df1cc0")}>
           <button
             type="button"
             className={`doc-feedback__btn${rating === "good" ? " active" : ""}`}
             onClick={() => setRating("good")}
             disabled={submitted}
           >
-            <ThumbsUp size={15} /> 有帮助
+            <ThumbsUp size={15} /> {t("legacy.28030e690447")}
           </button>
           <button
             type="button"
@@ -173,23 +177,23 @@ export function DocFeedbackBox({ docId, compact = false }: { docId: string; comp
             onClick={() => setRating("bad")}
             disabled={submitted}
           >
-            <ThumbsDown size={15} /> 需改进
+            <ThumbsDown size={15} /> {t("legacy.690d2b0654e9")}
           </button>
         </div>
       </div>
       {submitted ? (
-        <span className="doc-feedback__thanks">感谢你的反馈，我们会认真看。</span>
+        <span className="doc-feedback__thanks">{t("legacy.9d62ab8204a5")}</span>
       ) : (
         <div className="doc-feedback__form">
           <textarea
             className="doc-feedback__input"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="可以补充哪里有帮助、哪里没讲清楚，或希望增加什么内容。"
+            placeholder={t("legacy.88e629d53b5c")}
             rows={compact ? 2 : 3}
           />
           <button type="button" className="doc-feedback__submit" onClick={submit} disabled={!rating || submitting}>
-            <Send size={14} /> 提交反馈
+            <Send size={14} /> {t("legacy.228d8b711ccf")}
           </button>
         </div>
       )}

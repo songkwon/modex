@@ -3,10 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowUpRight, BookOpen } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { getCategories, getEntries, getModules } from "@/lib/api";
+import { getServerI18n } from "@/lib/i18n-server";
 import type { Category, ModuleInfo } from "@/types/modex";
 
 export default async function CategoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { t } = await getServerI18n();
   const categories = await getCategories();
   const category = findCategory(categories, id);
   if (!category) notFound();
@@ -23,14 +25,14 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
             activeID={id}
             rootId={id}
           backHref="/"
-          backLabel="全部分类"
+          backLabel={t("legacy.a1054434857f")}
           hrefFor={(c) => `/categories/${c.id}`}
         />
         <div className="category-content">
           <div className="shelf-toolbar mb-5">
             <div>
               <h1>{category.name}</h1>
-              <p className="muted">{modules.length} 个文档集合 · {category.description || ""}</p>
+              <p className="muted">{modules.length} {t("legacy.cd32163500a7")} {category.description || ""}</p>
             </div>
           </div>
           {modules.length === 1 ? (
@@ -40,7 +42,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
               {modules.map((module) => (
                 <ModuleRow module={module} key={module.module_key} />
               ))}
-              {modules.length === 0 ? <div className="empty-state">该分类下暂无文档集合</div> : null}
+              {modules.length === 0 ? <div className="empty-state">{t("legacy.c14b31fc3c38")}</div> : null}
             </div>
           )}
         </div>
@@ -54,15 +56,17 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
 // full-width). Embedding it in an iframe here nested a second Modex chrome
 // inside the page ("文档套文档"), so we redirect instead.
 async function SingleModuleView({ module }: { module: ModuleInfo }) {
+  const { t } = await getServerI18n();
   const entries = await getEntries(module.module_key, module.default_version);
   const primary = entries.find((e) => e.is_primary) || entries[0];
   if (!primary) {
-    return <div className="empty-state">暂无文档入口</div>;
+    return <div className="empty-state">{t("legacy.e44ccb662208")}</div>;
   }
   redirect(`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`);
 }
 
-function ModuleRow({ module }: { module: ModuleInfo }) {
+async function ModuleRow({ module }: { module: ModuleInfo }) {
+  const { t } = await getServerI18n();
   return (
     <article className="package-row">
       <div>
@@ -82,19 +86,19 @@ function ModuleRow({ module }: { module: ModuleInfo }) {
       <aside className="package-stats text-sm">
         <span className="score-pill">active package</span>
         <div>
-          <dt className="muted">默认版本</dt>
+          <dt className="muted">{t("legacy.a83a27e9be90")}</dt>
           <dd>{module.default_version}</dd>
         </div>
         <div>
-          <dt className="muted">文档类型</dt>
+          <dt className="muted">{t("legacy.79e65b1b328f")}</dt>
           <dd className="flex items-center gap-1"><BookOpen size={14} /> {docTypeLabel(module.doc_type)}</dd>
         </div>
         <div>
-          <dt className="muted">阅读 30d</dt>
+          <dt className="muted">{t("legacy.265cd352bea6")}</dt>
           <dd>{module.reads_30d}</dd>
         </div>
         <div className="flex gap-2 pt-1">
-          <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>打开 <ArrowUpRight size={14} /></Link>
+          <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("legacy.c771248e511f")} <ArrowUpRight size={14} /></Link>
         </div>
       </aside>
     </article>

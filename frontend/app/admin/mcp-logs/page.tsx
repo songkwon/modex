@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { usePaged } from "@/lib/use-paged";
+import { useI18n } from "@/lib/i18n";
 
 const PAGE_SIZE = 12;
 
@@ -21,14 +22,15 @@ type MCPLog = {
 };
 
 export default function MCPLogsPage() {
+  const { t } = useI18n();
   const [keyword, setKeyword] = useState("");
   const { items: pageRows, total, page, setPage, error, loading } = usePaged<MCPLog>("/api/admin/analytics/mcp", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title="MCP 日志" kicker="AI Access" description="记录 AI 工具通过 MCP 读取模块、版本、搜索结果与文档页面的行为。">
+    <AdminShell title={t("legacy.795c8bbceda7")} kicker="AI Access" description={t("legacy.7bec6afb46a2")}>
       {error ? (
         <div className="panel badge-danger" style={{ borderRadius: 12 }}>
-          加载失败：{error}（可能需要超级管理员权限）
+          {t("legacy.01de8216e0d0")}{error}{t("legacy.89a00d097403")}
         </div>
       ) : null}
 
@@ -36,7 +38,7 @@ export default function MCPLogsPage() {
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder="搜索工具 / 查询 / 用户"
+            placeholder={t("legacy.6771285bc08c")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -45,23 +47,23 @@ export default function MCPLogsPage() {
 
       <div className="table-card">
         {loading ? (
-          <div className="muted text-sm" style={{ padding: 18 }}>加载中...</div>
+          <div className="muted text-sm" style={{ padding: 18 }}>{t("legacy.9dc0825fba54")}</div>
         ) : total === 0 ? (
           <EmptyState
             icon={MessageSquareText}
-            title={keyword ? "没有匹配的记录" : "暂无 MCP 调用"}
-            hint={keyword ? "换个关键词试试。" : "配置并连接 MCP 服务后，AI 工具读取文档的记录会出现在这里。"}
+            title={keyword ? t("legacy.e455f075d925") : t("legacy.179ffc21f317")}
+            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.fea7bb8c19f5")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>工具</th>
-                <th>查询</th>
-                <th>结果数</th>
-                <th>用户</th>
-                <th>输入</th>
-                <th>时间</th>
+                <th>{t("legacy.5ca6730d4415")}</th>
+                <th>{t("legacy.bcd6771e08ec")}</th>
+                <th>{t("legacy.15c20d768e18")}</th>
+                <th>{t("legacy.0d0e1a86b3aa")}</th>
+                <th>{t("legacy.2087c777c06f")}</th>
+                <th>{t("legacy.8b6ff498515b")}</th>
               </tr>
             </thead>
             <tbody>
