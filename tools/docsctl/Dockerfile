@@ -6,7 +6,7 @@
 #
 # Publish to your registry and reference it in deploy/ci/modex-docs.gitlab-ci.yml.
 
-FROM golang:1.22-bookworm AS build
+FROM golang:1.23-bookworm AS build
 WORKDIR /src
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
