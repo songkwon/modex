@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible Modex defect
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: For security issues, use the private process in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: v1.2.3 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include minimal steps, expected behavior, and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and logs
+      description: Remove tokens, cookies, credentials, and personal data.
