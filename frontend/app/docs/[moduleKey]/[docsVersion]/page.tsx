@@ -23,7 +23,7 @@ export default async function VersionPage({ params }: { params: Promise<{ module
       </section>
       <section className="mt-5 card-grid">
         {entries.length === 0 ? (
-          <div className="panel muted">{t("legacy.05de0a0f5bd4")}</div>
+          <div className="panel muted">{t("docs.module.docsVersion.no_document_entry_is_available_in_the_current")}</div>
         ) : entries.map((entry) => (
           <Link className="card" href={`/docs/${moduleKey}/${docsVersion}/${entry.entry_key}`} key={entry.entry_key}>
             <h2 className="text-lg font-semibold">{entry.title}</h2>

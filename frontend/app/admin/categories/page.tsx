@@ -69,7 +69,7 @@ function TreeNode({
         onDragOver={(e) => drag.onDragOver(e, category.id)}
         onDrop={(e) => drag.onDrop(e, category.id)}
       >
-        <span className="tree-grip" title={t("legacy.13084b6a4ce9")}><GripVertical size={14} /></span>
+        <span className="tree-grip" title={t("admin.categories.drag_to_reorder_adjust_hierarchy")}><GripVertical size={14} /></span>
         {hasChildren ? (
           <span className={`tree-twist${open ? " open" : ""}`} onClick={() => toggle(category.id)}>
             <ChevronRight size={15} />
@@ -81,9 +81,9 @@ function TreeNode({
         <span className="tree-label">{category.name}</span>
         <span className="tree-spacer" />
         <div className="row-actions">
-          <button className="icon-btn" onClick={() => onAddSub(category.id)} title={t("legacy.447e2db4681e")}><Plus size={14} /></button>
-          <button className="icon-btn" onClick={() => onEdit(category)} title={t("legacy.051836569928")}><Pencil size={14} /></button>
-          <button className="icon-btn danger" onClick={() => onDelete(category.id, category.name)} title={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
+          <button className="icon-btn" onClick={() => onAddSub(category.id)} title={t("admin.categories.add_subcategory")}><Plus size={14} /></button>
+          <button className="icon-btn" onClick={() => onEdit(category)} title={t("admin.categories.edit")}><Pencil size={14} /></button>
+          <button className="icon-btn danger" onClick={() => onDelete(category.id, category.name)} title={t("admin.categories.delete")}><Trash2 size={14} /></button>
         </div>
       </div>
       {hasChildren && open ? (
@@ -221,7 +221,7 @@ export default function AdminCategoriesPage() {
   }
 
   async function remove(id: string, name: string) {
-    if (!confirm(t("legacy.b4976b17b23a", { value1: name }))) return;
+    if (!confirm(t("admin.categories.delete_category_value1_subcategories_must_be_deleted_first", { value1: name }))) return;
     try {
       await deleteCategory(id);
       await refresh();
@@ -241,16 +241,16 @@ export default function AdminCategoriesPage() {
 
   return (
     <AdminShell
-      title={t("legacy.62f8edc30321")}
+      title={t("component.adminShell.category_management")}
       kicker="Categories"
-      description={t("legacy.f0315110a4b8")}
+      description={t("admin.categories.hierarchical_categories_support_arbitrary_nesting_drag_directly_on")}
     >
       {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error}</div> : null}
 
       <div className="admin-toolbar">
-        <div className="muted" style={{ fontSize: 13 }}>{flatten(categories).length} {t("legacy.4f2370f5e386")}</div>
+        <div className="muted" style={{ fontSize: 13 }}>{flatten(categories).length} {t("admin.categories.category_nodes_drag_cards_to_reorder_or_change")}</div>
         <div className="admin-toolbar-actions">
-          {isSuper ? <button className="button button-primary" onClick={openCreate}><Plus size={16} /> {t("legacy.ffabe4e5b684")}</button> : null}
+          {isSuper ? <button className="button button-primary" onClick={openCreate}><Plus size={16} /> {t("admin.categories.add_top_level_category")}</button> : null}
         </div>
       </div>
 
@@ -258,8 +258,8 @@ export default function AdminCategoriesPage() {
         {categories.length === 0 && !error ? (
           <EmptyState
             icon={FolderTree}
-            title={t("legacy.3eeb3b76eef2")}
-            hint={t("legacy.0fe8c5284dd5")}
+            title={t("admin.categories.no_categories")}
+            hint={t("admin.categories.click_add_top_level_category_top_right_to")}
           />
         ) : (
           <div className="tree">
@@ -273,35 +273,35 @@ export default function AdminCategoriesPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={data.id ? t("legacy.182a0480aae8") : data.parent_id ? t("legacy.447e2db4681e") : t("legacy.ffabe4e5b684")}
-        subtitle={t("legacy.c1eab53f8cfb")}
+        title={data.id ? t("admin.categories.edit_category") : data.parent_id ? t("admin.categories.add_subcategory") : t("admin.categories.add_top_level_category")}
+        subtitle={t("admin.categories.top_level_categories_require_admin_privileges_subcategories_can")}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>{t("legacy.2cd0f3be8738")}</button>
-            <button className="button button-primary" onClick={submit} disabled={!data.name?.trim()}>{data.id ? t("legacy.991bb7cfe5a8") : t("legacy.cde2cd071d25")}</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{t("admin.categories.cancel")}</button>
+            <button className="button button-primary" onClick={submit} disabled={!data.name?.trim()}>{data.id ? t("admin.categories.save_changes") : t("admin.categories.create")}</button>
           </>
         }
       >
         <div className="field">
-          <label>{t("legacy.909712f2847d")}</label>
-          <input value={data.name || ""} placeholder={t("legacy.494b23115e71")} autoFocus onChange={(e) => setData({ ...data, name: e.target.value })} />
-          {data.id ? <span className="field-hint">{t("legacy.301c9461c1d0")} <span className="tree-keytag">{data.key}</span>{t("legacy.e7d3ed9636ac")}</span> : <span className="field-hint">{t("legacy.de9b50b07a8c")}</span>}
+          <label>{t("admin.categories.name")}</label>
+          <input value={data.name || ""} placeholder={t("admin.categories.e_g_tool_specification")} autoFocus onChange={(e) => setData({ ...data, name: e.target.value })} />
+          {data.id ? <span className="field-hint">{t("admin.categories.id")} <span className="tree-keytag">{data.key}</span>{t("admin.categories.system_generated_immutable")}</span> : <span className="field-hint">{t("admin.categories.id_is_auto_generated_by_the_system")}</span>}
         </div>
         <div className="field">
-          <label>{t("legacy.dc2ba467fc7a")}</label>
-          <input value={data.description || ""} placeholder={t("legacy.52b4136bf071")} onChange={(e) => setData({ ...data, description: e.target.value })} />
+          <label>{t("admin.categories.description")}</label>
+          <input value={data.description || ""} placeholder={t("admin.categories.one_sentence_description_of_this_category")} onChange={(e) => setData({ ...data, description: e.target.value })} />
         </div>
         <div className="field">
-          <label>{t("legacy.e77b87e5b8e7")}</label>
-          <Combobox options={[...(isSuper ? [{ value: "", label: t("legacy.76362d22d383") }] : []), ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder={t("legacy.6f6d88776984")} />
+          <label>{t("admin.categories.parent_category")}</label>
+          <Combobox options={[...(isSuper ? [{ value: "", label: t("admin.categories.top_level_category") }] : []), ...parentOptions]} value={[data.parent_id || ""]} onChange={(v) => setData({ ...data, parent_id: v[0] || "" })} multiple={false} placeholder={t("admin.categories.select_parent_category")} />
         </div>
         <div className="field">
-          <label>{t("legacy.0d720eeea264")}</label>
+          <label>{t("admin.categories.icon")}</label>
           <IconPicker value={data.icon} onChange={(icon) => setData({ ...data, icon })} />
         </div>
         <div className="field">
-          <label>{t("legacy.21fa2b2c4376")}</label>
-          <Combobox options={[{ value: "", label: t("legacy.c7bcc6d27f3a") }, ...teamOptions]} value={[data.responsible_team || ""]} onChange={(v) => setData({ ...data, responsible_team: v[0] || "" })} multiple={false} placeholder={t("legacy.66c48e3b9eb2")} />
+          <label>{t("admin.categories.owning_team")}</label>
+          <Combobox options={[{ value: "", label: t("admin.categories.none") }, ...teamOptions]} value={[data.responsible_team || ""]} onChange={(v) => setData({ ...data, responsible_team: v[0] || "" })} multiple={false} placeholder={t("admin.categories.select_owning_team")} />
         </div>
       </Modal>
     </AdminShell>

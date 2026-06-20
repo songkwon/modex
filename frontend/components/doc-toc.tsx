@@ -144,7 +144,7 @@ export function DocToc() {
   return (
     <>
       <p className="doc-toc-title doc-toc-head">
-        <List size={14} /> {t("legacy.a610e0c62b3e")}
+        <List size={14} /> {t("component.docToc.table_of_contents")}
       </p>
       <div className="doc-toc-wrap" ref={navRef}>
         {rail ? (
@@ -172,7 +172,7 @@ export function DocToc() {
             ) : null}
           </svg>
         ) : null}
-        <nav className="doc-toc-tree" aria-label={t("legacy.a610e0c62b3e")}>
+        <nav className="doc-toc-tree" aria-label={t("component.docToc.table_of_contents")}>
           {items.map((it) => (
             <a
               key={it.id}

@@ -17,7 +17,7 @@ export function CodeBlockCopy() {
 
       const btn = document.createElement("button");
       btn.className = "code-copy-btn";
-      btn.setAttribute("aria-label", t("legacy.420c20dd9fcc"));
+      btn.setAttribute("aria-label", t("component.codeBlockCopy.copy_code"));
       btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
 
       btn.addEventListener("click", () => {

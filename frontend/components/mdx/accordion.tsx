@@ -48,7 +48,7 @@ export function Expandable({ title, defaultOpen = false, children }: { title?: s
     <div className={`mdx-expandable${open ? " is-open" : ""}`}>
       <button type="button" className="mdx-expandable__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <ChevronRight size={14} className="mdx-accordion__chevron" aria-hidden />
-        <span>{title ?? t("legacy.00bd3960fea8")}</span>
+        <span>{title ?? t("component.mdx.accordion.expand")}</span>
       </button>
       {open ? <div className="mdx-expandable__body">{children}</div> : null}
     </div>

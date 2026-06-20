@@ -36,19 +36,19 @@ export default function FavoritesPage() {
     <main className="main">
       <section className="hero-panel compact-hero">
         <span className="hero-eyebrow">Personal</span>
-        <h1 className="hero-title">{t("legacy.9dccba0eafbb")}</h1>
-        <p className="hero-copy">{t("legacy.612f57738c06")}</p>
+        <h1 className="hero-title">{t("me.favorites.my_follows")}</h1>
+        <p className="hero-copy">{t("me.favorites.frequently_viewed_document_sources_are_grouped_here")}</p>
       </section>
 
-      {error ? <div className="panel badge-danger mt-5">{t("legacy.01de8216e0d0")}{error}</div> : null}
+      {error ? <div className="panel badge-danger mt-5">{t("admin.mcpLogs.load_failed")}{error}</div> : null}
 
       <section className="mt-5">
         {favorites.length === 0 ? (
           <div className="table-card">
             <EmptyState
               icon={Heart}
-              title={favoriteKeys.length ? t("legacy.34cacdaed351") : t("legacy.9d64d2c02081")}
-              hint={favoriteKeys.length ? t("legacy.76b0c12684e6") : t("legacy.379856f658f6")}
+              title={favoriteKeys.length ? t("me.favorites.followed_modules_are_temporarily_unavailable") : t("me.favorites.no_modules_followed_yet")}
+              hint={favoriteKeys.length ? t("me.favorites.these_modules_may_have_been_deprecated_or_renamed") : t("me.favorites.followed_modules_will_appear_here")}
             />
           </div>
         ) : (
@@ -70,18 +70,18 @@ export default function FavoritesPage() {
                 <aside className="package-stats text-sm">
                   <span className="score-pill">favorite</span>
                   <div>
-                    <dt className="muted">{t("legacy.a83a27e9be90")}</dt>
+                    <dt className="muted">{t("categories.id.default_version")}</dt>
                     <dd>{module.default_version}</dd>
                   </div>
                   <div>
-                    <dt className="muted">{t("legacy.265cd352bea6")}</dt>
+                    <dt className="muted">{t("categories.id.reads_30d")}</dt>
                     <dd>{module.reads_30d}</dd>
                   </div>
                   <div className="flex gap-2 pt-1">
-                    <button className="button icon-button" aria-label={t("legacy.dc89d336c8e9")} onClick={() => remove(module.module_key)}>
+                    <button className="button icon-button" aria-label={t("me.favorites.unfollow")} onClick={() => remove(module.module_key)}>
                       <Trash2 size={15} />
                     </button>
-                    <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("legacy.c771248e511f")} <ArrowUpRight size={14} /></Link>
+                    <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("categories.id.open")} <ArrowUpRight size={14} /></Link>
                   </div>
                 </aside>
               </article>

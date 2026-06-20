@@ -23,16 +23,16 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
           <CategoryTree
             categories={categories}
             activeID={id}
-            rootId={id}
+          rootId={id}
           backHref="/"
-          backLabel={t("legacy.a1054434857f")}
-          hrefFor={(c) => `/categories/${c.id}`}
+          backLabel={t("categories.id.all_categories")}
+          hrefPrefix="/categories"
         />
         <div className="category-content">
           <div className="shelf-toolbar mb-5">
             <div>
               <h1>{category.name}</h1>
-              <p className="muted">{modules.length} {t("legacy.cd32163500a7")} {category.description || ""}</p>
+              <p className="muted">{modules.length} {t("categories.id.document_collections")} {category.description || ""}</p>
             </div>
           </div>
           {modules.length === 1 ? (
@@ -42,7 +42,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
               {modules.map((module) => (
                 <ModuleRow module={module} key={module.module_key} />
               ))}
-              {modules.length === 0 ? <div className="empty-state">{t("legacy.c14b31fc3c38")}</div> : null}
+              {modules.length === 0 ? <div className="empty-state">{t("categories.id.no_document_collections_in_this_category_yet")}</div> : null}
             </div>
           )}
         </div>
@@ -60,7 +60,7 @@ async function SingleModuleView({ module }: { module: ModuleInfo }) {
   const entries = await getEntries(module.module_key, module.default_version);
   const primary = entries.find((e) => e.is_primary) || entries[0];
   if (!primary) {
-    return <div className="empty-state">{t("legacy.e44ccb662208")}</div>;
+    return <div className="empty-state">{t("categories.id.no_document_entry_points")}</div>;
   }
   redirect(`/docs/${module.module_key}/${module.default_version}/${primary.entry_key}`);
 }
@@ -79,26 +79,26 @@ async function ModuleRow({ module }: { module: ModuleInfo }) {
         <p className="muted mt-3 text-sm leading-6">{module.description}</p>
         <div className="package-meta">
           <span>{module.category_path}</span>
-          <span>owner: {module.owner_group}</span>
-          <span>channel: {module.channel}</span>
+          <span>{t("categories.id.owner")}: {module.owner_group}</span>
+          <span>{t("categories.id.channel")}: {module.channel}</span>
         </div>
       </div>
       <aside className="package-stats text-sm">
-        <span className="score-pill">active package</span>
+        <span className="score-pill">{t("categories.id.activePackage")}</span>
         <div>
-          <dt className="muted">{t("legacy.a83a27e9be90")}</dt>
+          <dt className="muted">{t("categories.id.default_version")}</dt>
           <dd>{module.default_version}</dd>
         </div>
         <div>
-          <dt className="muted">{t("legacy.79e65b1b328f")}</dt>
+          <dt className="muted">{t("categories.id.documentation_type")}</dt>
           <dd className="flex items-center gap-1"><BookOpen size={14} /> {docTypeLabel(module.doc_type)}</dd>
         </div>
         <div>
-          <dt className="muted">{t("legacy.265cd352bea6")}</dt>
+          <dt className="muted">{t("categories.id.reads_30d")}</dt>
           <dd>{module.reads_30d}</dd>
         </div>
         <div className="flex gap-2 pt-1">
-          <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("legacy.c771248e511f")} <ArrowUpRight size={14} /></Link>
+          <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("categories.id.open")} <ArrowUpRight size={14} /></Link>
         </div>
       </aside>
     </article>

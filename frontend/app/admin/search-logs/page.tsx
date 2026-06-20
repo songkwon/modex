@@ -28,14 +28,14 @@ export default function SearchLogsPage() {
   const { items: pageRows, total, page, setPage, error } = usePaged<SearchLog>("/api/admin/analytics/search", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title={t("legacy.1b9b75f51d20")} kicker="Search Analytics" description={t("legacy.9f4505ae6160")}>
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("legacy.01de8216e0d0")}{error}</div> : null}
+    <AdminShell title={t("component.adminShell.search_log")} kicker="Search Analytics" description={t("admin.searchLogs.monitor_high_frequency_search_terms_zero_result_queries")}>
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("admin.mcpLogs.load_failed")}{error}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder={t("legacy.77c5e12f55eb")}
+            placeholder={t("admin.searchLogs.search_query_user_ip")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -46,19 +46,19 @@ export default function SearchLogsPage() {
         {total === 0 ? (
           <EmptyState
             icon={Search}
-            title={keyword ? t("legacy.4d4e33d46e72") : t("legacy.2c45f43d5445")}
-            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.705c85d8bb95")}
+            title={keyword ? t("admin.searchLogs.no_matching_search_logs") : t("admin.searchLogs.no_search_logs")}
+            hint={keyword ? t("admin.mcpLogs.try_a_different_keyword") : t("admin.searchLogs.records_appear_here_after_a_user_performs_a")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>{t("legacy.97e406603ba9")}</th>
-                <th>{t("legacy.47a270081ab2")}</th>
-                <th>{t("legacy.15c20d768e18")}</th>
-                <th>{t("legacy.0d0e1a86b3aa")}</th>
-                <th>{t("legacy.dc71485f8ee9")}</th>
-                <th>{t("legacy.8b6ff498515b")}</th>
+                <th>{t("admin.searchLogs.search_term")}</th>
+                <th>{t("admin.searchLogs.mode")}</th>
+                <th>{t("admin.mcpLogs.results")}</th>
+                <th>{t("admin.mcpLogs.user")}</th>
+                <th>{t("admin.searchLogs.click")}</th>
+                <th>{t("admin.mcpLogs.time")}</th>
               </tr>
             </thead>
             <tbody>

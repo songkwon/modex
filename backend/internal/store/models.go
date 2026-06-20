@@ -176,6 +176,8 @@ type Release struct {
 	PipelineURL     string    `json:"pipeline_url"`
 	BuildSystem     string    `json:"build_system"`
 	BuildID         string    `json:"build_id"`
+	TriggerType     string    `json:"trigger_type"`
+	SourceIP        string    `json:"source_ip"`
 	ArtifactVersion string    `json:"artifact_version"`
 	PackageVersion  string    `json:"package_version"`
 	StorageURI      string    `json:"storage_uri"`
@@ -310,6 +312,8 @@ type DeployArtifact struct {
 	RepoType       string
 	Branch         string
 	CommitSHA      string
+	TriggerType    string
+	SourceIP       string
 	Entries        []DeployEntry
 	Documents      []DeployDocument
 	Nav            []NavItem

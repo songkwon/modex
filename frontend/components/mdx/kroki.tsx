@@ -81,7 +81,7 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
   if (error) {
     return (
       <div className="mdx-diagram mdx-diagram--error">
-        <span className="mdx-diagram__tag">{type} {t("legacy.55ad71e74ffb")}</span>
+        <span className="mdx-diagram__tag">{type} {t("component.mdx.kroki.rendering_failed")}</span>
         <pre>{source}</pre>
       </div>
     );

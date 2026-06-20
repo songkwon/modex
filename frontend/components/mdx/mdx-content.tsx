@@ -186,7 +186,7 @@ export async function MdxContent({ source, assetBase }: { source: string; assetB
     } catch {
       return (
         <div className="mdx mdx--error">
-          <p className="muted text-sm">{t("legacy.90394e52e026")}</p>
+          <p className="muted text-sm">{t("component.mdx.mdxContent.documentation_rendering_failed_falling_back_to_plain_text")}</p>
           <pre className="mdx-code__pre">{source}</pre>
         </div>
       );

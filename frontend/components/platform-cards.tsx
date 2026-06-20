@@ -48,7 +48,7 @@ export function PlatformCards({
               <span className="platform-icon"><Icon size={20} /></span>
               <div className="platform-titles">
                 <div className="platform-name">{cat.name}</div>
-                <div className="platform-count">{total} {t("legacy.5522d93cb7a1")}</div>
+                <div className="platform-count">{total} {t("component.platformCards.document_collections")}</div>
               </div>
             </div>
             {cat.description ? <p className="platform-desc muted">{cat.description}</p> : null}
@@ -77,7 +77,7 @@ export function PlatformCards({
                 ))}
               </div>
             ) : null}
-            <span className="platform-cta">{t("legacy.f590c32742cd")} <ArrowRight size={14} /></span>
+            <span className="platform-cta">{t("component.platformCards.browse_documentation")} <ArrowRight size={14} /></span>
           </button>
         );
       })}

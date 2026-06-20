@@ -63,7 +63,7 @@ export function ApiPlayground({
         try {
           hdrs = JSON.parse(headersText);
         } catch {
-          throw new Error(t("legacy.ec6c6aa43ffb"));
+          throw new Error(t("component.mdx.apiPlayground.request_headers_are_not_valid_json"));
         }
       }
       const init: RequestInit = { method: m, headers: hdrs };
@@ -78,7 +78,7 @@ export function ApiPlayground({
       }
       setResp({ status: r.status, ms: Math.round(performance.now() - t0), text: pretty });
     } catch (e) {
-      setResp({ error: e instanceof Error ? e.message : t("legacy.126fbf59cf04") });
+      setResp({ error: e instanceof Error ? e.message : t("component.mdx.apiPlayground.request_failed_2") });
     } finally {
       setLoading(false);
     }
@@ -95,11 +95,11 @@ export function ApiPlayground({
         </select>
         <input className="mdx-apiplay__url" value={u} placeholder="https://api.example.com/v1/resource" onChange={(e) => setU(e.target.value)} />
         <button className="mdx-apiplay__send" onClick={send} disabled={loading || !fullUrl}>
-          {loading ? <Loader2 size={14} className="ds-spin" /> : <Send size={14} />} {t("legacy.edecf0ae6e51")}
+          {loading ? <Loader2 size={14} className="ds-spin" /> : <Send size={14} />} {t("component.docChatPanel.send")}
         </button>
       </div>
       <details className="mdx-apiplay__opt">
-        <summary>{t("legacy.4a16b15e8914")}</summary>
+        <summary>{t("component.mdx.apiPlayground.request_headers_request_body")}</summary>
         <label className="mdx-apiplay__lbl">Headers（JSON）</label>
         <textarea className="mdx-apiplay__ta" value={headersText} placeholder='{"Authorization": "Bearer …"}' onChange={(e) => setHeadersText(e.target.value)} />
         {m !== "GET" && m !== "HEAD" ? (
@@ -112,7 +112,7 @@ export function ApiPlayground({
       {resp ? (
         <div className="mdx-apiplay__resp">
           {"error" in resp ? (
-            <div className="mdx-apiplay__status mdx-apiplay__status--err">{t("legacy.01a48c17c5bc")}{resp.error}</div>
+            <div className="mdx-apiplay__status mdx-apiplay__status--err">{t("component.mdx.apiPlayground.request_failed")}{resp.error}</div>
           ) : (
             <>
               <div className={`mdx-apiplay__status${resp.status >= 400 ? " mdx-apiplay__status--err" : ""}`}>
@@ -132,7 +132,7 @@ export function RequestExample({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   return (
     <div className="mdx-apix mdx-apix--req">
-      <div className="mdx-apix__label">{t("legacy.5f6c9c309eff")}</div>
+      <div className="mdx-apix__label">{t("component.mdx.apiPlayground.request_example")}</div>
       {children}
     </div>
   );
@@ -141,7 +141,7 @@ export function ResponseExample({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   return (
     <div className="mdx-apix mdx-apix--res">
-      <div className="mdx-apix__label">{t("legacy.45105c854fa2")}</div>
+      <div className="mdx-apix__label">{t("component.mdx.apiPlayground.response_example")}</div>
       {children}
     </div>
   );
@@ -177,7 +177,7 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
   useEffect(() => {
     if (!pluginEnabled(cfg, "openapi")) return;
     if (!specUrl) {
-      setErr(t("legacy.9423fa728535"));
+      setErr(t("component.mdx.apiPlayground.openapi_specification_url_spec_property_or_plugin_default"));
       return;
     }
     let cancelled = false;
@@ -196,11 +196,11 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
   const path = rawPath || "";
 
   if (err) return <div className="mdx-apiplay__status mdx-apiplay__status--err">{err}</div>;
-  if (!data) return <div className="mdx-openapi__loading">{t("legacy.a8cdf832ad5c")}</div>;
+  if (!data) return <div className="mdx-openapi__loading">{t("component.mdx.apiPlayground.loading_openapi_specification")}</div>;
 
   const op = data?.paths?.[path]?.[method];
   if (!op) {
-    return <div className="mdx-apiplay__status mdx-apiplay__status--err">{t("legacy.46018705252f")}{method.toUpperCase()} {path}</div>;
+    return <div className="mdx-apiplay__status mdx-apiplay__status--err">{t("component.mdx.apiPlayground.operation_not_found_in_specification")}{method.toUpperCase()} {path}</div>;
   }
   const server = (data.servers?.[0]?.url || "").replace(/\/+$/, "");
   const params: Param[] = op.parameters || [];
@@ -216,14 +216,14 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
 
       {params.length ? (
         <div className="mdx-openapi__section">
-          <h4>{t("legacy.9634fb0832be")}</h4>
+          <h4>{t("component.mdx.apiPlayground.parameters")}</h4>
           {params.map((p, i) => (
             <div className="mdx-field" key={i}>
               <div className="mdx-field__head">
                 {p.name ? <code className="mdx-field__name">{p.name}</code> : null}
                 {p.in ? <span className="mdx-field__type">{p.in}</span> : null}
                 {p.schema?.type ? <span className="mdx-field__type">{p.schema.type}</span> : null}
-                {p.required ? <span className="mdx-field__req">{t("legacy.11da9dc44285")}</span> : null}
+                {p.required ? <span className="mdx-field__req">{t("component.mdx.apiPlayground.required")}</span> : null}
               </div>
               {p.description ? <div className="mdx-field__body">{p.description}</div> : null}
             </div>
@@ -233,7 +233,7 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
 
       {Object.keys(responses).length ? (
         <div className="mdx-openapi__section">
-          <h4>{t("legacy.3b1f210d39e3")}</h4>
+          <h4>{t("component.mdx.apiPlayground.response")}</h4>
           {Object.entries(responses).map(([code, r]) => (
             <div className="mdx-field" key={code}>
               <div className="mdx-field__head">
@@ -245,7 +245,7 @@ export function OpenApi({ spec, operation, title }: { spec?: string; operation?:
         </div>
       ) : null}
 
-      <ApiPlayground method={method} url={`${server}${path}`} title={t("legacy.a3ba53fadbae")} />
+      <ApiPlayground method={method} url={`${server}${path}`} title={t("component.mdx.apiPlayground.debug")} />
     </div>
   );
 }

@@ -53,7 +53,7 @@ export default function AdminSnippetsPage() {
 
   return (
     <AdminShell
-      title={t("legacy.149f545ffeb8")}
+      title={t("component.adminShell.reused_snippet")}
       kicker="Snippets"
       description="定义可在任意文档中复用的片段（<Snippet name=&quot;key&quot;/>）与全局变量（{{key}}）。保存后立即对全站文档生效。"
     >
@@ -61,18 +61,18 @@ export default function AdminSnippetsPage() {
 
       <section className="card" style={{ display: "grid", gap: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 className="page-kicker" style={{ margin: 0 }}>{t("legacy.908e56fe5ed8")}</h2>
+          <h2 className="page-kicker" style={{ margin: 0 }}>{t("admin.snippets.chunk")}</h2>
           <button className="button" onClick={() => setSnippets((s) => [...s, { key: "", name: "", content: "" }])}>
-            <Plus size={15} /> {t("legacy.e8ede92ac319")}
+            <Plus size={15} /> {t("admin.snippets.add_snippet")}
           </button>
         </div>
-        {snippets.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{t("legacy.5dfd097a0cce")}</p> : null}
+        {snippets.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{t("admin.snippets.no_snippets")}</p> : null}
         {snippets.map((s, i) => (
           <div key={i} className="snippet-row">
             <div style={{ display: "flex", gap: 8 }}>
-              <input style={{ flex: "0 0 200px" }} value={s.key} placeholder={t("legacy.aefcfe5ad9d5")} onChange={(e) => patchSnippet(i, { key: e.target.value })} />
-              <input style={{ flex: 1 }} value={s.name} placeholder={t("legacy.7eb0a3254bf5")} onChange={(e) => patchSnippet(i, { name: e.target.value })} />
-              <button className="button" aria-label={t("legacy.2f9daa828907")} onClick={() => setSnippets((arr) => arr.filter((_, idx) => idx !== i))}>
+              <input style={{ flex: "0 0 200px" }} value={s.key} placeholder={t("admin.snippets.key_reference_name")} onChange={(e) => patchSnippet(i, { key: e.target.value })} />
+              <input style={{ flex: 1 }} value={s.name} placeholder={t("admin.snippets.display_name_optional")} onChange={(e) => patchSnippet(i, { name: e.target.value })} />
+              <button className="button" aria-label={t("admin.categories.delete")} onClick={() => setSnippets((arr) => arr.filter((_, idx) => idx !== i))}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -88,17 +88,17 @@ export default function AdminSnippetsPage() {
 
       <section className="card" style={{ display: "grid", gap: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 className="page-kicker" style={{ margin: 0 }}>{t("legacy.d1d2fb2df386")}</h2>
+          <h2 className="page-kicker" style={{ margin: 0 }}>{t("admin.snippets.global_variables")}</h2>
           <button className="button" onClick={() => setVars((v) => [...v, { key: "", value: "" }])}>
-            <Plus size={15} /> {t("legacy.de177c5fd914")}
+            <Plus size={15} /> {t("admin.snippets.add_variable")}
           </button>
         </div>
-        {vars.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{t("legacy.fd5c825212ed")}</p> : null}
+        {vars.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{t("admin.snippets.no_variables")}</p> : null}
         {vars.map((v, i) => (
           <div key={i} style={{ display: "flex", gap: 8 }}>
             <input style={{ flex: "0 0 200px" }} value={v.key} placeholder="key" onChange={(e) => patchVar(i, { key: e.target.value })} />
             <input style={{ flex: 1 }} value={v.value} placeholder="值" onChange={(e) => patchVar(i, { value: e.target.value })} />
-            <button className="button" aria-label={t("legacy.2f9daa828907")} onClick={() => setVars((arr) => arr.filter((_, idx) => idx !== i))}>
+            <button className="button" aria-label={t("admin.categories.delete")} onClick={() => setVars((arr) => arr.filter((_, idx) => idx !== i))}>
               <Trash2 size={15} />
             </button>
           </div>
@@ -107,9 +107,9 @@ export default function AdminSnippetsPage() {
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button className="button button-primary" onClick={submit} disabled={saving}>
-          {saving ? <Loader2 size={16} className="ds-spin" /> : <Puzzle size={16} />} {t("legacy.a3030bf8f16d")}
+          {saving ? <Loader2 size={16} className="ds-spin" /> : <Puzzle size={16} />} {t("admin.modules.save")}
         </button>
-        {saved ? <span className="badge badge-success"><Check size={13} /> {t("legacy.1bd91a7d0c53")}</span> : null}
+        {saved ? <span className="badge badge-success"><Check size={13} /> {t("admin.snippets.saved")}</span> : null}
       </div>
     </AdminShell>
   );

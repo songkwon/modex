@@ -264,6 +264,9 @@ func deploy(root, buildDir, artifact, url, token string) error {
 	req.Header.Set("User-Agent", "docsctl/"+docsctlVersion)
 	// Per-module / global deploy token (matches backend /api/deploy auth).
 	req.Header.Set("X-Modex-Deploy-Token", token)
+	if runningInCI() {
+		req.Header.Set("X-Modex-Deploy-Trigger", "pipeline")
+	}
 	fmt.Printf("docsctl deploy uploading %s (%d bytes) to %s\n", artifact, len(b), url)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -275,6 +278,23 @@ func deploy(root, buildDir, artifact, url, token string) error {
 		return fmt.Errorf("deploy upload failed: %s: %s", resp.Status, formatAPIError(body))
 	}
 	return nil
+}
+
+func runningInCI() bool {
+	for _, key := range []string{
+		"CI",
+		"GITLAB_CI",
+		"GITHUB_ACTIONS",
+		"JENKINS_URL",
+		"BUILDKITE",
+		"CIRCLECI",
+		"TF_BUILD",
+	} {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func formatAPIError(body []byte) string {

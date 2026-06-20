@@ -15,7 +15,7 @@ type Props = {
 /** Icon button that copies `value` and briefly swaps to a checkmark. */
 export function CopyButton({ value, title, className = "icon-btn", size = 14, label }: Props) {
   const { t } = useI18n();
-  const titleText = title ?? t("legacy.63d90d977348");
+  const titleText = title ?? t("component.ui.copyButton.copy");
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -36,7 +36,7 @@ export function CopyButton({ value, title, className = "icon-btn", size = 14, la
       data-copied={copied || undefined}
     >
       {copied ? <Check size={size} /> : <Copy size={size} />}
-      {label ? <span>{copied ? t("legacy.8f6f8d979c98") : label}</span> : null}
+      {label ? <span>{copied ? t("component.ui.copyButton.copied") : label}</span> : null}
     </button>
   );
 }

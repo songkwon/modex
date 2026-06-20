@@ -35,10 +35,10 @@ export function Pagination({
   return (
     <div className="pagination">
       <span>
-        共 {total} {t("legacy.064f059f1a4f")} {from}–{to} 条
+        共 {total} {t("component.ui.pagination.items_page")} {from}–{to} 条
       </span>
       <div className="pagination-pages">
-        <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label={t("legacy.c9b9ae7a6144")}>
+        <button className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label={t("component.ui.pagination.previous_page")}>
           <ChevronLeft size={15} />
         </button>
         {pageList(page, totalPages).map((p, i) =>
@@ -52,7 +52,7 @@ export function Pagination({
             </button>
           ),
         )}
-        <button className="page-btn" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label={t("legacy.8a8542f69648")}>
+        <button className="page-btn" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label={t("component.ui.pagination.next_page")}>
           <ChevronRight size={15} />
         </button>
       </div>

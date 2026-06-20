@@ -7,19 +7,19 @@ import { getServerI18n } from "@/lib/i18n-server";
 export default async function AdminPage() {
   const { t } = await getServerI18n();
   const links = [
-    ["/admin/categories", t("legacy.62f8edc30321"), t("legacy.c379199f21fd"), FolderTree],
-    ["/admin/teams", t("legacy.95a792201917"), t("legacy.93a61c1faea7"), UsersRound],
-    ["/admin/modules", t("legacy.79963951e270"), t("legacy.edfc0242df6d"), Boxes],
-    ["/admin/users", t("legacy.fbf413d429bd"), t("legacy.825a96349864"), Users],
-    ["/admin/settings", t("legacy.082a738ae620"), t("legacy.ca45f732b35e"), Settings],
-    ["/admin/connected-apps", t("legacy.213f5505bd1a"), t("legacy.7a58eb329136"), Link2],
-    ["/admin/releases", t("legacy.7290d89a6d74"), t("legacy.cf320f403b63"), History],
-    ["/admin/feedback", t("legacy.5f5b94f329bf"), t("legacy.44bc7f387b74"), MessageCircleQuestion],
-    ["/admin/search-logs", t("legacy.1b9b75f51d20"), t("legacy.6a460742faa7"), Search],
-    ["/admin/mcp-logs", t("legacy.795c8bbceda7"), t("legacy.baa3b6782ce5"), MessageSquareText],
+    ["/admin/categories", t("component.adminShell.category_management"), t("admin.maintain_hierarchy_categories_ordering_status_and_responsible_teams"), FolderTree],
+    ["/admin/teams", t("component.adminShell.team_management"), t("admin.manage_the_documentation_team_leads_and_members_and"), UsersRound],
+    ["/admin/modules", t("admin.documentation_source"), t("admin.connect_documentation_repository_bind_categories_generate_deploy_token"), Boxes],
+    ["/admin/users", t("component.adminShell.user_management"), t("admin.manage_user_profiles_statuses_and_permissions"), Users],
+    ["/admin/settings", t("component.adminShell.model_settings"), t("admin.integrate_chat_vector_re_ranking_models_to_enable"), Settings],
+    ["/admin/connected-apps", t("component.adminShell.app_link"), t("admin.register_external_applications_to_access_modex_api_and"), Link2],
+    ["/admin/releases", t("component.adminShell.release_history"), t("admin.track_the_source_build_and_status_of_each"), History],
+    ["/admin/feedback", t("component.adminShell.documentation_feedback"), t("admin.view_reader_submitted_helpful_needs_improvement_feedback"), MessageCircleQuestion],
+    ["/admin/search-logs", t("component.adminShell.search_log"), t("admin.analyze_query_terms_hits_and_clicks"), Search],
+    ["/admin/mcp-logs", t("component.adminShell.mcp_logs"), t("admin.view_ai_tool_document_reading_history"), MessageSquareText],
   ] as const;
   return (
-    <AdminShell title={t("legacy.87354adb1c31")} kicker="Admin" description={t("legacy.517da0e94f26")}>
+    <AdminShell title={t("admin.admin_console")} kicker="Admin" description={t("admin.manage_categories_teams_users_document_sources_models_and")}>
       <section className="card-grid">
         {links.map(([href, label, desc, Icon]) => (
           <Link className="admin-entry" href={href} key={href}>

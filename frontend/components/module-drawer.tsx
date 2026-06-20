@@ -8,14 +8,14 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
   const { t } = useI18n();
   if (!module) return null;
   const rows = [
-    [t("legacy.515559957fd3"), module.category_path],
-    ["Owner", module.owner_group],
-    ["maintainers", module.maintainers.join(", ")],
-    [t("legacy.c68acbc684f6"), module.default_version],
-    ["package_version", module.package_version],
-    ["channel", module.channel],
-    ["edition", module.edition],
-    [t("legacy.c71895a3aa4b"), module.updated_at.slice(0, 10)]
+    [t("common.category"), module.category_path],
+    [t("component.moduleDrawer.owner"), module.owner_group],
+    [t("component.moduleDrawer.maintainers"), module.maintainers.join(", ")],
+    [t("component.moduleDrawer.default_document_version"), module.default_version],
+    [t("component.moduleDrawer.packageVersion"), module.package_version],
+    [t("component.moduleDrawer.channel"), module.channel],
+    [t("component.moduleDrawer.edition"), module.edition],
+    [t("component.moduleDrawer.recent_releases"), module.updated_at.slice(0, 10)]
   ];
   return (
     <aside className="drawer">
@@ -24,7 +24,7 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
           <h2 className="text-xl font-semibold">{module.name}</h2>
           <p className="muted mt-2 text-sm leading-6">{module.description}</p>
         </div>
-        <button className="button icon-button" onClick={onClose} aria-label={t("legacy.3fd47edce45b")}>
+        <button className="button icon-button" onClick={onClose} aria-label={t("component.searchResults.close")}>
           <X size={16} />
         </button>
       </div>
@@ -43,7 +43,7 @@ export function ModuleDrawer({ module, onClose }: { module: ModuleInfo | null; o
       </div>
       <a className="button mt-5" href={module.repo_url}>
         <ExternalLink size={16} />
-        {t("legacy.921c3b62f1f7")}
+        {t("component.moduleDrawer.view_source_code")}
       </a>
     </aside>
   );

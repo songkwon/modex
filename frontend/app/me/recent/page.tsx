@@ -27,22 +27,22 @@ export default function RecentPage() {
     <main className="main">
       <section className="hero-panel compact-hero">
         <span className="hero-eyebrow">Personal</span>
-        <h1 className="hero-title">{t("legacy.de314b445e07")}</h1>
-        <p className="hero-copy">{t("legacy.648db0493044")}</p>
+        <h1 className="hero-title">{t("me.recent.recently_accessed")}</h1>
+        <p className="hero-copy">{t("me.recent.recently_viewed_document_pages_grouped_by_time")}</p>
       </section>
 
       <section className="mt-5 table-card">
         {items.length === 0 ? (
-          <EmptyState icon={Clock3} title={t("legacy.5751457093ee")} hint={t("legacy.6987b70b304c")} />
+          <EmptyState icon={Clock3} title={t("me.recent.no_access_records_yet")} hint={t("me.recent.recently_viewed_pages_appear_here")} />
         ) : (
           <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>{t("legacy.2687ccdbb1d2")}</th>
-                  <th>{t("legacy.b07e5088eafa")}</th>
-                  <th>{t("legacy.5f76b2bf82dd")}</th>
-                  <th>{t("legacy.92cfc7de2e88")}</th>
+                  <th>{t("me.recent.documentation")}</th>
+                  <th>{t("me.recent.module")}</th>
+                  <th>{t("me.recent.version")}</th>
+                  <th>{t("me.recent.access_time")}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -57,7 +57,7 @@ export default function RecentPage() {
                     <td><span className="tag">{item.docs_version}</span></td>
                     <td>{formatViewedAt(item.viewed_at)}</td>
                     <td>
-                      <Link className="button icon-button" href={item.href} aria-label={t("legacy.d1961d380a4d")}>
+                      <Link className="button icon-button" href={item.href} aria-label={t("me.recent.open_document")}>
                         <ExternalLink size={15} />
                       </Link>
                     </td>

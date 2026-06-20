@@ -101,7 +101,7 @@ export default function AdminTeamsPage() {
   }
 
   async function removeTeam(team: Team) {
-    if (!confirm(t("legacy.5c2909021434", { value1: team.key }))) return;
+    if (!confirm(t("admin.teams.confirm_deletion_of_team_value1_associated_category_owners", { value1: team.key }))) return;
     try {
       await deleteTeam(team.key);
       reload();
@@ -112,9 +112,9 @@ export default function AdminTeamsPage() {
 
   return (
     <AdminShell
-      title={t("legacy.95a792201917")}
+      title={t("component.adminShell.team_management")}
       kicker="Teams"
-      description={t("legacy.d6c0c303d626")}
+      description={t("admin.teams.documentation_maintenance_team_owner_members_the_owner_can")}
     >
       {(error || loadError) ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{error || loadError}</div> : null}
 
@@ -122,14 +122,14 @@ export default function AdminTeamsPage() {
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder={t("legacy.ba20d851f069")}
+            placeholder={t("admin.teams.search_team_name_id_owner_member")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
         </div>
         <div className="admin-toolbar-actions">
           <button className="button button-primary" onClick={openCreate}>
-            <Plus size={16} /> {t("legacy.5fae8485fa3b")}
+            <Plus size={16} /> {t("admin.teams.add_team")}
           </button>
         </div>
       </div>
@@ -139,11 +139,11 @@ export default function AdminTeamsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t("legacy.acdf17f4e9c4")}</th>
-                <th>{t("legacy.a525346277ed")}</th>
-                <th>{t("legacy.6e6d6ddbb7c1")}</th>
-                <th>{t("legacy.1792a32bddf9")}</th>
-                <th style={{ textAlign: "right" }}>{t("legacy.ed31fbb483ee")}</th>
+                <th>{t("admin.teams.team")}</th>
+                <th>{t("admin.teams.owner")}</th>
+                <th>{t("admin.teams.members")}</th>
+                <th>{t("admin.teams.category_owner")}</th>
+                <th className="table-actions-col">{t("admin.modules.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -172,12 +172,12 @@ export default function AdminTeamsPage() {
                       )}
                     </td>
                     <td>
-                      {owned.length > 0 ? owned.map((n) => <span key={n} className="tag" style={{ marginRight: 4 }}>{n}</span>) : <span className="muted" style={{ fontSize: 12 }}>{t("legacy.5c574cbbe0e5")}</span>}
+                      {owned.length > 0 ? owned.map((n) => <span key={n} className="tag" style={{ marginRight: 4 }}>{n}</span>) : <span className="muted" style={{ fontSize: 12 }}>{t("admin.teams.unbound_category")}</span>}
                     </td>
-                    <td>
-                      <div className="row-actions" style={{ justifyContent: "flex-end" }}>
-                        <button className="icon-btn" onClick={() => openEdit(team)} aria-label={t("legacy.051836569928")}><Pencil size={14} /></button>
-                        <button className="icon-btn danger" onClick={() => removeTeam(team)} aria-label={t("legacy.2f9daa828907")}><Trash2 size={14} /></button>
+                    <td className="table-actions-cell">
+                      <div className="row-actions">
+                        <button className="icon-btn" onClick={() => openEdit(team)} aria-label={t("admin.categories.edit")}><Pencil size={14} /></button>
+                        <button className="icon-btn danger" onClick={() => removeTeam(team)} aria-label={t("admin.categories.delete")}><Trash2 size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -187,8 +187,8 @@ export default function AdminTeamsPage() {
                 <tr><td colSpan={5}>
                   <EmptyState
                     icon={UsersRound}
-                    title={keyword ? t("legacy.16b8cd642237") : t("legacy.f36b68f045df")}
-                    hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.d517ea4d7b43")}
+                    title={keyword ? t("admin.teams.no_matching_teams") : t("admin.teams.no_teams")}
+                    hint={keyword ? t("admin.mcpLogs.try_a_different_keyword") : t("admin.teams.create_a_team_and_assign_it_as_the")}
                   />
                 </td></tr>
               ) : null}
@@ -201,50 +201,50 @@ export default function AdminTeamsPage() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={isEdit ? t("legacy.ba200870b207", { value1: draft.key }) : t("legacy.5fae8485fa3b")}
-        subtitle={isEdit ? t("legacy.8b4fd28534d8") : t("legacy.af6d8fbf9d33")}
+        title={isEdit ? t("admin.teams.edit_team_value1", { value1: draft.key }) : t("admin.teams.add_team")}
+        subtitle={isEdit ? t("admin.teams.update_team_info_and_members") : t("admin.teams.owner_is_automatically_added_to_the_member_list")}
         footer={
           <>
-            <button className="button" onClick={() => setModalOpen(false)}>{t("legacy.2cd0f3be8738")}</button>
+            <button className="button" onClick={() => setModalOpen(false)}>{t("admin.categories.cancel")}</button>
             <button className="button button-primary" onClick={submit} disabled={!draft.name.trim() || draft.leaders.length === 0}>
-              {isEdit ? t("legacy.a3030bf8f16d") : t("legacy.d2ec1c315266")}
+              {isEdit ? t("admin.modules.save") : t("admin.teams.create_team")}
             </button>
           </>
         }
       >
         <div className="field">
-          <label>{t("legacy.909712f2847d")}</label>
-          <input value={draft.name} placeholder={t("legacy.49b7511568e2")} autoFocus onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          {isEdit ? <span className="field-hint">{t("legacy.301c9461c1d0")} <code className="code-chip">{draft.key}</code>{t("legacy.e7d3ed9636ac")}</span> : <span className="field-hint">{t("legacy.de9b50b07a8c")}</span>}
+          <label>{t("admin.categories.name")}</label>
+          <input value={draft.name} placeholder={t("admin.teams.e_g_r_and_d_specification_group")} autoFocus onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          {isEdit ? <span className="field-hint">{t("admin.categories.id")} <code className="code-chip">{draft.key}</code>{t("admin.categories.system_generated_immutable")}</span> : <span className="field-hint">{t("admin.categories.id_is_auto_generated_by_the_system")}</span>}
         </div>
         <div className="field">
-          <label>{t("legacy.dc2ba467fc7a")}</label>
-          <input value={draft.description} placeholder={t("legacy.948180f4b4ac")} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+          <label>{t("admin.categories.description")}</label>
+          <input value={draft.description} placeholder={t("admin.teams.one_sentence_description_of_the_team_s_responsibilities")} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
         </div>
         <div className="field">
-          <label>{t("legacy.d196cf0f1ea8")}</label>
+          <label>{t("admin.teams.owner_2")}</label>
           <div className="picker-field">
             {draft.leaders.length > 0 ? (
               draft.leaders.map((l) => <span key={l} className="tag">{l}</span>)
             ) : (
-              <span className="muted" style={{ fontSize: 13 }}>{t("legacy.7409a608060f")}</span>
+              <span className="muted" style={{ fontSize: 13 }}>{t("admin.teams.not_specified")}</span>
             )}
             <button type="button" className="button" onClick={() => setPicker("leader")}>
-              <UserPlus size={14} /> {t("legacy.5b894d63abb8")}
+              <UserPlus size={14} /> {t("admin.teams.select_owner")}
             </button>
           </div>
-          <span className="field-hint">{t("legacy.aab727ead5bb")}</span>
+          <span className="field-hint">{t("admin.teams.at_least_one_owner_multiple_allowed_manages_content")}</span>
         </div>
         <div className="field">
-          <label>{t("legacy.6e6d6ddbb7c1")}</label>
+          <label>{t("admin.teams.members")}</label>
           <div className="picker-field">
             {draft.members.length > 0 ? (
               draft.members.map((m) => <span key={m} className="tag">{m}</span>)
             ) : (
-              <span className="muted" style={{ fontSize: 13 }}>{t("legacy.51c54a24eb22")}</span>
+              <span className="muted" style={{ fontSize: 13 }}>{t("admin.teams.no_members")}</span>
             )}
             <button type="button" className="button" onClick={() => setPicker("members")}>
-              <UserPlus size={14} /> {t("legacy.ad9737dafdbf")}
+              <UserPlus size={14} /> {t("admin.teams.add_members")}
             </button>
           </div>
         </div>
@@ -253,9 +253,9 @@ export default function AdminTeamsPage() {
       <Modal
         open={picker !== null}
         onClose={() => setPicker(null)}
-        title={picker === "leader" ? t("legacy.5b894d63abb8") : t("legacy.ad9737dafdbf")}
-        subtitle={picker === "leader" ? t("legacy.25a652713caf") : t("legacy.19582c16739e")}
-        footer={<button className="button button-primary" onClick={() => setPicker(null)}>{t("legacy.c0b3fbff51cc")}</button>}
+        title={picker === "leader" ? t("admin.teams.select_owner") : t("admin.teams.add_members")}
+        subtitle={picker === "leader" ? t("admin.teams.search_and_expand_by_department_select_at_least") : t("admin.teams.search_and_expand_multi_select_by_department")}
+        footer={<button className="button button-primary" onClick={() => setPicker(null)}>{t("admin.modules.done")}</button>}
       >
         {picker === "leader" ? (
           <UserSelect value={draft.leaders} onChange={(leaders) => setDraft({ ...draft, leaders })} />

@@ -76,13 +76,13 @@ export function FloatingDocFeedback({ docId }: { docId: string }) {
         onPointerCancel={stopDrag}
       >
         <GripHorizontal size={16} aria-hidden />
-        <strong>{t("legacy.5f5b94f329bf")}</strong>
+        <strong>{t("component.adminShell.documentation_feedback")}</strong>
         <button
           type="button"
           className="icon-btn doc-embed-feedback__action"
           onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? t("legacy.d613dc2b47e2") : t("legacy.a5efe577647c")}
-          title={collapsed ? t("legacy.d613dc2b47e2") : t("legacy.a5efe577647c")}
+          aria-label={collapsed ? t("component.docFooter.expand_feedback") : t("component.docFooter.collapse_feedback")}
+          title={collapsed ? t("component.docFooter.expand_feedback") : t("component.docFooter.collapse_feedback")}
         >
           {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
@@ -90,8 +90,8 @@ export function FloatingDocFeedback({ docId }: { docId: string }) {
           type="button"
           className="icon-btn doc-embed-feedback__action"
           onClick={() => setClosed(true)}
-          aria-label={t("legacy.a7aa73da9350")}
-          title={t("legacy.a7aa73da9350")}
+          aria-label={t("component.docFooter.close_feedback")}
+          title={t("component.docFooter.close_feedback")}
         >
           <X size={16} />
         </button>
@@ -123,13 +123,13 @@ export function DocFooter({
         <nav className="doc-pager">
           {prev ? (
             <Link href={prev.href} className="doc-pager__card doc-pager__card--prev">
-              <span className="doc-pager__dir"><ChevronLeft size={14} /> {t("legacy.5e50d5184669")}</span>
+              <span className="doc-pager__dir"><ChevronLeft size={14} /> {t("component.docFooter.previous")}</span>
               <span className="doc-pager__title">{prev.title}</span>
             </Link>
           ) : <span />}
           {next ? (
             <Link href={next.href} className="doc-pager__card doc-pager__card--next">
-              <span className="doc-pager__dir">{t("legacy.673ee5a5a418")} <ChevronRight size={14} /></span>
+              <span className="doc-pager__dir">{t("component.docFooter.next_article")} <ChevronRight size={14} /></span>
               <span className="doc-pager__title">{next.title}</span>
             </Link>
           ) : <span />}
@@ -161,15 +161,15 @@ export function DocFeedbackBox({ docId, compact = false }: { docId: string; comp
   return (
     <div className={`doc-feedback${compact ? " doc-feedback--compact" : ""}`}>
       <div className="doc-feedback__top">
-        <span className="doc-feedback__label">{t("legacy.e5c15acc5265")}</span>
-        <div className="doc-feedback__rating" aria-label={t("legacy.3d39e4df1cc0")}>
+        <span className="doc-feedback__label">{t("component.docFooter.how_is_this_document")}</span>
+        <div className="doc-feedback__rating" aria-label={t("component.docFooter.select_feedback_type")}>
           <button
             type="button"
             className={`doc-feedback__btn${rating === "good" ? " active" : ""}`}
             onClick={() => setRating("good")}
             disabled={submitted}
           >
-            <ThumbsUp size={15} /> {t("legacy.28030e690447")}
+            <ThumbsUp size={15} /> {t("component.docFooter.helpful")}
           </button>
           <button
             type="button"
@@ -177,23 +177,23 @@ export function DocFeedbackBox({ docId, compact = false }: { docId: string; comp
             onClick={() => setRating("bad")}
             disabled={submitted}
           >
-            <ThumbsDown size={15} /> {t("legacy.690d2b0654e9")}
+            <ThumbsDown size={15} /> {t("component.docFooter.needs_improvement")}
           </button>
         </div>
       </div>
       {submitted ? (
-        <span className="doc-feedback__thanks">{t("legacy.9d62ab8204a5")}</span>
+        <span className="doc-feedback__thanks">{t("component.docFooter.thank_you_for_your_feedback_we_ll_review")}</span>
       ) : (
         <div className="doc-feedback__form">
           <textarea
             className="doc-feedback__input"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder={t("legacy.88e629d53b5c")}
+            placeholder={t("component.docFooter.you_can_suggest_where_help_is_needed_what")}
             rows={compact ? 2 : 3}
           />
           <button type="button" className="doc-feedback__submit" onClick={submit} disabled={!rating || submitting}>
-            <Send size={14} /> {t("legacy.228d8b711ccf")}
+            <Send size={14} /> {t("component.docFooter.submit_feedback")}
           </button>
         </div>
       )}

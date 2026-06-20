@@ -26,18 +26,44 @@ const varMismatch = [...zhKeys]
     return JSON.stringify(sv) !== JSON.stringify(tv);
   });
 
+function collectSourceFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  return entries.flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return collectSourceFiles(full);
+    return /\.[tj]sx?$/.test(entry.name) ? [full] : [];
+  });
+}
+
+const sourceFiles = ["app", "components", "lib"].flatMap((dir) => collectSourceFiles(path.join(root, dir)));
+const referencedKeys = new Set();
+const tCallPattern = /(?<![\w$])t\(\s*["'`]([A-Za-z0-9_.-]+)["'`]/g;
+
+for (const file of sourceFiles) {
+  const content = fs.readFileSync(file, "utf8");
+  for (const match of content.matchAll(tCallPattern)) {
+    referencedKeys.add(match[1]);
+  }
+}
+
+const missingReferenced = [...referencedKeys]
+  .filter((k) => !zhKeys.has(k) || !enKeys.has(k))
+  .sort();
+
 const problems = [
   ["missing in en-US", missingInEn],
   ["missing in zh-CN", missingInZh],
   ["empty en-US value", emptyEn],
-  ["placeholder mismatch", varMismatch]
+  ["placeholder mismatch", varMismatch],
+  ["referenced key missing from catalogs", missingReferenced]
 ].filter(([, list]) => list.length);
 
 for (const [label, list] of problems) {
   console.error(`${label}: ${list.join(", ")}`);
 }
 
-console.log(`Checked ${zhKeys.size} messages.`);
+console.log(`Checked ${zhKeys.size} messages and ${referencedKeys.size} referenced keys.`);
 
 if (process.argv.includes("--check") && problems.length) {
   process.exit(1);

@@ -29,14 +29,14 @@ export default function FeedbackPage() {
   const { items: pageRows, total, page, setPage, error } = usePaged<FeedbackLog>("/api/admin/analytics/feedback", PAGE_SIZE, keyword.trim());
 
   return (
-    <AdminShell title={t("legacy.5f5b94f329bf")} kicker="Feedback" description={t("legacy.cf6af4a48e34")}>
-      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("legacy.01de8216e0d0")}{error}</div> : null}
+    <AdminShell title={t("component.adminShell.documentation_feedback")} kicker="Feedback" description={t("admin.feedback.view_helpful_needs_improvement_feedback_submitted_by_readers")}>
+      {error ? <div className="panel badge-danger" style={{ borderRadius: 12 }}>{t("admin.mcpLogs.load_failed")}{error}</div> : null}
 
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
           <input
-            placeholder={t("legacy.674e95f24014")}
+            placeholder={t("admin.feedback.search_doc_module_user_feedback")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -47,19 +47,19 @@ export default function FeedbackPage() {
         {total === 0 ? (
           <EmptyState
             icon={MessageCircleQuestion}
-            title={keyword ? t("legacy.5c1e3d7a48b8") : t("legacy.39032368a06d")}
-            hint={keyword ? t("legacy.018f0b4a413c") : t("legacy.28347fba15db")}
+            title={keyword ? t("admin.feedback.no_matching_feedback") : t("admin.feedback.no_document_feedback")}
+            hint={keyword ? t("admin.mcpLogs.try_a_different_keyword") : t("admin.feedback.records_appear_here_after_a_user_clicks_the")}
           />
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>{t("legacy.2687ccdbb1d2")}</th>
-                <th>{t("legacy.8b2106ca1371")}</th>
-                <th>{t("legacy.7a688306423b")}</th>
-                <th>{t("legacy.b07e5088eafa")}</th>
-                <th>{t("legacy.0d0e1a86b3aa")}</th>
-                <th>{t("legacy.8b6ff498515b")}</th>
+                <th>{t("me.recent.documentation")}</th>
+                <th>{t("admin.feedback.feedback")}</th>
+                <th>{t("admin.feedback.content")}</th>
+                <th>{t("me.recent.module")}</th>
+                <th>{t("admin.mcpLogs.user")}</th>
+                <th>{t("admin.mcpLogs.time")}</th>
               </tr>
             </thead>
             <tbody>
@@ -72,7 +72,7 @@ export default function FeedbackPage() {
                   <td>
                     <span className={`badge ${log.rating === "good" ? "badge-success" : "badge-warn"}`}>
                       {log.rating === "good" ? <ThumbsUp size={13} /> : <ThumbsDown size={13} />}
-                      {log.rating === "good" ? t("legacy.28030e690447") : t("legacy.690d2b0654e9")}
+                      {log.rating === "good" ? t("component.docFooter.helpful") : t("component.docFooter.needs_improvement")}
                     </span>
                   </td>
                   <td className="muted text-sm">{log.comment || "-"}</td>
@@ -83,7 +83,7 @@ export default function FeedbackPage() {
                     ) : log.user_id ? (
                       <span className="muted">{log.user_id}</span>
                     ) : (
-                      <span className="muted">{t("legacy.34a917cd44b0")}</span>
+                      <span className="muted">{t("admin.feedback.anonymous")}</span>
                     )}
                   </td>
                   <td>{log.created_at?.slice(0, 19).replace("T", " ")}</td>

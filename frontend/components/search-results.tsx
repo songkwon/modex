@@ -29,7 +29,7 @@ export function SearchResults({ s }: { s: Search }) {
             onClick={runAsk}
           >
             <Sparkles size={16} className="ds-ask-icon" />
-            <span>{t("legacy.09ee788d261e")}<strong>{query}</strong></span>
+            <span>{t("component.searchResults.ask_ai")}<strong>{query}</strong></span>
             <CornerDownLeft size={14} className="muted" />
           </button>
           <div className="ds-results">
@@ -55,10 +55,10 @@ export function SearchResults({ s }: { s: Search }) {
               );
             })}
             {results.length === 0 && !loading ? (
-              <div className="ds-empty muted">{t("legacy.5c0318141e37")}</div>
+              <div className="ds-empty muted">{t("component.searchResults.no_matching_documents_press_enter_or_click_ask")}</div>
             ) : null}
           </div>
-          <div className="ds-hint muted">{t("legacy.1616c5c60e66")}</div>
+          <div className="ds-hint muted">{t("component.searchResults.to_select_enter_to_open_esc_to_close")}</div>
         </div>
       ) : null}
 
@@ -66,14 +66,14 @@ export function SearchResults({ s }: { s: Search }) {
         <div className="ds-answer panel">
           <div className="ds-answer-head">
             <Sparkles size={16} className="ds-ask-icon" />
-            <strong>{t("legacy.3f008047e32d")}</strong>
+            <strong>{t("component.searchResults.ai_response")}</strong>
             <span className="tag">{answer.provider}</span>
-            <button className="button ds-answer-close" onClick={() => setAnswer(null)}>{t("legacy.3fd47edce45b")}</button>
+            <button className="button ds-answer-close" onClick={() => setAnswer(null)}>{t("component.searchResults.close")}</button>
           </div>
           <div className="ds-answer-body">{answer.answer}</div>
           {(answer.sources?.length ?? 0) > 0 ? (
             <div className="ds-sources">
-              <div className="muted ds-sources-label">{t("legacy.e4ec20e4843e")}</div>
+              <div className="muted ds-sources-label">{t("component.searchResults.reference_documentation")}</div>
               {(answer.sources || []).map((src) => (
                 <button className="ds-source" key={src.doc_id} onClick={() => go(src.path)}>
                   <span className="ds-crumb">{src.breadcrumb}</span>
