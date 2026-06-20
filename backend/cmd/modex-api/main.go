@@ -32,32 +32,31 @@ func main() {
 	addr := ":" + env("PORT", "8671")
 
 	databaseURL := os.Getenv("DATABASE_URL")
-	st, repository := loadStore(databaseURL)
-	var vectors *vectorstore.Postgres
-	if databaseURL != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		var err error
-		vectors, err = vectorstore.Open(ctx, databaseURL)
-		cancel()
-		if err != nil {
-			log.Fatalf("open PostgreSQL vector store: %v", err)
-		}
-		defer vectors.Close()
-		log.Printf("embedding store: PostgreSQL/pgvector")
+	if databaseURL == "" {
+		log.Fatalf("DATABASE_URL is required: modex-api persists all state in PostgreSQL")
 	}
+	st, repository := loadStore(databaseURL)
+
+	vectorCtx, vectorCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	vectors, err := vectorstore.Open(vectorCtx, databaseURL)
+	vectorCancel()
+	if err != nil {
+		log.Fatalf("open PostgreSQL vector store: %v", err)
+	}
+	defer vectors.Close()
+	log.Printf("embedding store: PostgreSQL/pgvector")
+
 	appSvc, err := application.NewConfigured(st, vectors, repository)
 	if err != nil {
 		log.Fatalf("initialize application: %v", err)
 	}
 	defer appSvc.Close()
 	srv := api.NewWithApplication(appSvc)
-	if appSvc.HasRepository() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := appSvc.Save(ctx); err != nil {
-			log.Printf("initial PostgreSQL relational save failed: %v", err)
-		}
-		cancel()
+	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := appSvc.Save(initCtx); err != nil {
+		log.Printf("initial PostgreSQL relational save failed: %v", err)
 	}
+	initCancel()
 
 	log.Printf("analytics source: %s", analyticsSource())
 
@@ -108,14 +107,6 @@ func main() {
 }
 
 func loadStore(databaseURL string) (*store.Store, *repository.PostgresRepository) {
-	if databaseURL == "" {
-		if os.Getenv("DATA_DIR") != "" {
-			log.Printf("DATA_DIR is ignored without DATABASE_URL; starting with volatile in-memory store")
-		} else {
-			log.Printf("DATABASE_URL not set; starting with volatile in-memory store")
-		}
-		return store.New(), nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	repo, err := repository.OpenPostgres(ctx, databaseURL)
