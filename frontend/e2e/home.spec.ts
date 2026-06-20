@@ -102,6 +102,7 @@ test("home page renders and switches locale from the user menu", async ({ page }
   await page.getByRole("button", { name: "English" }).click();
   await expect(page.getByRole("heading", { name: "Documentation Hub" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Project guide/ })).toBeVisible();
+	await expect(page.getByText("Browse Documentation")).toBeVisible();
 });
 
 test("mock login exposes the admin console entry", async ({ page }) => {

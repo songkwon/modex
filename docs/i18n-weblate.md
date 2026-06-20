@@ -65,6 +65,7 @@ Before importing into Weblate, make sure every locale has the same key set:
 ```bash
 cd frontend
 npm run i18n:extract
+npm run i18n:check
 npm run lint
 ```
 
@@ -80,14 +81,15 @@ the frontend checks.
 - Avoid putting HTML in message strings; compose markup in React and translate
   the visible text only.
 
-## Current Migration Scope
+## Migration compatibility
 
-The shell, home page, top-bar search/AI controls, global search palette, main
-document search box, and user menu are migrated.
+New and actively maintained screens should use semantic keys through
+`useI18n().t(...)`. Existing UI literals are covered by deterministic
+`legacy.<content-hash>` entries generated from the TypeScript syntax tree. The
+provider translates those text nodes and accessibility attributes at runtime,
+so switching locales covers the full existing interface while components move
+to semantic keys incrementally.
 
-The catalogs also include an `unmigrated.*` section generated from the current
-frontend source. These keys are a translation backlog: they make every existing
-Chinese UI string visible to Weblate even before each screen has been converted
-to semantic `useI18n().t(...)` calls. When a screen is migrated, replace the
-matching `unmigrated.*` value with a stable semantic key such as
-`admin.modules.emptyTitle`, then remove the obsolete `unmigrated.*` entry.
+`npm run i18n:check` fails when a generated entry is untranslated or when its
+placeholders differ between locales. Code examples are deliberately excluded so
+translation never changes executable snippets.
