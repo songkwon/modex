@@ -297,24 +297,6 @@ func (s *Server) cleanupUploadedSiteFiles(moduleKey, docsVersion string, files m
 	}
 }
 
-func (s *Server) migrateSiteAssetsToMinIO() bool {
-	objects := s.app.Store().SiteObjects()
-	if len(objects) == 0 {
-		return true
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	for key, file := range objects {
-		_, err := s.minioClient.PutObject(ctx, s.minioBucket, key, bytes.NewReader(file.Content), int64(len(file.Content)), minio.PutObjectOptions{ContentType: file.ContentType})
-		if err != nil {
-			log.Printf("legacy site asset migration failed for %s: %v", key, err)
-			return false
-		}
-	}
-	log.Printf("migrated %d legacy site assets to MinIO", len(objects))
-	return true
-}
-
 func contentTypeForName(name string, content []byte) string {
 	if ct := mime.TypeByExtension(filepath.Ext(name)); ct != "" {
 		return ct

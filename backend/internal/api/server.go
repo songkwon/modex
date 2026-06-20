@@ -406,7 +406,9 @@ func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, modul
 				w.Header().Set("Content-Type", ct)
 				w.Header().Set("Cache-Control", "private, max-age=60")
 				w.WriteHeader(http.StatusOK)
-				io.Copy(w, obj)
+				if _, err := io.Copy(w, obj); err != nil {
+					log.Printf("stream site asset %s failed: %v", name, err)
+				}
 				return
 			}
 		}
