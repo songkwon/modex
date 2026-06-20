@@ -239,18 +239,16 @@ func deploy(root, buildDir, artifact, url, token string) error {
 	if strings.TrimSpace(token) == "" {
 		return fmt.Errorf("deploy token is required (set --token or DOCS_DEPLOY_TOKEN; generate it from Modex admin)")
 	}
-	if _, err := os.Stat(artifact); err != nil {
-		// Auto-build and package when the artifact is missing, so `docsctl deploy`
-		// is the only command users need in CI/local workflows.
-		if err := docs.Validate(root); err != nil {
-			return fmt.Errorf("deploy preparation failed during validate: %w", err)
-		}
-		if err := docs.Build(root, buildDir); err != nil {
-			return fmt.Errorf("deploy preparation failed during build: %w", err)
-		}
-		if err := docs.Package(buildDir, artifact); err != nil {
-			return fmt.Errorf("deploy preparation failed during package: %w", err)
-		}
+	// Always rebuild before upload. Reusing an existing artifact can publish
+	// stale metadata, for example uploading a previous docs_version.
+	if err := docs.Validate(root); err != nil {
+		return fmt.Errorf("deploy preparation failed during validate: %w", err)
+	}
+	if err := docs.Build(root, buildDir); err != nil {
+		return fmt.Errorf("deploy preparation failed during build: %w", err)
+	}
+	if err := docs.Package(buildDir, artifact); err != nil {
+		return fmt.Errorf("deploy preparation failed during package: %w", err)
 	}
 	b, err := os.ReadFile(artifact)
 	if err != nil {
