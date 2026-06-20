@@ -1038,10 +1038,3 @@ func extractHTMLText(dir string) string {
 	})
 	return strings.Join(strings.Fields(out.String()), " ")
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

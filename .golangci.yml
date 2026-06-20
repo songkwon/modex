@@ -1,0 +1,31 @@
+# Shared lint config for the backend, tools/docsctl, and mcp Go modules.
+# Conservative on purpose: the default vet-grade linters plus a few high-signal
+# ones, so CI stays green without churn while still catching real mistakes.
+run:
+  timeout: 5m
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      # Deferred rollback after a successful commit is a no-op; ignoring its
+      # error is the standard pgx idiom.
+      - (github.com/jackc/pgx/v5.Tx).Rollback
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Test files routinely ignore errors on best-effort setup calls.
+    - path: _test\.go
+      linters:
+        - errcheck
