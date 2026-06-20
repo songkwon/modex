@@ -19,12 +19,15 @@ func TestConnectedAppOAuthAuthorizationCodeFlow(t *testing.T) {
 	srv := New(store.NewSeededTestStore())
 	handler := srv.Handler()
 
+	// OIDC is the only login path, so mint a session cookie directly instead of
+	// driving a full provider round-trip. SUPER_ADMIN_USERS promotes "dev".
+	user := srv.app.Store().UpsertUser(store.User{
+		ID: "u-dev", Username: "dev", DisplayName: "Dev User",
+		Email: "dev@example.com", Status: "active",
+	})
 	login := httptest.NewRecorder()
-	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/mock-login", strings.NewReader(`{"username":"dev"}`))
-	loginReq.Header.Set("Content-Type", "application/json")
-	handler.ServeHTTP(login, loginReq)
-	if login.Code != http.StatusOK {
-		t.Fatalf("login status = %d, body=%s", login.Code, login.Body.String())
+	if err := srv.app.Auth().CreateSession(login, user); err != nil {
+		t.Fatalf("create session: %v", err)
 	}
 	cookies := login.Result().Cookies()
 

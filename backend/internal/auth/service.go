@@ -176,9 +176,8 @@ func (s *Service) CompleteLogin(ctx context.Context, r *http.Request, w http.Res
 	return user, nil
 }
 
-// CreateSession issues a session cookie for the given user. It is shared by the
-// OIDC callback and the local mock-login endpoint so both paths produce a real,
-// cookie-backed session.
+// CreateSession issues a session cookie for the given user after the OIDC
+// callback establishes a real, cookie-backed session.
 func (s *Service) CreateSession(w http.ResponseWriter, user store.User) error {
 	user = s.applySuperAdmin(user)
 	sessionID, err := randomToken(32)
@@ -384,15 +383,6 @@ func randomToken(n int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func first(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // getString safely extracts a string value from claims (handles string, number, single-element slice).

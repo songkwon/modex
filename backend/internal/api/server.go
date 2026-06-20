@@ -86,7 +86,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/api/auth/me", s.handleMe)
 	mux.HandleFunc("/api/me/mcp-token", s.handleMeMCPToken)
-	mux.HandleFunc("/api/auth/mock-login", s.handleMockLogin)
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/callback", s.handleCallback)
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)
@@ -206,45 +205,6 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusUnauthorized, "unauthorized", "not logged in")
 }
 
-func (s *Server) handleMockLogin(w http.ResponseWriter, r *http.Request) {
-	if s.app.Auth().Config().Mode == "oidc" {
-		writeError(w, http.StatusForbidden, "mock_login_disabled", "mock login is disabled when AUTH_MODE=oidc")
-		return
-	}
-	// Allow developers to choose which seeded identity to log in as.
-	var req struct {
-		Username string `json:"username"`
-	}
-	_ = decodeBody(r, &req)
-	user := s.app.Store().CurrentUser()
-	if user.Username == "" {
-		created, err := s.app.Store().CreateUser(store.User{
-			ID: "u-dev", Username: "dev", DisplayName: "Dev User",
-			Email: "dev@example.com", Source: "mock", Status: "active",
-			Roles: []string{"admin"}, SuperAdmin: true,
-		})
-		if err != nil {
-			writeResult(w, nil, err)
-			return
-		}
-		user = created
-	}
-	if req.Username != "" {
-		for _, u := range s.app.Store().Users("") {
-			if strings.EqualFold(u.Username, req.Username) {
-				user = u
-				break
-			}
-		}
-	}
-	user = s.app.Store().UpsertUser(user)
-	if err := s.app.Auth().CreateSession(w, user); err != nil {
-		writeError(w, http.StatusInternalServerError, "session_failed", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": user})
-}
-
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	loginURL, err := s.app.Auth().BeginLogin(w)
 	if err != nil {
@@ -277,13 +237,11 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := s.app.Auth().Config()
 	loginURL := ""
-	// Advertise the login URL when a real login is available: always in mock
-	// mode, and in OIDC mode only once the provider is fully configured.
-	if cfg.Mode != "oidc" || cfg.LoginReady() {
+	// Advertise the login URL only once the OIDC provider is fully configured.
+	if cfg.LoginReady() {
 		loginURL = cfg.AppBaseURL + "/api/auth/login"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"auth_mode":          cfg.Mode,
 		"oidc_login_enabled": cfg.LoginReady(),
 		"login_url":          loginURL,
 		"frontend_base_url":  cfg.FrontendBaseURL,

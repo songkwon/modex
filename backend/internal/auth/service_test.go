@@ -13,7 +13,6 @@ import (
 
 func TestBeginLoginUsesNonceAndPKCE(t *testing.T) {
 	service := NewService(Config{
-		Mode:          "oidc",
 		IssuerURL:     "https://issuer.example.com",
 		AuthURL:       "https://issuer.example.com/authorize",
 		TokenURL:      "https://issuer.example.com/token",

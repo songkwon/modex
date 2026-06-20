@@ -5,8 +5,7 @@ async function mockBackend(page: Page) {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        auth_mode: "mock",
-        oidc_login_enabled: false,
+        oidc_login_enabled: true,
         login_url: "http://localhost:8671/api/auth/login",
         frontend_base_url: "http://127.0.0.1:3456",
         auto_login: false,
@@ -14,25 +13,9 @@ async function mockBackend(page: Page) {
       })
     });
   });
+  // Logged out by default; loginAs() overrides this for authenticated cases.
   await page.route("http://localhost:8671/api/auth/me*", async (route) => {
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(null) });
-  });
-  await page.route("http://localhost:8671/api/auth/mock-login", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({
-        user: {
-          id: "dev",
-          username: "dev",
-          display_name: "Dev User",
-          email: "dev@example.com",
-          department: "Docs",
-          groups: [],
-          roles: ["admin"],
-          is_super_admin: true
-        }
-      })
-    });
   });
   await page.route("http://localhost:8671/api/categories/tree", async (route) => {
     await route.fulfill({
@@ -71,6 +54,26 @@ async function mockBackend(page: Page) {
   });
 }
 
+// loginAs simulates an established session by serving an authenticated
+// /api/auth/me. Registered after mockBackend so it takes route precedence.
+async function loginAs(page: Page) {
+  await page.route("http://localhost:8671/api/auth/me*", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "dev",
+        username: "dev",
+        display_name: "Dev User",
+        email: "dev@example.com",
+        department: "Docs",
+        groups: [],
+        roles: ["admin"],
+        is_super_admin: true
+      })
+    });
+  });
+}
+
 async function mockEmptyDocs(page: Page) {
   await page.route("http://localhost:8671/api/categories/tree", async (route) => {
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(null) });
@@ -87,7 +90,7 @@ test.beforeEach(async ({ page }) => {
   await mockBackend(page);
 });
 
-test("home page renders and switches locale from the user menu", async ({ page }) => {
+test("home page renders and shows the login entry when logged out", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
@@ -96,19 +99,26 @@ test("home page renders and switches locale from the user menu", async ({ page }
   await expect(page.getByRole("heading", { name: "文档中心" })).toBeVisible();
   await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
   expect(pageErrors).toEqual([]);
-
-  await page.getByRole("button", { name: "登录" }).click();
-  await page.getByRole("button", { name: /Dev User/ }).click();
-  await page.getByRole("button", { name: "English" }).click();
-  await expect(page.getByRole("heading", { name: "Documentation Hub" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Project guide/ })).toBeVisible();
-	await expect(page.getByText("Browse Documentation")).toBeVisible();
 });
 
-test("mock login exposes the admin console entry", async ({ page }) => {
+test("authenticated user can switch locale from the user menu", async ({ page }) => {
+  await loginAs(page);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "登录" }).click();
+  // Starts in zh-CN (seeded via localStorage in beforeEach).
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+
+  await page.getByRole("button", { name: /Dev User/ }).click();
+  await page.getByRole("button", { name: "English" }).click();
+
+  // The user menu's language control drives the app locale.
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+});
+
+test("authenticated admin sees the admin console entry", async ({ page }) => {
+  await loginAs(page);
+  await page.goto("/");
+
   await page.getByRole("button", { name: /Dev User/ }).click();
 
   await expect(page.getByRole("link", { name: /项目指南/ })).toBeVisible();

@@ -26,13 +26,17 @@ type Provider interface {
 	EmbedBatch(ctx context.Context, texts []string) ([][]float32, error)
 }
 
-type MockProvider struct {
+// FallbackProvider produces deterministic hash-based vectors when no real
+// embedding API is configured. The vectors carry no semantic meaning, so search
+// treats this provider as keyword-only; it exists so the system still runs
+// (ingest, indexing, keyword search) before an embedding provider is set up.
+type FallbackProvider struct {
 	Dim int
 }
 
-func (p MockProvider) Name() string { return "mock" }
+func (p FallbackProvider) Name() string { return "fallback" }
 
-func (p MockProvider) EmbedText(ctx context.Context, text string) ([]float32, error) {
+func (p FallbackProvider) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	dim := p.Dim
 	if dim <= 0 {
 		dim = Dim
@@ -47,7 +51,7 @@ func (p MockProvider) EmbedText(ctx context.Context, text string) ([]float32, er
 	return vec, nil
 }
 
-func (p MockProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+func (p FallbackProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	out := make([][]float32, 0, len(texts))
 	for _, text := range texts {
 		vec, err := p.EmbedText(ctx, text)
@@ -78,7 +82,7 @@ func (p SettingsProvider) Name() string {
 	if cfg := p.settings(); cfg.BaseURL != "" && cfg.Model != "" {
 		return "admin"
 	}
-	return "mock"
+	return "fallback"
 }
 
 func (p SettingsProvider) EmbedText(ctx context.Context, text string) ([]float32, error) {
@@ -95,7 +99,7 @@ func (p SettingsProvider) EmbedText(ctx context.Context, text string) ([]float32
 func (p SettingsProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	cfg := p.settings()
 	if cfg.BaseURL == "" || cfg.Model == "" {
-		return MockProvider{Dim: cfg.Dim}.EmbedBatch(ctx, texts)
+		return FallbackProvider{Dim: cfg.Dim}.EmbedBatch(ctx, texts)
 	}
 	endpoint := strings.TrimRight(cfg.BaseURL, "/")
 	if !strings.HasSuffix(endpoint, "/embeddings") {

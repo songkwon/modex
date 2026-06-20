@@ -76,7 +76,7 @@ func (s *Server) requestGuards(next http.Handler) http.Handler {
 
 func requestPolicy(path string) (limitPolicy, string) {
 	switch {
-	case path == "/api/auth/login" || path == "/api/auth/mock-login":
+	case path == "/api/auth/login":
 		return limitPolicy{requests: envPositiveInt("RATE_LIMIT_AUTH_PER_MINUTE", 10), window: time.Minute}, "auth"
 	case path == "/oauth/token":
 		return limitPolicy{requests: envPositiveInt("RATE_LIMIT_TOKEN_PER_MINUTE", 30), window: time.Minute}, "token"

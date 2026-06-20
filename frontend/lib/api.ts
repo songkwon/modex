@@ -25,8 +25,6 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getMe = () => api<User>("/api/auth/me");
 export const getOptionalMe = () => api<User | null>("/api/auth/me?optional=1");
-export const mockLogin = (username?: string) =>
-  api<{ user: User }>("/api/auth/mock-login", { method: "POST", body: JSON.stringify(username ? { username } : {}) });
 export const logout = () => api<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
 export const getAuthConfig = () => api<AuthConfig>("/api/config");
 export const getCategories = () => api<Category[]>("/api/categories/tree");

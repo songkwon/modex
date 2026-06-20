@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Terminal, Shield, LogOut, LogIn, ChevronDown, FileText } from "lucide-react";
-import { getAuthConfig, getOptionalMe, logout, mockLogin } from "@/lib/api";
+import { getAuthConfig, getOptionalMe, logout } from "@/lib/api";
 import { identify } from "@/lib/analytics";
 import { useI18n } from "@/lib/i18n";
 import type { AuthConfig, User } from "@/types/modex";
@@ -73,24 +73,13 @@ export function UserMenu() {
     if (!checkedMe || user || !cfg?.auto_login || autoLoginStarted.current) return;
     if (typeof window !== "undefined" && window.sessionStorage.getItem("modex_manual_logout") === "1") return;
     autoLoginStarted.current = true;
-    if (cfg.auth_mode === "oidc") {
-      if (cfg.login_url) window.location.href = cfg.login_url;
-      return;
-    }
-    mockLogin()
-      .then((res) => setUser(res.user))
-      .catch(() => {});
+    if (cfg.login_url) window.location.href = cfg.login_url;
   }, [cfg, checkedMe, user]);
 
-  async function login() {
+  function login() {
     if (typeof window !== "undefined") window.sessionStorage.removeItem("modex_manual_logout");
-    if (cfg?.auth_mode === "oidc") {
-      if (cfg.login_url) window.location.href = cfg.login_url;
-      else alert(t("user.oidcNotConfigured"));
-      return;
-    }
-    const res = await mockLogin();
-    setUser(res.user);
+    if (cfg?.login_url) window.location.href = cfg.login_url;
+    else alert(t("user.oidcNotConfigured"));
   }
 
   async function signOut() {
