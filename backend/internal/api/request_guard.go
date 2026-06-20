@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -8,11 +10,32 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type limitPolicy struct {
 	requests int
 	window   time.Duration
+}
+
+// rateLimiter is the abstraction the request guards depend on. The in-memory
+// implementation is per-process; the Redis implementation shares counters
+// across replicas so a horizontally scaled deployment enforces one global
+// limit instead of (limit × replicas).
+type rateLimiter interface {
+	permit(ctx context.Context, key string, policy limitPolicy) bool
+}
+
+// newRateLimiter returns a Redis-backed limiter when a shared client is
+// available, otherwise falls back to the in-memory limiter. Falling back keeps
+// single-node and local deployments working without Redis.
+func newRateLimiter(client *redis.Client) rateLimiter {
+	if client != nil {
+		log.Printf("rate limiter: using shared Redis backend")
+		return &redisRateLimiter{client: client}
+	}
+	return newRequestLimiter()
 }
 
 type limitWindow struct {
@@ -28,6 +51,10 @@ type requestLimiter struct {
 
 func newRequestLimiter() *requestLimiter {
 	return &requestLimiter{windows: map[string]limitWindow{}, lastGC: time.Now()}
+}
+
+func (l *requestLimiter) permit(_ context.Context, key string, policy limitPolicy) bool {
+	return l.allow(key, policy, time.Now())
 }
 
 func (l *requestLimiter) allow(key string, policy limitPolicy, now time.Time) bool {
@@ -53,11 +80,41 @@ func (l *requestLimiter) allow(key string, policy limitPolicy, now time.Time) bo
 	return true
 }
 
+// rateLimitScript implements an atomic fixed-window counter: the first request
+// in a window sets the expiry, and every request returns the running count.
+// Running INCR and PEXPIRE as one script avoids a leaked key if the process
+// dies between the two commands.
+var rateLimitScript = redis.NewScript(`
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return current
+`)
+
+type redisRateLimiter struct {
+	client *redis.Client
+}
+
+func (l *redisRateLimiter) permit(ctx context.Context, key string, policy limitPolicy) bool {
+	// Cap the time the limiter can add to a request: a slow or unreachable Redis
+	// must not become a latency tax on every guarded endpoint.
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	count, err := rateLimitScript.Run(ctx, l.client, []string{"modex:rl:" + key}, policy.window.Milliseconds()).Int64()
+	if err != nil {
+		// Fail open: a rate limiter is best-effort protection, never a hard
+		// dependency that can take the API down when Redis hiccups.
+		return true
+	}
+	return count <= int64(policy.requests)
+}
+
 func (s *Server) requestGuards(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if policy, class := requestPolicy(r.URL.Path); policy.requests > 0 {
 			key := clientIP(r) + ":" + class
-			if !s.limiter.allow(key, policy, time.Now()) {
+			if !s.limiter.permit(r.Context(), key, policy) {
 				w.Header().Set("Retry-After", strconv.Itoa(int(policy.window.Seconds())))
 				writeError(w, http.StatusTooManyRequests, "rate_limited", "too many requests")
 				return

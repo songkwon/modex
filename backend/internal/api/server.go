@@ -19,13 +19,43 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/redis/go-redis/v9"
 )
+
+// dialRedis builds the Redis client shared by the rate and deploy limiters,
+// or returns nil (so both fall back to in-process behavior) when REDIS_URL is
+// unset, malformed, or unreachable.
+func dialRedis() *redis.Client {
+	rawURL := strings.TrimSpace(os.Getenv("REDIS_URL"))
+	if rawURL == "" {
+		return nil
+	}
+	options, err := redis.ParseURL(rawURL)
+	if err != nil {
+		log.Printf("redis: invalid REDIS_URL (%v); using in-process limiters", err)
+		return nil
+	}
+	client := redis.NewClient(options)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		log.Printf("redis: ping failed (%v); using in-process limiters", err)
+		_ = client.Close()
+		return nil
+	}
+	return client
+}
 
 type Server struct {
 	app         *application.Service
 	minioClient *minio.Client
 	minioBucket string
-	limiter     *requestLimiter
+	limiter     rateLimiter
+	// deploy bounds how many artifacts are ingested at once so a burst of large
+	// uploads can't exhaust memory/CPU. Redis-backed when REDIS_URL is set (a
+	// single global bound across replicas), per-process otherwise. Requests
+	// beyond the bound wait briefly, then get 503. nil means unbounded.
+	deploy deployLimiter
 }
 
 func New(st store.DataStore) *Server {
@@ -37,9 +67,11 @@ func NewWithVectorStore(st store.DataStore, vectors search.VectorStore) *Server 
 }
 
 func NewWithApplication(app *application.Service) *Server {
+	redisClient := dialRedis()
 	s := &Server{
 		app:     app,
-		limiter: newRequestLimiter(),
+		limiter: newRateLimiter(redisClient),
+		deploy:  newDeployLimiter(redisClient),
 	}
 	// init MinIO for real site file storage (upload SiteFiles from deploys)
 	if endpoint := os.Getenv("MINIO_ENDPOINT"); endpoint != "" {
