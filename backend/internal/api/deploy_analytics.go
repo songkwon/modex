@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -14,9 +15,28 @@ import (
 	"modex/backend/internal/store"
 )
 
+// acquireDeploySlot blocks until an ingest slot is free, the wait budget runs
+// out, or the client disconnects. The returned release frees the slot and must
+// be deferred by the caller; ok is false when the slot could not be acquired.
+func (s *Server) acquireDeploySlot(ctx context.Context) (release func(), ok bool) {
+	if s.deploy == nil {
+		return func() {}, true
+	}
+	return s.deploy.acquire(ctx)
+}
+
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	// Bound concurrent ingests so simultaneous large artifacts can't exhaust the
+	// instance. Wait briefly (CI tolerates a short queue), then shed load with 503.
+	if release, ok := s.acquireDeploySlot(r.Context()); ok {
+		defer release()
+	} else {
+		w.Header().Set("Retry-After", strconv.Itoa(envPositiveInt("DEPLOY_BUSY_RETRY_SECONDS", 30)))
+		writeError(w, http.StatusServiceUnavailable, "deploy_busy", "too many concurrent deployments; retry shortly")
 		return
 	}
 	report := newDeployReport()

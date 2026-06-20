@@ -1,18 +1,59 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
 
+func TestRequestLimiterPermitMatchesAllow(t *testing.T) {
+	limiter := newRequestLimiter()
+	policy := limitPolicy{requests: 1, window: time.Minute}
+	if !limiter.permit(context.Background(), "client", policy) {
+		t.Fatal("first request should be permitted")
+	}
+	if limiter.permit(context.Background(), "client", policy) {
+		t.Fatal("second request in window should be denied")
+	}
+}
+
+func TestAcquireDeploySlotBoundsConcurrency(t *testing.T) {
+	s := &Server{deploy: &localDeployLimiter{sem: make(chan struct{}, 1)}}
+	release, ok := s.acquireDeploySlot(context.Background())
+	if !ok {
+		t.Fatal("first slot should be acquired")
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := s.acquireDeploySlot(cancelled); ok {
+		t.Fatal("slot should not be acquired while the only slot is held")
+	}
+	release()
+	again, ok := s.acquireDeploySlot(context.Background())
+	if !ok {
+		t.Fatal("slot should be reusable after release")
+	}
+	again()
+}
+
+func TestAcquireDeploySlotUnboundedWhenDisabled(t *testing.T) {
+	s := &Server{}
+	if _, ok := s.acquireDeploySlot(context.Background()); !ok {
+		t.Fatal("nil semaphore should always grant a slot")
+	}
+}
+
 func TestRequestLimiterResetsAfterWindow(t *testing.T) {
 	limiter := newRequestLimiter()
 	policy := limitPolicy{requests: 2, window: time.Minute}
 	now := time.Now()
-	if !limiter.allow("client", policy, now) || !limiter.allow("client", policy, now) {
-		t.Fatal("initial requests should be allowed")
+	if !limiter.allow("client", policy, now) {
+		t.Fatal("first request should be allowed")
+	}
+	if !limiter.allow("client", policy, now) {
+		t.Fatal("second request should be allowed")
 	}
 	if limiter.allow("client", policy, now) {
 		t.Fatal("request above limit should be denied")
