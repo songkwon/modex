@@ -179,15 +179,13 @@ services:
       backend:
         condition: service_healthy
 
-  # MCP server (stdio JSON-RPC) — proxies tool calls to the backend API.
-  # MCP is a stdio protocol, so it is launched per-session by an AI client
-  # rather than served as an always-on port. It builds alongside the stack and
-  # is run on demand:
+  # MCP server (streamable HTTP JSON-RPC) — proxies tool calls to the backend API.
+  # It can be exposed to MCP clients that support remote streamable HTTP:
   #
-  #   docker compose --profile mcp run --rm mcp
+  #   http://localhost:8787/mcp
   #
-  # Most developers instead use the npx package (mcp/npx, `npx modex-mcp`)
-  # pointed at this deployment's backend URL + their personal MCP token.
+  # The npx package (mcp/npx, `npx modex-mcp`) remains available for clients
+  # that only support launching local stdio MCP servers.
   mcp:
     build:
       context: ../mcp
@@ -197,8 +195,16 @@ services:
     environment:
       MODEX_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:8671}
       MODEX_MCP_TOKEN: ${MODEX_MCP_TOKEN:-}
-    stdin_open: true
-    tty: true
+      MODEX_MCP_TRANSPORT: http
+      MODEX_MCP_ADDR: :8787
+      MODEX_MCP_PATH: /mcp
+    ports:
+      - "${MCP_PORT:-8787}:8787"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8787/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
     depends_on:
       backend:
         condition: service_healthy
