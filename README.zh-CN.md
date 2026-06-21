@@ -8,7 +8,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](frontend/package.json)
 [![Playwright](https://img.shields.io/badge/E2E-Playwright-45ba4b?logo=playwright)](frontend/playwright.config.ts)
 [![MCP](https://img.shields.io/badge/MCP-streamable_HTTP-6f42c1)](mcp/)
-[![i18n](https://img.shields.io/badge/i18n-Weblate_ready-2f80ed)](docs/i18n-weblate.md)
+[![i18n](https://img.shields.io/badge/i18n-ready-2f80ed)](docs/i18n-weblate.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/songkwon/modex)
 
 **语言：** [English](README.md) | 中文
@@ -28,7 +28,7 @@ Modex 是一个面向团队、企业和开源社区的文档体验平台。它�
 - **权限与组织模型**：支持本地 mock 登录、生产 OIDC/Keycloak、用户、团队、分类责任人、超级管理员和平台级管理权限。
 - **发布诊断**：`/api/deploy` 返回阶段化发布结果，方便 CI 排查 artifact 解析、鉴权、资源上传、索引清理和入库问题。
 - **运维快照**：`/healthz` 返回 repository、对象存储、搜索/vector、embedding count 和 registry counts。
-- **国际化准备**：前端使用 JSON 消息目录，已准备好接入 Weblate。
+- **国际化准备**：前端使用 JSON 消息目录，提供一致性检查和 Weblate 接入说明。
 - **可测试交付**：Go 单测、前端类型检查、生产构建和 Playwright E2E smoke tests 已接入 CI。
 
 ## 仓库结构

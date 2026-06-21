@@ -8,7 +8,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](frontend/package.json)
 [![Playwright](https://img.shields.io/badge/E2E-Playwright-45ba4b?logo=playwright)](frontend/playwright.config.ts)
 [![MCP](https://img.shields.io/badge/MCP-streamable_HTTP-6f42c1)](mcp/)
-[![i18n](https://img.shields.io/badge/i18n-Weblate_ready-2f80ed)](docs/i18n-weblate.md)
+[![i18n](https://img.shields.io/badge/i18n-ready-2f80ed)](docs/i18n-weblate.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/songkwon/modex)
 
 **Language:** English | [中文](README.zh-CN.md)
@@ -28,7 +28,7 @@ Use Modex to build an internal engineering docs hub, module knowledge base, arch
 - **Permissions and teams**: mock login for local development, OIDC/Keycloak for production, users, teams, category ownership, super admins, and scoped platform management.
 - **Deploy diagnostics**: `/api/deploy` returns staged deploy results for artifact parsing, authentication, asset upload, embedding cleanup, and metadata ingest.
 - **Operational health**: `/healthz` exposes a lightweight snapshot of repository, object storage, search/vector state, embedding count, and registry counts.
-- **Internationalization-ready**: frontend copy uses JSON message catalogs designed for Weblate.
+- **Internationalization-ready**: frontend copy uses JSON message catalogs, consistency checks, and Weblate setup notes.
 - **Tested delivery**: Go tests, frontend type checks, production build, and Playwright E2E smoke tests are wired into CI.
 
 ## Repository Layout
