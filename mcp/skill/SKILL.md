@@ -17,7 +17,13 @@ Use this skill when answering questions with a Modex documentation portal.
 
 ## MCP
 
-Install the MCP server with:
+For hosted Modex deployments, prefer the streamable HTTP MCP endpoint when the client supports it:
+
+```text
+https://modex.example.com/mcp
+```
+
+For clients that only support launching a local stdio MCP server, install the wrapper with:
 
 ```bash
 claude mcp add modex \

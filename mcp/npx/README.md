@@ -3,6 +3,10 @@
 Connect any [MCP](https://modelcontextprotocol.io) client (Claude Code, Cursor, Windsurf, …)
 to your Modex documentation platform. Zero dependencies, runs over stdio via `npx`.
 
+For hosted deployments, Modex also ships a `modex-mcp-server` container that exposes
+streamable HTTP at `/mcp`. Use the `npx` package for clients that only support local
+stdio MCP servers.
+
 ## Tools
 
 | Tool | Description |
@@ -20,6 +24,20 @@ to your Modex documentation platform. Zero dependencies, runs over stdio via `np
 | `MODEX_MCP_TOKEN` | _(none)_ | Personal bearer token generated on the Modex MCP page |
 
 ## Install
+
+### Streamable HTTP
+
+Run the MCP image alongside Modex and point compatible MCP clients at:
+
+```text
+https://modex.example.com/mcp
+```
+
+For local compose deployments with the `mcp` profile enabled:
+
+```text
+http://localhost:8787/mcp
+```
 
 ### Claude Code
 

@@ -10,4 +10,5 @@ RUN go build -o /out/modex-mcp-server ./cmd/modex-mcp-server
 
 FROM alpine:3.20
 COPY --from=build /out/modex-mcp-server /usr/local/bin/modex-mcp-server
-CMD ["modex-mcp-server"]
+EXPOSE 8787
+CMD ["modex-mcp-server", "--transport", "http", "--addr", ":8787", "--path", "/mcp"]

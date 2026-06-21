@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build-go:
-    name: Build Go Binaries
+  build-docsctl:
+    name: Build docsctl Binaries
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,20 +33,6 @@ jobs:
       - name: Prepare dist directory
         run: mkdir -p dist
 
-      # 编译 backend (modex-api)
-      - name: Build modex-api
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          BINARY_NAME="modex-api-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-          cd backend
-          go build -ldflags="-s -w" -o "../dist/${BINARY_NAME}" ./cmd/modex-api
-
       # 编译 tools/docsctl（被文档仓库 CI 通过 MODEX_DOCSCTL_URL 下载使用）
       - name: Build docsctl
         env:
@@ -61,24 +47,10 @@ jobs:
           cd tools/docsctl
           go build -ldflags="-s -w -X main.docsctlVersion=${{ github.ref_name }}" -o "../../dist/${BINARY_NAME}" ./cmd/docsctl
 
-      # 编译 mcp (modex-mcp-server)
-      - name: Build modex-mcp-server
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          BINARY_NAME="modex-mcp-server-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-          cd mcp
-          go build -ldflags="-s -w" -o "../dist/${BINARY_NAME}" ./cmd/modex-mcp-server
-
-      - name: Upload Go Binaries
+      - name: Upload docsctl Binaries
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: docsctl-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
 
   build-frontend:
@@ -105,21 +77,14 @@ jobs:
           cd frontend
           npm run build
 
-      - name: Archive Frontend Output
-        run: |
-          cd frontend
-          zip -r ../modex-frontend.zip .next public package.json package-lock.json -x "node_modules/*" ".git/*"
-
       - name: Package MCP npm distribution
         run: npm pack ./mcp/npx --pack-destination .
 
-      - name: Upload Frontend Artifact
+      - name: Upload MCP npm package
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-zip
-          path: |
-            modex-frontend.zip
-            modex-mcp-*.tgz
+          name: mcp-npm-package
+          path: modex-mcp-*.tgz
 
   publish-images:
     name: Publish ${{ matrix.name }} image
@@ -136,9 +101,9 @@ jobs:
           - name: frontend
             context: frontend
             file: frontend/Dockerfile
-          - name: docsctl
-            context: tools/docsctl
-            file: tools/docsctl/Dockerfile
+          - name: mcp
+            context: mcp
+            file: mcp/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -168,7 +133,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-go, build-frontend, publish-images]
+    needs: [build-docsctl, build-frontend, publish-images]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -186,12 +151,9 @@ jobs:
       - name: Organize release files
         run: |
           mkdir -p final-release
-          # 提取所有的 Go 编译产物
-          find release-artifacts -type f -name "modex-api-*" -exec cp {} final-release/ \;
+          # 提取 docsctl 二进制（前后端和 MCP 以 GHCR 镜像发布）
           find release-artifacts -type f -name "docsctl-*" -exec cp {} final-release/ \;
-          find release-artifacts -type f -name "modex-mcp-server-*" -exec cp {} final-release/ \;
-          # 提取前端打包产物
-          find release-artifacts -type f -name "modex-frontend.zip" -exec cp {} final-release/ \;
+          # 提取 MCP npm 分发包，供仍需本地 stdio MCP 的客户端使用
           find release-artifacts -type f -name "modex-mcp-*.tgz" -exec cp {} final-release/ \;
           ls -l final-release
 

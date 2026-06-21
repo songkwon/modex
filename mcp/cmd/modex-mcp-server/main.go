@@ -2,8 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"strings"
 
@@ -26,6 +30,22 @@ type rpcResponse struct {
 
 func main() {
 	c := client.FromEnv()
+	transport := flag.String("transport", env("MODEX_MCP_TRANSPORT", "stdio"), "MCP transport: stdio or http")
+	addr := flag.String("addr", env("MODEX_MCP_ADDR", ":8787"), "HTTP listen address")
+	path := flag.String("path", env("MODEX_MCP_PATH", "/mcp"), "HTTP MCP endpoint path")
+	flag.Parse()
+
+	switch strings.ToLower(*transport) {
+	case "http", "streamable-http", "streamable_http":
+		runHTTP(c, *addr, *path)
+	case "stdio":
+		runStdio(c)
+	default:
+		log.Fatalf("unsupported transport %q", *transport)
+	}
+}
+
+func runStdio(c client.Client) {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -40,6 +60,105 @@ func main() {
 	if err := scanner.Err(); err != nil {
 		respond(nil, nil, fmt.Errorf("stdin read failed: %w", err))
 	}
+}
+
+func runHTTP(c client.Client, addr, path string) {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "use GET", http.StatusMethodNotAllowed)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+	})
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+		handleHTTPRPC(c, w, r)
+	})
+	log.Printf("modex MCP streamable HTTP listening on %s%s", addr, path)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func handleHTTPRPC(c client.Client, w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Mcp-Session-Id")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("MCP-Protocol-Version", "2024-11-05")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"name":      "modex-mcp-server",
+			"transport": "streamable-http",
+			"endpoint":  r.URL.Path,
+		})
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "use POST", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+	var raw json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32700, "parse error")})
+		return
+	}
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32700, "parse error")})
+		return
+	}
+	if raw[0] == '[' {
+		var reqs []rpcRequest
+		if err := json.Unmarshal(raw, &reqs); err != nil {
+			writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32600, "invalid request")})
+			return
+		}
+		responses := make([]rpcResponse, 0, len(reqs))
+		for _, req := range reqs {
+			if isNotification(req) {
+				_, _ = handle(c, req)
+				continue
+			}
+			responses = append(responses, handleRPC(c, req))
+		}
+		if len(responses) == 0 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		writeJSON(w, http.StatusOK, responses)
+		return
+	}
+	var req rpcRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32600, "invalid request")})
+		return
+	}
+	if isNotification(req) {
+		_, _ = handle(c, req)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	writeJSON(w, http.StatusOK, handleRPC(c, req))
+}
+
+func handleRPC(c client.Client, req rpcRequest) rpcResponse {
+	result, err := handle(c, req)
+	if err != nil {
+		return rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: rpcError(-32000, err.Error())}
+	}
+	return rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result}
+}
+
+func isNotification(req rpcRequest) bool {
+	return req.ID == nil
 }
 
 func handle(c client.Client, req rpcRequest) (any, error) {
@@ -74,7 +193,11 @@ func handle(c client.Client, req rpcRequest) (any, error) {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
 			return nil, err
 		}
-		return callTool(c, params.Name, params.Arguments)
+		result, err := callTool(c, params.Name, params.Arguments)
+		if err != nil {
+			return nil, err
+		}
+		return toolResult(result), nil
 	default:
 		return nil, fmt.Errorf("unsupported method %s", req.Method)
 	}
@@ -141,13 +264,35 @@ func propString(description string) map[string]any {
 	return map[string]any{"type": "string", "description": description}
 }
 
+func toolResult(v any) map[string]any {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		b = []byte(fmt.Sprint(v))
+	}
+	return map[string]any{
+		"content": []map[string]any{
+			{"type": "text", "text": string(b)},
+		},
+	}
+}
+
 func respond(id, result any, err error) {
 	resp := rpcResponse{JSONRPC: "2.0", ID: id, Result: result}
 	if err != nil {
 		resp.Result = nil
-		resp.Error = map[string]any{"code": -32000, "message": err.Error()}
+		resp.Error = rpcError(-32000, err.Error())
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(resp)
+}
+
+func rpcError(code int, message string) map[string]any {
+	return map[string]any{"code": code, "message": message}
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func str(v any) string {
@@ -207,4 +352,11 @@ func resultCount(v any) int {
 	default:
 		return 1
 	}
+}
+
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
