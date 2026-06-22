@@ -276,6 +276,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"oidc_login_enabled": cfg.LoginReady(),
 		"login_url":          loginURL,
+		"app_base_url":       cfg.AppBaseURL,
 		"frontend_base_url":  cfg.FrontendBaseURL,
 		"auto_login":         cfg.AutoLogin,
 		// Effective doc-engine plugin state (enabled + non-secret config) so the

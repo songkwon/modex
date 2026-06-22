@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Copy, RefreshCw, Check } from "lucide-react";
-import { getMCPToken, rotateMCPToken } from "@/lib/api";
+import { getAuthConfig, getMCPToken, rotateMCPToken } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://modex.example.com";
+const FALLBACK_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
 
 export default function McpUsagePage() {
   const { t } = useI18n();
   const [token, setToken] = useState("");
+  const [apiBase, setApiBase] = useState(FALLBACK_API_BASE);
   const [loading, setLoading] = useState(true);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
@@ -17,8 +18,15 @@ export default function McpUsagePage() {
   const [copiedSkill, setCopiedSkill] = useState(false);
 
   useEffect(() => {
-    getMCPToken()
-      .then((r) => setToken(r.mcp_token || ""))
+    Promise.allSettled([getMCPToken(), getAuthConfig()])
+      .then(([tokenResult, configResult]) => {
+        if (tokenResult.status === "fulfilled") {
+          setToken(tokenResult.value.mcp_token || "");
+        }
+        if (configResult.status === "fulfilled" && configResult.value.app_base_url) {
+          setApiBase(configResult.value.app_base_url.replace(/\/+$/, ""));
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -26,20 +34,20 @@ export default function McpUsagePage() {
   const displayToken = token || t("me.mcp.your_token");
 
   const claudeCmd = `claude mcp add modex \\
-  --env MODEX_API_BASE_URL=${API_BASE} \\
+  --env MODEX_API_BASE_URL=${apiBase} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y modex-mcp`;
 
-  const tarballUrl = `${API_BASE}/api/mcp/dist/modex-mcp.tgz`;
+  const tarballUrl = `${apiBase}/api/mcp/dist/modex-mcp.tgz`;
   const offlineCmd = `claude mcp add modex \\
-  --env MODEX_API_BASE_URL=${API_BASE} \\
+  --env MODEX_API_BASE_URL=${apiBase} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y ${tarballUrl}`;
   const gitCmd = `claude mcp add modex \\
-  --env MODEX_API_BASE_URL=${API_BASE} \\
+  --env MODEX_API_BASE_URL=${apiBase} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y git+https://github.com/your-org/modex-mcp.git`;
-  const skillCmd = `npx skills add ${API_BASE}`;
+  const skillCmd = `npx skills add ${apiBase}`;
 
   const cursorJson = `{
   "mcpServers": {
@@ -47,7 +55,7 @@ export default function McpUsagePage() {
       "command": "npx",
       "args": ["-y", "modex-mcp"],
       "env": {
-        "MODEX_API_BASE_URL": "${API_BASE}",
+        "MODEX_API_BASE_URL": "${apiBase}",
         "MODEX_MCP_TOKEN": "${displayToken}"
       }
     }
@@ -165,7 +173,7 @@ export default function McpUsagePage() {
             {t("me.mcp.or_download_the_tool_output_directly")}
             <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-mcp.tgz</a>
             {t("me.mcp.also_available_for_download")}
-            <a href={`${API_BASE}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
+            <a href={`${apiBase}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
             用 <code className="code-chip">node index.mjs</code> {t("me.mcp.run_directly")}
           </p>
         </section>

@@ -76,6 +76,7 @@ export type Team = {
 export type AuthConfig = {
   oidc_login_enabled: boolean;
   login_url: string;
+  app_base_url?: string;
   frontend_base_url: string;
   auto_login?: boolean;
 };
