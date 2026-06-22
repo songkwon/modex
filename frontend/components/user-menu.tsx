@@ -133,6 +133,7 @@ export function UserMenu() {
           </div>
           <div className="user-dropdown-list">
             <Link className="user-dropdown-item" href="/me/guide" onClick={() => setOpen(false)}><FileText size={16} />{t("user.projectGuide")}</Link>
+            <Link className="user-dropdown-item" href="/me/markdown-guide" onClick={() => setOpen(false)}><FileText size={16} />{t("user.markdownGuide")}</Link>
             <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />{t("user.mcp")}</Link>
             {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />{t("user.admin")}</Link> : null}
           </div>
