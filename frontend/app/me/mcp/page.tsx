@@ -4,13 +4,12 @@ import { useEffect, useState } from "react";
 import { Copy, RefreshCw, Check } from "lucide-react";
 import { getAuthConfig, getMCPToken, rotateMCPToken } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-
-const FALLBACK_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
+import { publicApiBaseURL } from "@/lib/runtime-config";
 
 export default function McpUsagePage() {
   const { t } = useI18n();
   const [token, setToken] = useState("");
-  const [apiBase, setApiBase] = useState(FALLBACK_API_BASE);
+  const [apiBase, setApiBase] = useState(publicApiBaseURL());
   const [loading, setLoading] = useState(true);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);

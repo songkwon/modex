@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { usePluginConfig, pluginValue } from "./mdx-config";
 import { useI18n } from "@/lib/i18n";
+import { publicKrokiURL } from "@/lib/runtime-config";
 
 // Diagram-as-code rendered via a Kroki server (https://kroki.io). One HTTP API
 // covers PlantUML, Graphviz, C4, DITAA, BPMN, Excalidraw, Vega, D2 and more.
 // The base URL is configurable (admin plugin config, then env) so deployments
 // can point at a self-hosted Kroki instance and keep diagram source private.
-const ENV_KROKI_BASE = (process.env.NEXT_PUBLIC_KROKI_URL || "https://kroki.io").replace(/\/+$/, "");
-
 // Fenced-code language → Kroki diagram type. Aliases map to canonical types.
 const KROKI_TYPES: Record<string, string> = {
   plantuml: "plantuml",
@@ -51,7 +50,7 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
   const { t } = useI18n();
   const type = KROKI_TYPES[lang.toLowerCase()] || lang.toLowerCase();
   const cfg = usePluginConfig();
-  const base = (pluginValue(cfg, "kroki", "base_url") || ENV_KROKI_BASE).replace(/\/+$/, "");
+  const base = (pluginValue(cfg, "kroki", "base_url") || publicKrokiURL()).replace(/\/+$/, "");
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const source = code.trim();

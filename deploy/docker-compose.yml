@@ -66,6 +66,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-modex}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-modex-password}
       MINIO_BUCKET: ${MINIO_BUCKET:-modex}
+      MINIO_BUCKET_LOOKUP: ${MINIO_BUCKET_LOOKUP:-path}
+      MINIO_REGION: ${MINIO_REGION:-}
+      MINIO_SESSION_TOKEN: ${MINIO_SESSION_TOKEN:-}
+      MINIO_TRACE: ${MINIO_TRACE:-false}
       MEILISEARCH_URL: ${MEILISEARCH_URL:-http://meilisearch:7700}
       MEILISEARCH_PUBLIC_URL: ${MEILISEARCH_PUBLIC_URL:-http://localhost:7700}
       AUTO_LOGIN: ${AUTO_LOGIN:-false}
@@ -156,23 +160,17 @@ services:
   frontend:
     build:
       context: ../frontend
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
-        NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
-        NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
-        NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL: ${POSTHOG_ENABLE_LOCAL:-false}
-        # Diagram-as-code (PlantUML/Graphviz/C4/…) render server. Defaults to the
-        # public kroki.io; set to http://localhost:8000 (the `kroki` profile below)
-        # to keep diagram source on-prem.
-        NEXT_PUBLIC_KROKI_URL: ${NEXT_PUBLIC_KROKI_URL:-https://kroki.io}
     environment:
       PORT: 3456
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8671}
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8671}
-      NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
-      NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
-      NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL: ${POSTHOG_ENABLE_LOCAL:-false}
-      NEXT_PUBLIC_KROKI_URL: ${NEXT_PUBLIC_KROKI_URL:-https://kroki.io}
+      MODEX_PUBLIC_API_BASE_URL: ${MODEX_PUBLIC_API_BASE_URL:-http://localhost:8671}
+      MODEX_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
+      MODEX_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-https://app.posthog.com}
+      MODEX_PUBLIC_POSTHOG_ENABLE_LOCAL: ${POSTHOG_ENABLE_LOCAL:-false}
+      # Diagram-as-code (PlantUML/Graphviz/C4/…) render server. Defaults to the
+      # public kroki.io; set to http://localhost:8000 (the `kroki` profile below)
+      # to keep diagram source on-prem.
+      MODEX_PUBLIC_KROKI_URL: ${MODEX_PUBLIC_KROKI_URL:-https://kroki.io}
     ports:
       - "${FRONTEND_PORT:-3456}:3456"
     depends_on:
@@ -213,7 +211,7 @@ services:
   # Optional — only needed if you don't want diagram source sent to public
   # kroki.io. Enable with the `kroki` profile and point the frontend at it:
   #
-  #   NEXT_PUBLIC_KROKI_URL=http://localhost:8000 docker compose --profile kroki up -d
+  #   MODEX_PUBLIC_KROKI_URL=http://localhost:8000 docker compose --profile kroki up -d
   #
   # The base yuzutech/kroki image covers PlantUML, Graphviz, C4, DITAA, BPMN,
   # Vega, D2 and more; Mermaid/Excalidraw need companion containers (see kroki docs).

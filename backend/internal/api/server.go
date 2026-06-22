@@ -87,10 +87,15 @@ func NewWithApplication(app *application.Service) *Server {
 		}
 		host = strings.TrimRight(host, "/")
 		client, err := minio.New(host, &minio.Options{
-			Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-			Secure: secure,
+			Creds:        credentials.NewStaticV4(accessKey, secretKey, os.Getenv("MINIO_SESSION_TOKEN")),
+			Secure:       secure,
+			Region:       os.Getenv("MINIO_REGION"),
+			BucketLookup: minioBucketLookup(),
 		})
 		if err == nil {
+			if envBool("MINIO_TRACE", false) {
+				client.TraceOn(os.Stderr)
+			}
 			s.minioClient = client
 			s.minioBucket = os.Getenv("MINIO_BUCKET")
 			if s.minioBucket == "" {
@@ -111,6 +116,20 @@ func NewWithApplication(app *application.Service) *Server {
 		}
 	}
 	return s
+}
+
+func minioBucketLookup() minio.BucketLookupType {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MINIO_BUCKET_LOOKUP"))) {
+	case "", "path":
+		return minio.BucketLookupPath
+	case "auto":
+		return minio.BucketLookupAuto
+	case "dns", "virtual-host", "virtualhost":
+		return minio.BucketLookupDNS
+	default:
+		log.Printf("minio: unknown MINIO_BUCKET_LOOKUP=%q; using path-style bucket lookup", os.Getenv("MINIO_BUCKET_LOOKUP"))
+		return minio.BucketLookupPath
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -398,20 +417,26 @@ func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, modul
 		obj, err := s.minioClient.GetObject(r.Context(), s.minioBucket, key, minio.GetObjectOptions{})
 		if err == nil {
 			defer obj.Close()
-			stat, statErr := obj.Stat()
-			if statErr == nil && stat.Size > 0 {
-				ct := stat.ContentType
-				if ct == "" {
-					ct = contentTypeForName(name, nil)
-				}
-				w.Header().Set("Content-Type", ct)
+			head := make([]byte, 512)
+			n, readErr := obj.Read(head)
+			if readErr == nil || readErr == io.EOF {
+				head = head[:n]
+				w.Header().Set("Content-Type", contentTypeForName(name, head))
 				w.Header().Set("Cache-Control", "private, max-age=60")
 				w.WriteHeader(http.StatusOK)
-				if _, err := io.Copy(w, obj); err != nil {
-					log.Printf("stream site asset %s failed: %v", name, err)
+				if len(head) > 0 {
+					_, _ = w.Write(head)
+				}
+				if readErr != io.EOF {
+					if _, err := io.Copy(w, obj); err != nil {
+						log.Printf("stream site asset %s failed: %v", name, err)
+					}
 				}
 				return
 			}
+			log.Printf("minio site asset read failed bucket=%s key=%s error=%v", s.minioBucket, key, readErr)
+		} else {
+			log.Printf("minio site asset get failed bucket=%s key=%s error=%v", s.minioBucket, key, err)
 		}
 	}
 	// Without MinIO, static assets are read from PostgreSQL.
@@ -447,18 +472,11 @@ func (s *Server) docPageHTML(ctx context.Context, moduleKey, docsVersion, entryK
 		obj, err := s.minioClient.GetObject(ctx, s.minioBucket, key, minio.GetObjectOptions{})
 		if err == nil {
 			defer obj.Close()
-			stat, statErr := obj.Stat()
-			if statErr == nil && stat.Size > 0 {
-				b, readErr := io.ReadAll(obj)
-				if readErr == nil && len(b) > 0 {
-					return string(b), nil
-				}
-				if readErr != nil {
-					err = readErr
-				}
-			} else if statErr != nil {
-				err = statErr
+			b, readErr := io.ReadAll(obj)
+			if readErr == nil {
+				return string(b), nil
 			}
+			err = readErr
 		}
 		if fallback := s.app.Store().PageHTML(moduleKey, docsVersion, entryKey); fallback != "" {
 			return fallback, nil
@@ -466,6 +484,7 @@ func (s *Server) docPageHTML(ctx context.Context, moduleKey, docsVersion, entryK
 		if err == nil {
 			err = store.ErrNotFound
 		}
+		log.Printf("minio page html read failed bucket=%s key=%s error=%v", s.minioBucket, key, err)
 		return "", fmt.Errorf("read MinIO object %s: %w", key, err)
 	}
 	return s.app.Store().PageHTML(moduleKey, docsVersion, entryKey), nil

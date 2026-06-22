@@ -1,8 +1,10 @@
 // Analytics helper. PostHog integration is wired here behind env config so the
 // rest of the app can capture events without importing posthog directly.
 //
-// To enable PostHog, set NEXT_PUBLIC_POSTHOG_KEY and optionally
-// NEXT_PUBLIC_POSTHOG_HOST.
+// To enable PostHog, set MODEX_PUBLIC_POSTHOG_KEY at container runtime and
+// optionally MODEX_PUBLIC_POSTHOG_HOST.
+
+import { runtimeConfig } from "@/lib/runtime-config";
 
 export type AnalyticsEvent =
   | "docs_home_view"
@@ -21,17 +23,19 @@ export type AnalyticsEvent =
 let initialized = false;
 
 function analyticsEnabled(): boolean {
-  if (typeof window === "undefined" || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return false;
+  const cfg = runtimeConfig();
+  if (typeof window === "undefined" || !cfg.posthogKey) return false;
   const local = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname === "::1";
-  return !local || process.env.NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL === "true";
+  return !local || cfg.posthogEnableLocal;
 }
 
 export function initAnalytics(): void {
   if (initialized || !analyticsEnabled()) return;
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY!;
+  const cfg = runtimeConfig();
+  const key = cfg.posthogKey;
   initialized = true;
   import("posthog-js").then((posthog) => {
-    posthog.default.init(key, { api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://app.posthog.com" });
+    posthog.default.init(key, { api_host: cfg.posthogHost });
   }).catch(() => {
     initialized = false;
   });

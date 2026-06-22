@@ -12,6 +12,7 @@ import { VersionSwitcher } from "@/components/version-switcher";
 import { DocFooter, FloatingDocFeedback } from "@/components/doc-footer";
 import { DocSourceToggle } from "@/components/doc-source-toggle";
 import { getServerI18n } from "@/lib/i18n-server";
+import { publicApiBaseURL } from "@/lib/runtime-config";
 
 export default async function DocPage({
   params,
@@ -34,7 +35,7 @@ export default async function DocPage({
   const contentHTML = extractDocumentBody(pagePayload.content_html || "");
   const contentMD = (page.content_md || pagePayload.content_md || "").trim();
   const isMarkdown = page.entry_type === "markdown";
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
+  const apiBase = publicApiBaseURL();
   const actualEntryKey = page.entry_key || entryKey;
   const assetBase = `${apiBase}/api/docs/${moduleKey}/${docsVersion}/${actualEntryKey}/site/`;
   // Prev/next doc cards from the entry order.
