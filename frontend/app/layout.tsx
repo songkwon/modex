@@ -32,6 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
+        <script src="/runtime-env.js" />
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body>

@@ -34,6 +34,7 @@ import { SandboxedPlugin } from "./sandboxed-plugin";
 import { serializableProps } from "./plugin-utils";
 import { expandSnippets } from "./snippets";
 import { getDocsPluginConfig, getDocsSnippets, getDocsUploadedPlugins, type PluginConfig, type UploadedPlugin } from "@/lib/api";
+import { publicApiBaseURL } from "@/lib/runtime-config";
 
 // Effective plugin config drives which plugins run. On any failure we fall back
 // to "all enabled" (empty config → pluginEnabled returns its true default).
@@ -201,8 +202,6 @@ export async function MdxContent({ source, assetBase }: { source: string; assetB
   );
 }
 
-const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
-
 function imageComponent(assetBase?: string) {
   return function Image(props: ImgHTMLAttributes<HTMLImageElement>) {
     const src = typeof props.src === "string" ? resolveAssetURL(props.src, assetBase) : props.src;
@@ -226,7 +225,7 @@ function resolveAssetURL(src: string, assetBase?: string) {
     return src;
   }
   if (src.startsWith("/api/docs/")) {
-    return `${PUBLIC_API_BASE}${src}`;
+    return `${publicApiBaseURL()}${src}`;
   }
   if (src.startsWith("/")) {
     return src;

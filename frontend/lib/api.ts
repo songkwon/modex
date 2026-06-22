@@ -1,10 +1,10 @@
 import type { AskResponse, AuthConfig, Category, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
-
-const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8671";
-const SERVER_API_BASE = process.env.INTERNAL_API_BASE_URL || PUBLIC_API_BASE;
+import { publicApiBaseURL } from "@/lib/runtime-config";
 
 function apiBaseURL() {
-  return typeof window === "undefined" ? SERVER_API_BASE : PUBLIC_API_BASE;
+  return typeof window === "undefined"
+    ? process.env.INTERNAL_API_BASE_URL || publicApiBaseURL()
+    : publicApiBaseURL();
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

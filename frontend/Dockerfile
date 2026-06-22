@@ -5,16 +5,6 @@ RUN npm install
 
 FROM node:20-alpine AS build
 WORKDIR /app
-ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8671
-ARG NEXT_PUBLIC_POSTHOG_KEY=
-ARG NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
-ARG NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL=false
-ARG NEXT_PUBLIC_KROKI_URL=https://kroki.io
-ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
-ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
-ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
-ENV NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL=$NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL
-ENV NEXT_PUBLIC_KROKI_URL=$NEXT_PUBLIC_KROKI_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
@@ -24,8 +14,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3456
 ENV INTERNAL_API_BASE_URL=http://backend:8671
+ENV MODEX_PUBLIC_API_BASE_URL=http://localhost:8671
+ENV MODEX_PUBLIC_KROKI_URL=https://kroki.io
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
+COPY docker-entrypoint.sh /usr/local/bin/modex-frontend-entrypoint
+RUN chmod +x /usr/local/bin/modex-frontend-entrypoint
 EXPOSE 3456
+ENTRYPOINT ["modex-frontend-entrypoint"]
 CMD ["node", "server.js"]
