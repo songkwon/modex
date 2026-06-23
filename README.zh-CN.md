@@ -58,7 +58,6 @@ docker compose up --build
 - 前端：<http://localhost:3456>
 - 后端健康检查：<http://localhost:8671/healthz>
 - MinIO Console：<http://localhost:9001>
-- Meilisearch：<http://localhost:7700>
 - PostgreSQL：`localhost:5432`
 - Redis：`localhost:6379`
 
@@ -75,7 +74,7 @@ streamable HTTP MCP 地址为：
 http://localhost:8787/mcp
 ```
 
-不使用 Docker 启动应用时，需要先准备 PostgreSQL、Redis、MinIO 和 Meilisearch，然后分别启动后端和前端：
+不使用 Docker 启动应用时，需要先准备 PostgreSQL、Redis 和 MinIO，然后分别启动后端和前端：
 
 ```bash
 cd backend
@@ -180,7 +179,7 @@ npx skills add https://github.com/songkwon/modex/tree/main/mcp/skill
 
 - 登录统一走 OIDC/Keycloak，并配置好 `KEYCLOAK_*` 或 `OIDC_*` 环境变量。
 - 设置 `COOKIE_SECURE=true`、生产 `COOKIE_DOMAIN` 和精确 CORS origins。
-- 替换 PostgreSQL、MinIO、Meilisearch、OIDC、PostHog、cookie、deploy token 等所有 secret。
+- 替换 PostgreSQL、MinIO、OIDC、PostHog、cookie、deploy token 等所有 secret。
 - 配置真实 Chat/Embedding/Rerank provider 后执行 embedding reindex。
 - 如果图表源码不能离开内网，使用内部 Kroki 部署。
 - `deploy/.env`、`deploy/config.yaml` 和 `docker compose config` 输出都可能包含 secret，不要公开。

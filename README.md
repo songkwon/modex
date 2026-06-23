@@ -58,7 +58,6 @@ Default endpoints:
 - Frontend: <http://localhost:3456>
 - Backend health: <http://localhost:8671/healthz>
 - MinIO Console: <http://localhost:9001>
-- Meilisearch: <http://localhost:7700>
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
@@ -75,7 +74,7 @@ Then point streamable HTTP MCP clients at:
 http://localhost:8787/mcp
 ```
 
-To run backend and frontend separately, make sure PostgreSQL, Redis, MinIO, and Meilisearch are available, then start:
+To run backend and frontend separately, make sure PostgreSQL, Redis, and MinIO are available, then start:
 
 ```bash
 cd backend
@@ -180,7 +179,7 @@ Production recommendations:
 
 - Use OIDC/Keycloak for login and configure the `KEYCLOAK_*` or `OIDC_*` environment variables.
 - Set `COOKIE_SECURE=true`, a production `COOKIE_DOMAIN`, and exact CORS origins.
-- Replace all PostgreSQL, MinIO, Meilisearch, OIDC, PostHog, cookie, and deploy-token secrets.
+- Replace all PostgreSQL, MinIO, OIDC, PostHog, cookie, and deploy-token secrets.
 - Configure real chat, embedding, and rerank providers, then run embedding reindex.
 - Use an internal Kroki deployment if diagram source must stay on-prem.
 - Treat `deploy/.env`, `deploy/config.yaml`, and `docker compose config` output as secret-bearing material.

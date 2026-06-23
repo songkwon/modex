@@ -43,16 +43,6 @@ services:
     volumes:
       - minio-data:/data
 
-  meilisearch:
-    image: getmeili/meilisearch:v1.9
-    environment:
-      MEILI_ENV: ${MEILI_ENV:-development}
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-modex-dev-key}
-    ports:
-      - "${MEILI_PORT:-7700}:7700"
-    volumes:
-      - meili-data:/meili_data
-
   backend:
     build:
       context: ../backend
@@ -87,8 +77,6 @@ services:
       MINIO_BUCKET_LOOKUP: ${MINIO_BUCKET_LOOKUP:-path}
       MINIO_REGION: ${MINIO_REGION:-}
       MINIO_TRACE: ${MINIO_TRACE:-false}
-      MEILISEARCH_URL: ${MEILISEARCH_URL:-http://meilisearch:7700}
-      MEILISEARCH_PUBLIC_URL: ${MEILISEARCH_PUBLIC_URL:-http://localhost:7700}
       AUTO_LOGIN: ${AUTO_LOGIN:-false}
       SUPER_ADMIN_USERS: ${SUPER_ADMIN_USERS:-}
       KEYCLOAK_BASE_URL: ${KEYCLOAK_BASE_URL:-}
@@ -152,8 +140,6 @@ services:
       redis:
         condition: service_started
       minio:
-        condition: service_started
-      meilisearch:
         condition: service_started
 
   frontend:
@@ -225,4 +211,3 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
-  meili-data:
