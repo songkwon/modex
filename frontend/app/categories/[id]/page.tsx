@@ -7,7 +7,8 @@ import { getServerI18n } from "@/lib/i18n-server";
 import type { Category, ModuleInfo } from "@/types/modex";
 
 export default async function CategoryPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawID } = await params;
+  const id = decodeURIComponent(rawID);
   const { t } = await getServerI18n();
   const categories = await getCategories();
   const category = findCategory(categories, id);

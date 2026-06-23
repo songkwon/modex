@@ -45,6 +45,24 @@ export function UserMenu() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    refreshAuthState();
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onPageShow = () => {
+      autoLoginStarted.current = false;
+      refreshAuthState();
+    };
+    document.addEventListener("mousedown", onClick);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, []);
+
+  function refreshAuthState() {
+    setCheckedMe(false);
     getOptionalMe()
       .then((u) => {
         if (!u) {
@@ -61,13 +79,8 @@ export function UserMenu() {
       })
       .catch(() => setUser(null))
       .finally(() => setCheckedMe(true));
-    getAuthConfig().then(setCfg).catch(() => {});
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+    getAuthConfig().then(setCfg).catch(() => setCfg(null));
+  }
 
   useEffect(() => {
     if (!checkedMe || user || !cfg?.auto_login || autoLoginStarted.current) return;
@@ -76,9 +89,11 @@ export function UserMenu() {
     if (cfg.login_url) window.location.href = cfg.login_url;
   }, [cfg, checkedMe, user]);
 
-  function login() {
+  async function login() {
     if (typeof window !== "undefined") window.sessionStorage.removeItem("modex_manual_logout");
-    if (cfg?.login_url) window.location.href = cfg.login_url;
+    const current = cfg || await getAuthConfig().catch(() => null);
+    if (current) setCfg(current);
+    if (current?.login_url) window.location.href = current.login_url;
     else alert(t("user.oidcNotConfigured"));
   }
 
@@ -87,6 +102,14 @@ export function UserMenu() {
     if (typeof window !== "undefined") window.sessionStorage.setItem("modex_manual_logout", "1");
     setUser(null);
     setOpen(false);
+  }
+
+  if (!checkedMe) {
+    return (
+      <button className="button button-primary" disabled>
+        <LogIn size={16} />{t("component.docReadStats.loading")}
+      </button>
+    );
   }
 
   if (!user) {

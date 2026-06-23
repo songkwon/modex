@@ -121,16 +121,7 @@ https://modex.example.com/mcp
 
 The MCP server proxies tool calls to the Modex backend. Set `MODEX_API_BASE_URL` to the backend URL and pass a user MCP token with `MODEX_MCP_TOKEN` when the deployment needs authenticated access.
 
-For clients that only support local stdio MCP servers, use the `npx` wrapper:
-
-```bash
-claude mcp add modex \
-  --env MODEX_API_BASE_URL=https://modex.example.com \
-  --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-mcp
-```
-
-You can also install the package served by a deployed Modex backend:
+For clients that only support local stdio MCP servers, install the package served by a deployed Modex backend:
 
 ```bash
 claude mcp add modex \

@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Mermaid } from "@/components/mdx/mermaid";
 import { createModule, getManagedCategories, getDeployToken, rotateDeployToken, updateModule } from "@/lib/api";
+import { gitlabCiTemplateInclude } from "@/lib/runtime-config";
 import { usePaged } from "@/lib/use-paged";
 import type { Category, ModuleInfo } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
@@ -94,8 +95,7 @@ function localDeployCommand(moduleKey: string, deployUrl?: string) {
 }
 
 function gitlabSnippet(moduleKey: string, deployUrl?: string) {
-  return `include:
-  - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
+  return `${gitlabCiTemplateInclude()}
 
 variables:
   MODEX_MODULE_KEY: "${moduleKey || "<module_key>"}"

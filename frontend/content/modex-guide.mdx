@@ -106,7 +106,9 @@ docsctl deploy \
 
 ```yaml GitLab CI
 include:
-  - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
+  - project: "songkwon/modex-fscut"
+    ref: "main"
+    file: "deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
   MODEX_MODULE_KEY: "rd-doc"
@@ -197,7 +199,7 @@ docsctl build failed during build: documentation build failed
 claude mcp add modex \
   --env MODEX_API_BASE_URL=https://modex.example.com \
   --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-mcp
+  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
 ```
 
 <Note>

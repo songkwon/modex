@@ -1,6 +1,7 @@
 export type RuntimeConfig = {
   apiBaseUrl: string;
   krokiUrl: string;
+  gitlabCiTemplateInclude: string;
   posthogKey: string;
   posthogHost: string;
   posthogEnableLocal: boolean;
@@ -21,6 +22,10 @@ declare global {
 const DEFAULT_API_BASE_URL = "http://localhost:8671";
 const DEFAULT_KROKI_URL = "https://kroki.io";
 const DEFAULT_POSTHOG_HOST = "https://app.posthog.com";
+const DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE = `include:
+  - project: "songkwon/modex-fscut"
+    ref: "main"
+    file: "deploy/ci/modex-docs.gitlab-ci.yml"`;
 
 function envValue(name: string, legacyName: string, fallback = ""): string {
   if (typeof window !== "undefined") return fallback;
@@ -29,6 +34,10 @@ function envValue(name: string, legacyName: string, fallback = ""): string {
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeMultiline(value: string): string {
+  return value.replace(/\\n/g, "\n").trim();
 }
 
 function boolValue(value: boolean | string | undefined): boolean {
@@ -50,6 +59,10 @@ export function runtimeConfig(): RuntimeConfig {
     krokiUrl: trimTrailingSlash(
       cfg.krokiUrl || envValue("MODEX_PUBLIC_KROKI_URL", "NEXT_PUBLIC_KROKI_URL", DEFAULT_KROKI_URL)
     ),
+    gitlabCiTemplateInclude: normalizeMultiline(
+      cfg.gitlabCiTemplateInclude ||
+        envValue("MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE", "NEXT_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE", DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE)
+    ),
     posthogKey: cfg.posthogKey || envValue("MODEX_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_KEY"),
     posthogHost: trimTrailingSlash(
       cfg.posthogHost || envValue("MODEX_PUBLIC_POSTHOG_HOST", "NEXT_PUBLIC_POSTHOG_HOST", DEFAULT_POSTHOG_HOST)
@@ -66,4 +79,8 @@ export function publicApiBaseURL(): string {
 
 export function publicKrokiURL(): string {
   return runtimeConfig().krokiUrl;
+}
+
+export function gitlabCiTemplateInclude(): string {
+  return runtimeConfig().gitlabCiTemplateInclude;
 }
