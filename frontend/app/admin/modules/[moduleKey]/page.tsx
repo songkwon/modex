@@ -197,12 +197,9 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
   - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
-  MODEX_MODULE_KEY: "rd-standards"     # 必须等于 modex 后台文档源 key
-  DOCS_VERSION: "latest"
-  DOCS_BUILDER: "vitepress"            # vitepress/vuepress/fumadocs/docusaurus/mkdocs/honkit/gitbook/markdown/static
-  DOCS_SOURCE_DIR: "docs/standard"     # rd-doc 的子目录，映射到 modex 指定位置
-  DOCS_BUILD: "npm ci && npm run docs:build"
-  DOCS_OUTPUT: "docs/.vitepress/dist"
+  MODEX_MODULE_KEY: "rd-standards"
+  # 只有多目录仓库才需要：
+  # DOCS_SOURCE_DIR: "docs/standard"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
 
 # DOCS_DEPLOY_TOKEN: 从上方生成并复制到 GitLab CI Variables（Masked + Protected）`}</pre>

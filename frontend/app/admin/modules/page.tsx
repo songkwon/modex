@@ -93,28 +93,12 @@ function localDeployCommand(moduleKey: string, deployUrl?: string) {
   ].join("\n");
 }
 
-function gitlabSnippet(moduleKey: string, deployUrl?: string, builder = "vitepress") {
-  const output = builder === "vuepress"
-    ? "docs/.vuepress/dist"
-    : builder === "fumadocs"
-      ? "out"
-      : builder === "docusaurus"
-        ? "build"
-        : builder === "mkdocs"
-          ? "site"
-          : builder === "honkit" || builder === "gitbook"
-            ? "_book"
-            : builder === "static"
-              ? "dist"
-              : "docs/.vitepress/dist";
-  const build = builder === "static" || builder === "markdown" ? "" : builder === "mkdocs" ? "mkdocs build" : "npm ci && npm run docs:build";
+function gitlabSnippet(moduleKey: string, deployUrl?: string) {
   return `include:
   - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
   MODEX_MODULE_KEY: "${moduleKey || "<module_key>"}"
-  DOCS_BUILDER: "${builder}"
-${build ? `  DOCS_BUILD: "${build}"\n` : ""}  DOCS_OUTPUT: "${output}"
   MODEX_DEPLOY_URL: "${deployUrl || "https://modex.example.com/api/deploy"}"
 
 # 在 GitLab Settings > CI/CD > Variables 中添加：
@@ -457,9 +441,9 @@ export default function AdminModulesPage() {
             <div className="docs-source-code">
               <div className="docs-source-code__head">
                 <span>GitLab CI</span>
-                <CopyButton value={gitlabSnippet(draft.module_key, token.deploy_url, draft.doc_type)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
+                <CopyButton value={gitlabSnippet(draft.module_key, token.deploy_url)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
               </div>
-              <pre>{gitlabSnippet(draft.module_key, token.deploy_url, draft.doc_type)}</pre>
+              <pre>{gitlabSnippet(draft.module_key, token.deploy_url)}</pre>
             </div>
           </div>
         ) : null}

@@ -13,6 +13,7 @@ import (
 	"modex/backend/internal/api"
 	"modex/backend/internal/application"
 	"modex/backend/internal/config"
+	"modex/backend/internal/dburl"
 	"modex/backend/internal/repository"
 	"modex/backend/internal/vectorstore"
 )
@@ -30,10 +31,7 @@ func main() {
 	}
 	addr := ":" + env("PORT", "8671")
 
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		log.Fatalf("DATABASE_URL is required: modex-api persists all state in PostgreSQL")
-	}
+	databaseURL := dburl.FromEnv()
 	repository := openRepository(databaseURL)
 
 	vectorCtx, vectorCancel := context.WithTimeout(context.Background(), 10*time.Second)

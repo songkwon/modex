@@ -14,7 +14,8 @@ import (
 // Use this for settings that describe application behavior/semantics rather than
 // per-deployment infrastructure wiring (the latter belongs in environment variables).
 type FileConfig struct {
-	Auth AuthSection `yaml:"auth"`
+	Auth   AuthSection   `yaml:"auth"`
+	Search SearchSection `yaml:"search"`
 }
 
 type AuthSection struct {
@@ -22,6 +23,15 @@ type AuthSection struct {
 	// This is a classic example of application-level configuration that is nicer
 	// in a versioned config file than scattered environment variables.
 	UserMapping UserMapping `yaml:"user_mapping"`
+}
+
+type SearchSection struct {
+	Scoring SearchScoring `yaml:"scoring"`
+}
+
+type SearchScoring struct {
+	KeywordWeight  float64 `yaml:"keyword_weight"`
+	SemanticWeight float64 `yaml:"semantic_weight"`
 }
 
 // UserMapping defines claim names coming from the identity provider (Keycloak etc.).
@@ -44,12 +54,8 @@ type UserMapping struct {
 	SecondaryInfoClaim string `yaml:"secondary_info_claim"`
 }
 
-// Load reads the application config.
-// Precedence (lowest to highest):
-//  1. Sensible defaults inside the code that calls this.
-//  2. Values from the YAML config file (if found).
-//  3. Explicit environment variable overrides (highest — allows per-deployment tweaks
-//     without modifying the committed config file).
+// Load reads the application config. Sensible defaults live in the code that
+// calls this package; application-level behavior overrides live in YAML.
 //
 // The config file location is determined by:
 //   - CONFIG_FILE environment variable (highest priority for location)
@@ -77,31 +83,22 @@ func Load() (FileConfig, error) {
 	return fc, nil
 }
 
-// LoadUserMapping returns the effective UserMapping after applying file + env precedence.
+// LoadUserMapping returns the UserMapping from the application config file.
 func LoadUserMapping() UserMapping {
 	fc, err := Load()
 	if err != nil {
-		log.Printf("warning: failed to load config file for user mapping, falling back to env only: %v", err)
+		log.Printf("warning: failed to load config file for user mapping: %v", err)
 	}
+	return fc.Auth.UserMapping
+}
 
-	m := fc.Auth.UserMapping
-
-	// Environment variables take highest priority (explicit overrides).
-	// This preserves the previous pure-env behavior and allows emergency / per-env changes.
-	if v := os.Getenv("OIDC_CLAIM_UNIQUE_ID"); v != "" {
-		m.UniqueIDClaim = v
+// LoadSearchScoring returns search ranking weights from the application config file.
+func LoadSearchScoring() SearchScoring {
+	fc, err := Load()
+	if err != nil {
+		log.Printf("warning: failed to load config file for search scoring: %v", err)
 	}
-	if v := os.Getenv("OIDC_CLAIM_AVATAR"); v != "" {
-		m.AvatarClaim = v
-	}
-	if v := os.Getenv("OIDC_CLAIM_DISPLAY_NAME"); v != "" {
-		m.DisplayNameClaim = v
-	}
-	if v := os.Getenv("OIDC_CLAIM_SECONDARY_INFO"); v != "" {
-		m.SecondaryInfoClaim = v
-	}
-
-	return m
+	return fc.Search.Scoring
 }
 
 // findConfigPath returns the first existing config file path according to the lookup rules.

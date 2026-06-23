@@ -1,10 +1,8 @@
 package application
 
 import (
-	"os"
-	"strconv"
-
 	"modex/backend/internal/auth"
+	"modex/backend/internal/config"
 	"modex/backend/internal/embedding"
 	"modex/backend/internal/search"
 	"modex/backend/internal/store"
@@ -39,6 +37,7 @@ func NewConfigured(st store.DataStore, vectors search.VectorStore, repository Re
 
 func newService(st store.DataStore, vectors search.VectorStore, repository Repository, authService *auth.Service) *Service {
 	contentStore := search.ContentStore(st)
+	scoring := config.LoadSearchScoring()
 	provider := embedding.SettingsProvider{Load: func() embedding.Settings {
 		ai := contentStore.Settings().AI
 		return embedding.Settings{
@@ -56,8 +55,8 @@ func newService(st store.DataStore, vectors search.VectorStore, repository Repos
 			Store:          contentStore,
 			Embedder:       provider,
 			Vectors:        vectors,
-			KeywordWeight:  envFloat("HYBRID_KEYWORD_WEIGHT", 0.6),
-			SemanticWeight: envFloat("HYBRID_SEMANTIC_WEIGHT", 0.4),
+			KeywordWeight:  positiveFloat(scoring.KeywordWeight, 0.6),
+			SemanticWeight: positiveFloat(scoring.SemanticWeight, 0.4),
 		},
 	}
 }
@@ -81,9 +80,8 @@ func (s *Service) Close() {
 	}
 }
 
-func envFloat(key string, fallback float64) float64 {
-	v, err := strconv.ParseFloat(os.Getenv(key), 64)
-	if err != nil || v == 0 {
+func positiveFloat(v, fallback float64) float64 {
+	if v <= 0 {
 		return fallback
 	}
 	return v
