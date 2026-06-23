@@ -110,12 +110,7 @@ include:
 
 variables:
   MODEX_MODULE_KEY: "rd-doc"
-  DOCS_BUILDER: "vitepress"
-  DOCS_BUILD: "npm ci && npm run docs:build"
-  DOCS_OUTPUT: "docs/.vitepress/dist"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
-  # MkDocs 等非 Node 构建可覆盖镜像：
-  # MODEX_DOCS_IMAGE: "python:3.12-bookworm"
 
 # MODEX_DEPLOY_TOKEN 在 GitLab Settings > CI/CD > Variables 中配置，设为 Masked + Protected。
 ```

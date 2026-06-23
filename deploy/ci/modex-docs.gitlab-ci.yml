@@ -1,36 +1,10 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# modex 文档同步 · GitLab CI 模板（B 模式：仓库 CI 编译再推送）
-#
-# 用法：在你的文档仓库 .gitlab-ci.yml 顶部 include 本文件，并设置变量即可，
-# 无需在仓库里维护 docs.yaml（docsctl 会从下列变量合成配置）。
-#
-#   include:
-#     - remote: 'https://raw.githubusercontent.com/<org>/modex/main/deploy/ci/modex-docs.gitlab-ci.yml'
-#
-#   variables:
-#     MODEX_MODULE_KEY:  "rd-doc"                       # 必填：modex 后台登记的文档源 key
-#     DOCS_BUILDER:      "vitepress"                    # vitepress | vuepress | fumadocs | docusaurus | mkdocs | honkit | gitbook | markdown | static
-#     DOCS_BUILD:        "npm ci && npm run docs:build" # markdown/static 可留空
-#     DOCS_OUTPUT:       "docs/.vitepress/dist"         # 编译产物目录；static 填已有静态目录，如 dist
-#     MODEX_DEPLOY_URL:  "https://modex.example.com/api/deploy"
-#     # MODEX_DOCS_IMAGE: "python:3.12-bookworm"        # MkDocs 等非 Node 构建可覆盖镜像
-#     # MODEX_DEPLOY_TOKEN: 在 GitLab → Settings → CI/CD → Variables 设置（Masked + Protected），勿写进仓库
-#
-# docsctl 不需要预装：CI 会按 MODEX_DOCSCTL_URL 下载预编译二进制（见 before_script）。
-# 默认镜像 node:20-bookworm 自带 node / npm / curl / git，足以构建前端文档框架。
-#
-# 说明：
-#   · 文档归属哪个能力域（锚点）在 modex 后台配置，CI 不关心，只带 MODULE_KEY 推产物。
-#   · docsctl deploy 会自动 validate/build/package/upload，仓库侧通常只需要这一份模板。
-#   · Docusaurus、MkDocs、HonKit/GitBook 已作为 builder 支持；其他已有 HTML 静态目录用 static。
-#   · 编译型和 static 固定 single 挂载；split 仅对 markdown 型有意义。
-# ─────────────────────────────────────────────────────────────────────────────
+# Modex docs deploy template.
+# Usage and optional variables: deploy/ci/modex-docs.md
 
 variables:
   DOCS_VERSION: "latest"
   DOCS_SOURCE_DIR: "."
   MODEX_DOCS_IMAGE: "node:20-bookworm"
-  # 预编译 docsctl 二进制下载地址（可覆盖为你自托管的路径 / 内网 GitLab Release / 制品库）。
   MODEX_DOCSCTL_URL: "https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64"
 
 .modex-docs-base:
@@ -39,7 +13,6 @@ variables:
     DOCS_MODULE: "$MODEX_MODULE_KEY"
     DOCS_DEPLOY_URL: "$MODEX_DEPLOY_URL"
     DOCS_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN"
-    # Source metadata shown read-only in modex (filled from GitLab CI predefined vars).
     DOCS_REPO_URL: "$CI_PROJECT_URL"
     DOCS_REPO_TYPE: "git"
     DOCS_BRANCH: "$CI_COMMIT_REF_NAME"
@@ -47,7 +20,6 @@ variables:
   before_script:
     - 'test -n "$MODEX_MODULE_KEY" || { echo "MODEX_MODULE_KEY 未设置"; exit 1; }'
     - 'test -n "$MODEX_DEPLOY_URL" || { echo "MODEX_DEPLOY_URL 未设置"; exit 1; }'
-    - 'echo "下载 docsctl: $MODEX_DOCSCTL_URL"'
     - 'curl -fsSL "$MODEX_DOCSCTL_URL" -o /usr/local/bin/docsctl'
     - 'chmod +x /usr/local/bin/docsctl'
     - 'docsctl version || true'
@@ -57,7 +29,6 @@ variables:
     - docsctl package
     - docsctl deploy
 
-# 默认：推到默认分支时自动同步。需要别的触发条件可在仓库侧覆盖 rules。
 modex-docs-deploy:
   extends: .modex-docs-base
   stage: deploy

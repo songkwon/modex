@@ -41,7 +41,7 @@ func NewConfiguredService(cfg Config) (*Service, error) {
 		return newService(cfg, sessions), nil
 	}
 	if cfg.DatabaseURL == "" {
-		return nil, errors.New("DATABASE_URL is required when REDIS_URL is not configured")
+		return nil, errors.New("PostgreSQL connection is required when Redis is not configured")
 	}
 	sessions, err := newPostgresSessionStore(cfg.DatabaseURL)
 	if err != nil {

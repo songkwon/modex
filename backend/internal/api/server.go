@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"modex/backend/internal/application"
+	"modex/backend/internal/redisurl"
 	"modex/backend/internal/search"
 	"modex/backend/internal/store"
 
@@ -23,16 +24,16 @@ import (
 )
 
 // dialRedis builds the Redis client shared by the rate and deploy limiters,
-// or returns nil (so both fall back to in-process behavior) when REDIS_URL is
-// unset, malformed, or unreachable.
+// or returns nil (so both fall back to in-process behavior) when Redis is
+// unconfigured, malformed, or unreachable.
 func dialRedis() *redis.Client {
-	rawURL := strings.TrimSpace(os.Getenv("REDIS_URL"))
+	rawURL := redisurl.FromEnv()
 	if rawURL == "" {
 		return nil
 	}
 	options, err := redis.ParseURL(rawURL)
 	if err != nil {
-		log.Printf("redis: invalid REDIS_URL (%v); using in-process limiters", err)
+		log.Printf("redis: invalid connection settings (%v); using in-process limiters", err)
 		return nil
 	}
 	client := redis.NewClient(options)
@@ -52,7 +53,7 @@ type Server struct {
 	minioBucket string
 	limiter     rateLimiter
 	// deploy bounds how many artifacts are ingested at once so a burst of large
-	// uploads can't exhaust memory/CPU. Redis-backed when REDIS_URL is set (a
+	// uploads can't exhaust memory/CPU. Redis-backed when Redis is configured (a
 	// single global bound across replicas), per-process otherwise. Requests
 	// beyond the bound wait briefly, then get 503. nil means unbounded.
 	deploy deployLimiter
@@ -87,7 +88,7 @@ func NewWithApplication(app *application.Service) *Server {
 		}
 		host = strings.TrimRight(host, "/")
 		client, err := minio.New(host, &minio.Options{
-			Creds:        credentials.NewStaticV4(accessKey, secretKey, os.Getenv("MINIO_SESSION_TOKEN")),
+			Creds:        credentials.NewStaticV4(accessKey, secretKey, ""),
 			Secure:       secure,
 			Region:       os.Getenv("MINIO_REGION"),
 			BucketLookup: minioBucketLookup(),

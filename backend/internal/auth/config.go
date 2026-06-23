@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"modex/backend/internal/config"
+	"modex/backend/internal/dburl"
+	"modex/backend/internal/redisurl"
 )
 
 type Config struct {
@@ -66,13 +68,12 @@ func FromEnv() Config {
 		AutoLogin:        env("AUTO_LOGIN", "false") == "true",
 		CORSAllowOrigins: splitList(env("CORS_ALLOW_ORIGINS", "http://localhost:3456")),
 		SuperAdmins:      splitList(os.Getenv("SUPER_ADMIN_USERS")),
-		RedisURL:         os.Getenv("REDIS_URL"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		RedisURL:         redisurl.FromEnv(),
+		DatabaseURL:      dburl.FromEnv(),
 		SessionTTL:       envDuration("SESSION_TTL", 8*time.Hour),
 
-		// UserMapping comes from a combination of (optional) config file + env overrides.
-		// See internal/config for precedence rules and why some settings live in files
-		// while connection secrets stay in the environment.
+		// UserMapping comes from the optional application config file. Connection
+		// secrets stay in environment variables; identity semantics stay in config.yaml.
 		UserMapping: resolveUserMapping(),
 	}
 	if cfg.AuthURL == "" && issuer != "" {
@@ -138,10 +139,8 @@ func splitList(v string) []string {
 	return out
 }
 
-// resolveUserMapping loads the user attribute mapping with the following precedence:
-//  1. Values from config file (if CONFIG_FILE or conventional locations exist)
-//  2. OIDC_CLAIM_* environment variables (explicit overrides)
-//  3. Reasonable defaults (company prefers email as unique id)
+// resolveUserMapping loads user attribute mapping from config.yaml, then fills
+// defaults for fields omitted by the file.
 func resolveUserMapping() config.UserMapping {
 	m := config.LoadUserMapping()
 

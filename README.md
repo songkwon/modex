@@ -110,7 +110,7 @@ go run ./cmd/docsctl deploy
 
 Generate the Deploy Token from the Modex admin console. In production CI, store it in GitLab/GitHub secret variables and never commit it.
 
-For GitLab CI, see [deploy/ci/modex-docs.gitlab-ci.yml](deploy/ci/modex-docs.gitlab-ci.yml). The template downloads a prebuilt `docsctl` binary from GitHub Releases through `MODEX_DOCSCTL_URL`.
+For GitLab CI, see [deploy/ci/modex-docs.md](deploy/ci/modex-docs.md). The template downloads a prebuilt `docsctl` binary from GitHub Releases.
 
 ## AI Tool Access
 
@@ -215,7 +215,7 @@ Frontend catalogs:
 - [Testing Guide](docs/testing.md)
 - [Internationalization and Weblate](docs/i18n-weblate.md)
 - [VuePress Migration](docs/vuepress-migration.md)
-- [GitLab CI Template](deploy/ci/modex-docs.gitlab-ci.yml)
+- [GitLab CI Template](deploy/ci/modex-docs.md)
 - [Production upgrades and rollback](docs/operations.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-modex}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-modex}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PUBLISHED_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./db:/docker-entrypoint-initdb.d:ro
@@ -18,7 +18,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else
+        redis-server --appendonly yes;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -59,8 +66,19 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8671}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3456}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3456}
-      DATABASE_URL: ${DATABASE_URL:-postgres://modex:modex@postgres:5432/modex?sslmode=disable}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-modex}
+      POSTGRES_USER: ${POSTGRES_USER:-modex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-modex}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-disable}
+      REDIS_URL: ${REDIS_URL:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_USER: ${REDIS_USER:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-modex}
@@ -68,7 +86,6 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-modex}
       MINIO_BUCKET_LOOKUP: ${MINIO_BUCKET_LOOKUP:-path}
       MINIO_REGION: ${MINIO_REGION:-}
-      MINIO_SESSION_TOKEN: ${MINIO_SESSION_TOKEN:-}
       MINIO_TRACE: ${MINIO_TRACE:-false}
       MEILISEARCH_URL: ${MEILISEARCH_URL:-http://meilisearch:7700}
       MEILISEARCH_PUBLIC_URL: ${MEILISEARCH_PUBLIC_URL:-http://localhost:7700}
@@ -85,10 +102,6 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
       OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
-      OIDC_CLAIM_UNIQUE_ID: ${OIDC_CLAIM_UNIQUE_ID:-}
-      OIDC_CLAIM_AVATAR: ${OIDC_CLAIM_AVATAR:-}
-      OIDC_CLAIM_DISPLAY_NAME: ${OIDC_CLAIM_DISPLAY_NAME:-}
-      OIDC_CLAIM_SECONDARY_INFO: ${OIDC_CLAIM_SECONDARY_INFO:-}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-modex_session}
       OAUTH_STATE_COOKIE_NAME: ${OAUTH_STATE_COOKIE_NAME:-modex_oauth_state}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
@@ -107,8 +120,6 @@ services:
       RATE_LIMIT_SEARCH_PER_MINUTE: ${RATE_LIMIT_SEARCH_PER_MINUTE:-60}
       RATE_LIMIT_AI_PER_MINUTE: ${RATE_LIMIT_AI_PER_MINUTE:-20}
       RATE_LIMIT_DEPLOY_PER_MINUTE: ${RATE_LIMIT_DEPLOY_PER_MINUTE:-10}
-      HYBRID_KEYWORD_WEIGHT: ${HYBRID_KEYWORD_WEIGHT:-0.6}
-      HYBRID_SEMANTIC_WEIGHT: ${HYBRID_SEMANTIC_WEIGHT:-0.4}
       # Directory the backend serves the MCP npx package from (intranet download).
       # The package is bind-mounted read-only below.
       MCP_DIST_DIR: ${MCP_DIST_DIR:-/app/mcp-dist}
@@ -116,8 +127,7 @@ services:
       POSTHOG_HOST: ${POSTHOG_HOST:-}
       POSTHOG_PERSONAL_API_KEY: ${POSTHOG_PERSONAL_API_KEY:-}
       POSTHOG_PROJECT_ID: ${POSTHOG_PROJECT_ID:-}
-      # CONFIG_FILE: set this (e.g. to /app/config.yaml) when you mount a config file below.
-      # Leave empty or unset to use only environment variables (the old behavior).
+      # Set when mounting deploy/config.yaml below.
       CONFIG_FILE: ${CONFIG_FILE:-}
     ports:
       - "${BACKEND_PORT:-8671}:${BACKEND_PORT:-8671}"
@@ -125,23 +135,12 @@ services:
       # MCP npx package served for intranet download (GET /api/mcp/dist/*).
       - ../mcp/npx:/app/mcp-dist:ro
       - ../mcp/skill:/app/modex-skill:ro
-      # === Optional Application Config (config.yaml) ===
-      # This is the recommended way to configure things like OIDC claim mappings
-      # (unique_id_claim, avatar_claim, display_name_claim, secondary_info_claim).
-      #
-      # Steps to enable:
-      #   1. cp deploy/config.example.yaml deploy/config.yaml
-      #   2. Edit deploy/config.yaml (especially the auth.user_mapping section)
-      #   3. Uncomment the volume mount below
-      #   4. Make sure CONFIG_FILE is set to /app/config.yaml (you can put it in your .env)
+      # Optional application behavior config:
+      #   cp deploy/config.example.yaml deploy/config.yaml
+      #   set CONFIG_FILE=/app/config.yaml
+      #   uncomment the mount below
       #
       # - ./config.yaml:/app/config.yaml:ro
-      #
-      # You can also mount to other paths and set CONFIG_FILE accordingly, e.g.:
-      # - ./my-oidc-config.yaml:/etc/modex/config.yaml:ro
-      # and CONFIG_FILE=/etc/modex/config.yaml
-      #
-      # The app will also auto-discover common locations if CONFIG_FILE is not set.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:${BACKEND_PORT:-8671}/healthz"]
       interval: 10s
