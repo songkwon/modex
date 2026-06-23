@@ -35,7 +35,7 @@ and route-contract check rather than an ESLint rule set.
 
 The Playwright suite lives in `frontend/e2e`. It starts the Next.js dev server
 and mocks the backend API at the browser network layer, so the smoke tests do
-not require PostgreSQL, MinIO, Meilisearch, or the Go API.
+not require PostgreSQL, MinIO, or the Go API.
 
 ```bash
 cd frontend
