@@ -143,10 +143,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download docsctl artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: docsctl-*
           path: release-artifacts
+
+      - name: Download MCP npm package
+        uses: actions/download-artifact@v4
+        with:
+          name: mcp-npm-package
+          path: release-artifacts/mcp-npm-package
 
       - name: Organize release files
         run: |
