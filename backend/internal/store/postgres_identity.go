@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,13 +68,19 @@ func (p *PostgresRepository) Users(keyword string) []User {
 func (p *PostgresRepository) UserByID(id string) (User, error) {
 	var raw []byte
 	var mcpToken string
-	err := p.pool.QueryRow(context.Background(), `SELECT to_jsonb(u),COALESCE(mcp_token,'') FROM users u WHERE id=$1`, id).Scan(&raw,&mcpToken)
-	if errors.Is(err,pgx.ErrNoRows){return User{},ErrNotFound}
-	if err!=nil{return User{},err}
+	err := p.pool.QueryRow(context.Background(), `SELECT to_jsonb(u),COALESCE(mcp_token,'') FROM users u WHERE id=$1`, id).Scan(&raw, &mcpToken)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, err
+	}
 	var user User
-	if err=json.Unmarshal(raw,&user);err!=nil{return User{},err}
-	user.MCPToken=mcpToken
-	return user,nil
+	if err = json.Unmarshal(raw, &user); err != nil {
+		return User{}, err
+	}
+	user.MCPToken = mcpToken
+	return user, nil
 }
 
 func (p *PostgresRepository) UserByMCPToken(token string) (User, error) {
@@ -225,16 +232,37 @@ func normalizeTeam(t Team) Team {
 	return t
 }
 
+func (p *PostgresRepository) uniqueTeamKey(ctx context.Context, name string) string {
+	base := slugifyKey(name)
+	if base == "" {
+		base = "team-" + strconv.FormatInt(time.Now().UnixNano()%1_000_000, 36)
+	}
+	for index := 1; ; index++ {
+		key := base
+		if index > 1 {
+			key += "-" + strconv.Itoa(index)
+		}
+		var exists bool
+		_ = p.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM teams WHERE lower(key)=lower($1))`, key).Scan(&exists)
+		if !exists {
+			return key
+		}
+	}
+}
+
 func (p *PostgresRepository) CreateTeam(t Team) (Team, error) {
+	ctx := context.Background()
 	t.Key = strings.TrimSpace(t.Key)
 	if t.Key == "" {
-		return Team{}, ErrInvalid
+		if strings.TrimSpace(t.Name) == "" {
+			return Team{}, ErrInvalid
+		}
+		t.Key = p.uniqueTeamKey(ctx, t.Name)
 	}
 	if t.ID == "" {
 		t.ID = databaseID("t")
 	}
 	t = normalizeTeam(t)
-	ctx := context.Background()
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return Team{}, err
