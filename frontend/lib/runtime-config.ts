@@ -19,13 +19,14 @@ declare global {
   }
 }
 
-const DEFAULT_API_BASE_URL = "http://localhost:8671";
+const SERVER_DEFAULT_API_BASE_URL = "http://localhost:8671";
 const DEFAULT_KROKI_URL = "https://kroki.io";
 const DEFAULT_POSTHOG_HOST = "https://app.posthog.com";
 const DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE = `include:
   - project: "songkwon/modex-fscut"
     ref: "main"
     file: "deploy/ci/modex-docs.gitlab-ci.yml"`;
+const LEGACY_REMOTE_GITLAB_CI_TEMPLATE_URL = "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml";
 
 function envValue(name: string, legacyName: string, fallback = ""): string {
   if (typeof window !== "undefined") return fallback;
@@ -38,6 +39,39 @@ function trimTrailingSlash(value: string): string {
 
 function normalizeMultiline(value: string): string {
   return value.replace(/\\n/g, "\n").trim();
+}
+
+function defaultApiBaseURL(): string {
+  return typeof window === "undefined" ? SERVER_DEFAULT_API_BASE_URL : "";
+}
+
+function normalizeGitLabCiTemplateInclude(value: string): string {
+  const normalized = normalizeMultiline(value);
+  if (normalized.includes(LEGACY_REMOTE_GITLAB_CI_TEMPLATE_URL)) {
+    return DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE;
+  }
+  return normalized;
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function normalizeApiBaseURL(value: string): string {
+  const trimmed = trimTrailingSlash(value);
+  if (typeof window === "undefined" || trimmed === "") return trimmed;
+  try {
+    const configured = new URL(trimmed);
+    if (isLoopbackHost(configured.hostname) && !isLoopbackHost(window.location.hostname)) {
+      if (window.location.protocol === "http:" && configured.port && configured.port !== window.location.port) {
+        return `${window.location.protocol}//${window.location.hostname}:${configured.port}`;
+      }
+      return "";
+    }
+  } catch {
+    return trimmed;
+  }
+  return trimmed;
 }
 
 function boolValue(value: boolean | string | undefined): boolean {
@@ -53,13 +87,13 @@ function browserConfig(): RuntimeConfigWindow {
 export function runtimeConfig(): RuntimeConfig {
   const cfg = browserConfig();
   return {
-    apiBaseUrl: trimTrailingSlash(
-      cfg.apiBaseUrl || envValue("MODEX_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", DEFAULT_API_BASE_URL)
+    apiBaseUrl: normalizeApiBaseURL(
+      cfg.apiBaseUrl || envValue("MODEX_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", defaultApiBaseURL())
     ),
     krokiUrl: trimTrailingSlash(
       cfg.krokiUrl || envValue("MODEX_PUBLIC_KROKI_URL", "NEXT_PUBLIC_KROKI_URL", DEFAULT_KROKI_URL)
     ),
-    gitlabCiTemplateInclude: normalizeMultiline(
+    gitlabCiTemplateInclude: normalizeGitLabCiTemplateInclude(
       cfg.gitlabCiTemplateInclude ||
         envValue("MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE", "NEXT_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE", DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE)
     ),

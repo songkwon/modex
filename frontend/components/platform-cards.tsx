@@ -1,8 +1,10 @@
 "use client";
 
+import type { KeyboardEvent } from "react";
 import { ArrowRight, BookOpen, Box, Boxes, Cpu, Layers, Layout, Package, Wrench } from "lucide-react";
 import type { Category, ModuleInfo } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
+import { CategoryInfoButton } from "@/components/category-info-button";
 
 const ICONS: Record<string, typeof Boxes> = {
   wrench: Wrench,
@@ -36,6 +38,12 @@ export function PlatformCards({
   onSelect: (category: Category) => void;
 }) {
   const { t } = useI18n();
+  function activateCard(event: KeyboardEvent, category: Category) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect(category);
+    }
+  }
   return (
     <div className="platform-grid">
       {categories.map((cat) => {
@@ -43,7 +51,17 @@ export function PlatformCards({
         const total = countModules(modules, cat.id);
         const children = cat.children || [];
         return (
-          <button className="platform-card" key={cat.id} onClick={() => onSelect(cat)}>
+          <article
+            className="platform-card"
+            key={cat.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(cat)}
+            onKeyDown={(event) => activateCard(event, cat)}
+          >
+            <div className="platform-card-info">
+              <CategoryInfoButton category={cat} modulesCount={total} compact />
+            </div>
             <div className="platform-card-head">
               <span className="platform-icon"><Icon size={20} /></span>
               <div className="platform-titles">
@@ -54,31 +72,35 @@ export function PlatformCards({
             {cat.description ? <p className="platform-desc muted">{cat.description}</p> : null}
             {children.length > 0 ? (
               <div className="platform-subs">
-                {children.map((sub) => (
-                  <span
-                    className="platform-sub"
-                    key={sub.id}
-                    role="link"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelect(sub);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                {children.map((sub) => {
+                  const subTotal = countModules(modules, sub.id);
+                  return (
+                    <span
+                      className="platform-sub"
+                      key={sub.id}
+                      role="link"
+                      tabIndex={0}
+                      onClick={(e) => {
                         e.stopPropagation();
                         onSelect(sub);
-                      }
-                    }}
-                  >
-                    {sub.name}
-                    <em className="platform-sub-count">{countModules(modules, sub.id)}</em>
-                  </span>
-                ))}
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.stopPropagation();
+                          onSelect(sub);
+                        }
+                      }}
+                    >
+                      {sub.name}
+                      <em className="platform-sub-count">{subTotal}</em>
+                      <CategoryInfoButton category={sub} modulesCount={subTotal} compact />
+                    </span>
+                  );
+                })}
               </div>
             ) : null}
             <span className="platform-cta">{t("component.platformCards.browse_documentation")} <ArrowRight size={14} /></span>
-          </button>
+          </article>
         );
       })}
     </div>

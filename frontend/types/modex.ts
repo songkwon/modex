@@ -7,7 +7,16 @@ export type Category = {
   parent_id?: string;
   sort_order?: number;
   responsible_team?: string;
+  responsible_team_info?: TeamSummary | null;
   children?: Category[];
+};
+
+export type TeamSummary = {
+  key: string;
+  name: string;
+  description?: string;
+  leaders: string[];
+  members?: string[];
 };
 
 export type ModuleInfo = {

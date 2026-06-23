@@ -79,17 +79,26 @@ type Team struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type TeamSummary struct {
+	Key         string   `json:"key"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Leaders     []string `json:"leaders"`
+	Members     []string `json:"members,omitempty"`
+}
+
 type Category struct {
-	ID              string     `json:"id"`
-	ParentID        string     `json:"parent_id,omitempty"`
-	Key             string     `json:"key"`
-	Name            string     `json:"name"`
-	Description     string     `json:"description"`
-	Icon            string     `json:"icon"`
-	SortOrder       int        `json:"sort_order"`
-	Status          string     `json:"status"`
-	ResponsibleTeam string     `json:"responsible_team,omitempty"`
-	Children        []Category `json:"children,omitempty"`
+	ID                  string       `json:"id"`
+	ParentID            string       `json:"parent_id,omitempty"`
+	Key                 string       `json:"key"`
+	Name                string       `json:"name"`
+	Description         string       `json:"description"`
+	Icon                string       `json:"icon"`
+	SortOrder           int          `json:"sort_order"`
+	Status              string       `json:"status"`
+	ResponsibleTeam     string       `json:"responsible_team,omitempty"`
+	ResponsibleTeamInfo *TeamSummary `json:"responsible_team_info,omitempty"`
+	Children            []Category   `json:"children,omitempty"`
 }
 
 type Module struct {

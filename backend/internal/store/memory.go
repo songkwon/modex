@@ -558,6 +558,7 @@ func (s *MemoryStore) AllCategories() []Category {
 	defer s.mu.RUnlock()
 	out := make([]Category, len(s.categories))
 	copy(out, s.categories)
+	s.attachResponsibleTeamInfoLocked(out)
 	return out
 }
 
@@ -610,6 +611,7 @@ func (s *MemoryStore) CategoryTree() []Category {
 	for _, c := range s.categories {
 		cp := c
 		cp.Children = nil
+		cp.ResponsibleTeamInfo = s.responsibleTeamInfoLocked(cp.ResponsibleTeam)
 		byParent[c.ParentID] = append(byParent[c.ParentID], cp)
 	}
 	var attach func(parent string) []Category
@@ -626,6 +628,30 @@ func (s *MemoryStore) CategoryTree() []Category {
 		return []Category{}
 	}
 	return res
+}
+
+func (s *MemoryStore) attachResponsibleTeamInfoLocked(categories []Category) {
+	for i := range categories {
+		categories[i].ResponsibleTeamInfo = s.responsibleTeamInfoLocked(categories[i].ResponsibleTeam)
+	}
+}
+
+func (s *MemoryStore) responsibleTeamInfoLocked(teamKey string) *TeamSummary {
+	if strings.TrimSpace(teamKey) == "" {
+		return nil
+	}
+	for _, t := range s.teams {
+		if strings.EqualFold(t.Key, teamKey) {
+			return &TeamSummary{
+				Key:         t.Key,
+				Name:        t.Name,
+				Description: t.Description,
+				Leaders:     cloneStrings(t.Leaders),
+				Members:     cloneStrings(t.Members),
+			}
+		}
+	}
+	return nil
 }
 
 func (s *MemoryStore) Modules(categoryID, keyword string) []Module {

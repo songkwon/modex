@@ -133,5 +133,5 @@ test("home page explains the empty documentation state", async ({ page }) => {
   await expect(page.getByText("还没有接入文档")).toBeVisible();
   await expect(page.getByText("当前空间暂无分类或文档源")).toBeVisible();
   await expect(page.getByRole("link", { name: "接入文档源" })).toHaveAttribute("href", "/admin/modules");
-  await expect(page.getByRole("link", { name: "查看项目指南" })).toHaveAttribute("href", "/me/guide");
+  await expect(page.getByRole("link", { name: "查看项目指南" })).toHaveCount(0);
 });

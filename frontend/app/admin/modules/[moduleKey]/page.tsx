@@ -14,6 +14,7 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [templateInclude, setTemplateInclude] = useState(() => gitlabCiTemplateInclude());
 
   async function load(key: string) {
     setError(null);
@@ -29,6 +30,7 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
   }
 
   useEffect(() => {
+    setTemplateInclude(gitlabCiTemplateInclude());
     let cancelled = false;
     params.then(({ moduleKey: key }) => {
       if (cancelled) return;
@@ -194,7 +196,7 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
 
           <div className="mt-4 p-4 bg-slate-50 rounded text-xs font-mono overflow-auto">
             <div className="mb-2 text-slate-500"># .gitlab-ci.yml 示例 (rd-doc 仓库)</div>
-            <pre>{`${gitlabCiTemplateInclude()}
+            <pre>{`${templateInclude}
 
 variables:
   MODEX_MODULE_KEY: "rd-standards"

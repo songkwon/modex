@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowUpRight, BookOpen } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
+import { CategoryInfoButton } from "@/components/category-info-button";
 import { getCategories, getEntries, getModules } from "@/lib/api";
 import { getServerI18n } from "@/lib/i18n-server";
 import type { Category, ModuleInfo } from "@/types/modex";
@@ -32,8 +33,17 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
         <div className="category-content">
           <div className="shelf-toolbar mb-5">
             <div>
-              <h1>{category.name}</h1>
+              <div className="category-title-row">
+                <h1>{category.name}</h1>
+                <CategoryInfoButton category={category} modulesCount={modules.length} />
+              </div>
               <p className="muted">{modules.length} {t("categories.id.document_collections")} {category.description || ""}</p>
+              {category.responsible_team_info ? (
+                <p className="category-owner-summary">
+                  {t("component.categoryInfo.responsible_team")}: {category.responsible_team_info.name || category.responsible_team_info.key}
+                  {(category.responsible_team_info.leaders || []).length > 0 ? ` · ${t("component.categoryInfo.owners")}: ${category.responsible_team_info.leaders.join(", ")}` : ""}
+                </p>
+              ) : null}
             </div>
           </div>
           {modules.length === 1 ? (

@@ -120,7 +120,8 @@ export function UserMenu() {
     );
   }
 
-  const isAdmin = user.is_super_admin || user.is_team_admin || (user.roles || []).includes("admin");
+  const isSuperAdmin = !!user.is_super_admin;
+  const isAdmin = isSuperAdmin || user.is_team_admin || (user.roles || []).includes("admin");
 
   return (
     <div className="user-menu" ref={ref}>
@@ -137,7 +138,7 @@ export function UserMenu() {
           <div className="user-dropdown-head">
             <div className="font-semibold">{user.display_name || user.username}</div>
             <div className="muted text-xs">{user.email || user.username}{user.department ? ` · ${user.department}` : ""}</div>
-            {user.is_super_admin ? <span className="tag mt-2">{t("user.superAdmin")}</span> : null}
+            {isSuperAdmin ? <span className="tag mt-2">{t("user.superAdmin")}</span> : null}
             <div className="user-locale-row" aria-label={t("nav.language")}>
               <span>{t("nav.language")}</span>
               <span className="user-locale-options">
@@ -155,7 +156,7 @@ export function UserMenu() {
             </div>
           </div>
           <div className="user-dropdown-list">
-            <Link className="user-dropdown-item" href="/me/guide" onClick={() => setOpen(false)}><FileText size={16} />{t("user.projectGuide")}</Link>
+            {isSuperAdmin ? <Link className="user-dropdown-item" href="/me/guide" onClick={() => setOpen(false)}><FileText size={16} />{t("user.projectGuide")}</Link> : null}
             <Link className="user-dropdown-item" href="/me/markdown-guide" onClick={() => setOpen(false)}><FileText size={16} />{t("user.markdownGuide")}</Link>
             <Link className="user-dropdown-item" href="/me/mcp" onClick={() => setOpen(false)}><Terminal size={16} />{t("user.mcp")}</Link>
             {isAdmin ? <Link className="user-dropdown-item" href="/admin" onClick={() => setOpen(false)}><Shield size={16} />{t("user.admin")}</Link> : null}
