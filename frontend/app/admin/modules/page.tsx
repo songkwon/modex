@@ -94,8 +94,8 @@ function localDeployCommand(moduleKey: string, deployUrl?: string) {
   ].join("\n");
 }
 
-function gitlabSnippet(moduleKey: string, deployUrl?: string) {
-  return `${gitlabCiTemplateInclude()}
+function gitlabSnippet(moduleKey: string, deployUrl: string | undefined, templateInclude: string) {
+  return `${templateInclude}
 
 variables:
   MODEX_MODULE_KEY: "${moduleKey || "<module_key>"}"
@@ -124,6 +124,7 @@ export default function AdminModulesPage() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [token, setToken] = useState<{ deploy_token: string; deploy_url: string } | null>(null);
+  const [templateInclude, setTemplateInclude] = useState(() => gitlabCiTemplateInclude());
   const isEdit = !!draft.module_key;
 
   const { items: pageItems, total, page, setPage, error: loadError, reload } = usePaged<ModuleInfo>(
@@ -133,6 +134,7 @@ export default function AdminModulesPage() {
   );
 
   useEffect(() => {
+    setTemplateInclude(gitlabCiTemplateInclude());
     getManagedCategories().then((tree) => setCategories(tree || [])).catch(() => {});
   }, []);
 
@@ -441,9 +443,9 @@ export default function AdminModulesPage() {
             <div className="docs-source-code">
               <div className="docs-source-code__head">
                 <span>GitLab CI</span>
-                <CopyButton value={gitlabSnippet(draft.module_key, token.deploy_url)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
+                <CopyButton value={gitlabSnippet(draft.module_key, token.deploy_url, templateInclude)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
               </div>
-              <pre>{gitlabSnippet(draft.module_key, token.deploy_url)}</pre>
+              <pre>{gitlabSnippet(draft.module_key, token.deploy_url, templateInclude)}</pre>
             </div>
           </div>
         ) : null}

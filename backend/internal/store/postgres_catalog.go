@@ -16,7 +16,19 @@ import (
 
 func (p *PostgresRepository) AllCategories() []Category {
 	var categories []Category
-	if err := loadQuery(context.Background(), p.pool, `SELECT to_jsonb(c)-'created_at'-'updated_at' FROM docs_category c ORDER BY sort_order,id`, &categories); err != nil {
+	if err := loadQuery(context.Background(), p.pool, `SELECT (to_jsonb(c)-'created_at'-'updated_at') || jsonb_build_object(
+			'responsible_team_info',
+			CASE WHEN t.id IS NULL THEN NULL ELSE jsonb_build_object(
+				'key', t.key,
+				'name', t.name,
+				'description', t.description,
+				'leaders', t.leaders,
+				'members', t.members
+			) END
+		)
+		FROM docs_category c
+		LEFT JOIN teams t ON lower(t.key)=lower(c.responsible_team)
+		ORDER BY c.sort_order,c.id`, &categories); err != nil {
 		return []Category{}
 	}
 	return categories
