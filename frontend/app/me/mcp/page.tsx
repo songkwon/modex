@@ -13,7 +13,6 @@ export default function McpUsagePage() {
   const [loading, setLoading] = useState(true);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedOffline, setCopiedOffline] = useState(false);
   const [copiedSkill, setCopiedSkill] = useState(false);
 
   useEffect(() => {
@@ -32,27 +31,18 @@ export default function McpUsagePage() {
 
   const displayToken = token || t("me.mcp.your_token");
 
+  const tarballUrl = `${apiBase}/api/mcp/dist/modex-mcp.tgz`;
   const claudeCmd = `claude mcp add modex \\
   --env MODEX_API_BASE_URL=${apiBase} \\
   --env MODEX_MCP_TOKEN=${displayToken} \\
-  -- npx -y modex-mcp`;
-
-  const tarballUrl = `${apiBase}/api/mcp/dist/modex-mcp.tgz`;
-  const offlineCmd = `claude mcp add modex \\
-  --env MODEX_API_BASE_URL=${apiBase} \\
-  --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y ${tarballUrl}`;
-  const gitCmd = `claude mcp add modex \\
-  --env MODEX_API_BASE_URL=${apiBase} \\
-  --env MODEX_MCP_TOKEN=${displayToken} \\
-  -- npx -y git+https://github.com/your-org/modex-mcp.git`;
   const skillCmd = `npx skills add ${apiBase}`;
 
   const cursorJson = `{
   "mcpServers": {
     "modex": {
       "command": "npx",
-      "args": ["-y", "modex-mcp"],
+      "args": ["-y", "${tarballUrl}"],
       "env": {
         "MODEX_API_BASE_URL": "${apiBase}",
         "MODEX_MCP_TOKEN": "${displayToken}"
@@ -146,35 +136,6 @@ export default function McpUsagePage() {
               {copiedJson ? <Check size={14} /> : <Copy size={14} />}
             </button>
           </div>
-        </section>
-
-        <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.offline_intranet_installation_no_public_npm_required")}</h2>
-          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {t("me.mcp.mcp_packages_are_released_alongside_modex_and_also")}
-          </p>
-          <div style={{ position: "relative" }}>
-            <pre className="mcp-code">{offlineCmd}</pre>
-            <button
-              className="icon-btn"
-              style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
-              onClick={() => copyText(offlineCmd, setCopiedOffline)}
-              aria-label={t("me.mcp.copy_command")}
-            >
-              {copiedOffline ? <Check size={14} /> : <Copy size={14} />}
-            </button>
-          </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            {t("me.mcp.also_supported_if_you_split_your_mcp_packages")} <code className="code-chip">npx</code> {t("me.mcp.install_directly_from_git")}
-          </p>
-          <pre className="mcp-code" style={{ marginTop: 8 }}>{gitCmd}</pre>
-          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            {t("me.mcp.or_download_the_tool_output_directly")}
-            <a href={tarballUrl} className="code-chip" style={{ margin: "0 6px" }}>modex-mcp.tgz</a>
-            {t("me.mcp.also_available_for_download")}
-            <a href={`${apiBase}/api/mcp/dist/index.mjs`} className="code-chip" style={{ margin: "0 6px" }}>index.mjs</a>
-            用 <code className="code-chip">node index.mjs</code> {t("me.mcp.run_directly")}
-          </p>
         </section>
 
         <section className="card">

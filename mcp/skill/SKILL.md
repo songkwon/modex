@@ -23,13 +23,13 @@ For hosted Modex deployments, prefer the streamable HTTP MCP endpoint when the c
 https://modex.example.com/mcp
 ```
 
-For clients that only support launching a local stdio MCP server, install the wrapper with:
+For clients that only support launching a local stdio MCP server, install the package served by Modex with:
 
 ```bash
 claude mcp add modex \
   --env MODEX_API_BASE_URL=https://modex.example.com \
   --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-mcp
+  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
 ```
 
 The MCP server exposes:

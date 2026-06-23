@@ -40,7 +40,7 @@ export default function HomePage() {
   }, [clearScope, t]);
 
   function selectCategory(category: Category) {
-    router.push(`/categories/${category.id}`);
+    router.push(`/categories/${encodeURIComponent(category.id)}`);
   }
 
   const hasDocs = categories.length > 0 || allModules.length > 0;

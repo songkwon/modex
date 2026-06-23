@@ -69,7 +69,7 @@ function CategoryNode({
   onSelect?: (category: Category) => void;
 }) {
   const hasChildren = !!category.children?.length;
-  const href = hrefPrefix ? `${hrefPrefix}/${category.id}` : undefined;
+  const href = hrefPrefix ? `${hrefPrefix}/${encodeURIComponent(category.id)}` : undefined;
   const className = `cat-node${activeID === category.id ? " active" : ""}${depth === 0 ? " cat-node-root" : ""}`;
   const style = { paddingLeft: 10 + depth * 14 };
   const label = (

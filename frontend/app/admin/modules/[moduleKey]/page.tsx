@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { getModule, rotateDeployToken } from "@/lib/api";
+import { gitlabCiTemplateInclude } from "@/lib/runtime-config";
 import type { ModuleInfo } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
 
@@ -193,8 +194,7 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
 
           <div className="mt-4 p-4 bg-slate-50 rounded text-xs font-mono overflow-auto">
             <div className="mb-2 text-slate-500"># .gitlab-ci.yml 示例 (rd-doc 仓库)</div>
-            <pre>{`include:
-  - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
+            <pre>{`${gitlabCiTemplateInclude()}
 
 variables:
   MODEX_MODULE_KEY: "rd-standards"

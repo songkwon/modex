@@ -4,7 +4,9 @@
 
 ```yaml
 include:
-  - remote: "https://raw.githubusercontent.com/songkwon/modex/main/deploy/ci/modex-docs.gitlab-ci.yml"
+  - project: "songkwon/modex-fscut"
+    ref: "main"
+    file: "deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
   MODEX_MODULE_KEY: "rd-doc"

@@ -121,16 +121,7 @@ https://modex.example.com/mcp
 
 MCP server 会把工具调用代理到 Modex 后端。需要鉴权时，为部署设置 `MODEX_API_BASE_URL`，并通过 `MODEX_MCP_TOKEN` 传入用户自己的 MCP token。
 
-如果客户端只支持启动本地 stdio MCP server，可以使用 `npx` wrapper：
-
-```bash
-claude mcp add modex \
-  --env MODEX_API_BASE_URL=https://modex.example.com \
-  --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-mcp
-```
-
-也可以安装已部署 Modex 后端提供的内网分发包：
+如果客户端只支持启动本地 stdio MCP server，可以安装已部署 Modex 后端提供的分发包：
 
 ```bash
 claude mcp add modex \

@@ -45,7 +45,7 @@ http://localhost:8787/mcp
 claude mcp add modex \
   --env MODEX_API_BASE_URL=https://modex.example.com \
   --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y modex-mcp
+  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
 ```
 
 ### Cursor / Windsurf / generic MCP client
@@ -57,7 +57,7 @@ Add to your MCP config (e.g. `~/.cursor/mcp.json`):
   "mcpServers": {
     "modex": {
       "command": "npx",
-      "args": ["-y", "modex-mcp"],
+      "args": ["-y", "https://modex.example.com/api/mcp/dist/modex-mcp.tgz"],
       "env": {
         "MODEX_API_BASE_URL": "https://modex.example.com",
         "MODEX_MCP_TOKEN": "your-token"
@@ -67,25 +67,7 @@ Add to your MCP config (e.g. `~/.cursor/mcp.json`):
 }
 ```
 
-### Modex release tarball
-
-Modex releases can bundle this package and serve it from the platform backend:
-
-```bash
-claude mcp add modex \
-  --env MODEX_API_BASE_URL=https://modex.example.com \
-  --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y https://modex.example.com/api/mcp/dist/modex-mcp.tgz
-```
-
-If your organization keeps the MCP package in an installable Git repository:
-
-```bash
-claude mcp add modex \
-  --env MODEX_API_BASE_URL=https://modex.example.com \
-  --env MODEX_MCP_TOKEN=your-token \
-  -- npx -y git+https://github.com/your-org/modex-mcp.git
-```
+The tarball is served by the Modex backend at `/api/mcp/dist/modex-mcp.tgz`.
 
 ### Modex Skill
 
@@ -104,7 +86,7 @@ npx skills add https://github.com/your-org/modex/tree/main/mcp/skill
 ### Try it locally
 
 ```bash
-MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=your-personal-token npx -y modex-mcp
+MODEX_API_BASE_URL=http://localhost:8671 MODEX_MCP_TOKEN=your-personal-token npx -y http://localhost:8671/api/mcp/dist/modex-mcp.tgz
 ```
 
 Then send a JSON-RPC line on stdin, e.g.:
