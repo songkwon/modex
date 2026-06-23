@@ -26,6 +26,13 @@ func TestPostgresRepositoryRequestLevelCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
+	team, err := repository.CreateTeam(Team{Name: "DB Team " + suffix, Leaders: []string{user.Username}})
+	if err != nil {
+		t.Fatalf("CreateTeam without key: %v", err)
+	}
+	if team.Key == "" || team.Name == "" || len(team.Leaders) != 1 || len(team.Members) != 1 || team.Members[0] != user.Username {
+		t.Fatalf("CreateTeam generated unexpected team: %+v", team)
+	}
 	category, err := repository.CreateCategory(Category{ID: "cat-" + suffix, Key: "cat-" + suffix, Name: "DB Category"})
 	if err != nil {
 		t.Fatalf("CreateCategory: %v", err)
@@ -75,6 +82,7 @@ func TestPostgresRepositoryRequestLevelCRUD(t *testing.T) {
 		_, _ = cleanup.pool.Exec(context.Background(), `DELETE FROM docs_module_category WHERE module_id=$1`, module.ID)
 		_, _ = cleanup.pool.Exec(context.Background(), `DELETE FROM docs_module WHERE id=$1`, module.ID)
 		_ = cleanup.DeleteCategory(category.ID)
+		_ = cleanup.DeleteTeam(team.Key)
 		_ = cleanup.DeleteUser(user.ID)
 	})
 
