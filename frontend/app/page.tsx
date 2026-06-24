@@ -10,6 +10,7 @@ import { PlatformCards } from "@/components/platform-cards";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useSearch } from "@/components/search-provider";
 import { getCategories, getModules, getOptionalMe } from "@/lib/api";
+import { categoryHref } from "@/lib/category-url";
 import { useI18n } from "@/lib/i18n";
 import type { Category, ModuleInfo } from "@/types/modex";
 
@@ -42,7 +43,7 @@ export default function HomePage() {
   }, [clearScope, t]);
 
   function selectCategory(category: Category) {
-    router.push(`/categories/${encodeURIComponent(category.id)}`);
+    router.push(categoryHref(category));
   }
 
   const hasDocs = categories.length > 0 || allModules.length > 0;

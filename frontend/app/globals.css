@@ -147,6 +147,16 @@ a {
   transform: translateY(-1px);
 }
 
+.button-disabled,
+.button-disabled:hover {
+  border-color: hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none;
+}
+
 .icon-button {
   width: 34px;
   padding: 0;
@@ -2011,16 +2021,16 @@ select:focus {
 
 .home-hero .doc-search {
   width: min(860px, 100%);
+  z-index: 30;
 }
 
 .home-hero .ds-panel {
-  position: static;
   margin-top: 12px;
-  max-height: none;
+  max-height: min(56vh, 560px);
 }
 
 .home-hero .ds-results {
-  max-height: min(48vh, 520px);
+  max-height: min(48vh, 500px);
 }
 
 /* ===== Centered home hero ===== */

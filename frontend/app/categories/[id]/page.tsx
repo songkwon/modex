@@ -4,16 +4,17 @@ import { ArrowUpRight, BookOpen, FolderTree } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { CategoryInfoButton } from "@/components/category-info-button";
 import { getCategories, getEntries, getModules } from "@/lib/api";
+import { categoryHref, findCategoryByRouteSegment } from "@/lib/category-url";
 import { getServerI18n } from "@/lib/i18n-server";
 import type { Category, ModuleInfo } from "@/types/modex";
 
 export default async function CategoryPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: rawID } = await params;
-  const id = decodeURIComponent(rawID);
+  const { id: segment } = await params;
   const { t } = await getServerI18n();
   const categories = await getCategories();
-  const category = findCategory(categories, id);
+  const category = findCategoryByRouteSegment(categories, segment);
   if (!category) notFound();
+  const id = category.id;
 
   // A category with no direct modules (e.g. a parent that only holds
   // sub-categories) returns null from the API — coalesce so .length is safe.
@@ -81,7 +82,7 @@ async function SubcategoryCards({ categories, modules }: { categories: Category[
           const total = countModules(modules, cat.id);
           const childCount = cat.children?.length || 0;
           return (
-            <Link className="subcategory-card" href={`/categories/${encodeURIComponent(cat.id)}`} key={cat.id}>
+            <Link className="subcategory-card" href={categoryHref(cat)} key={cat.id}>
               <span className="subcategory-icon"><FolderTree size={18} /></span>
               <span className="subcategory-body">
                 <span className="subcategory-name">{cat.name}</span>
@@ -106,7 +107,10 @@ async function SubcategoryCards({ categories, modules }: { categories: Category[
 // inside the page ("文档套文档"), so we redirect instead.
 async function SingleModuleView({ module }: { module: ModuleInfo }) {
   const { t } = await getServerI18n();
-  const entries = await getEntries(module.module_key, module.default_version);
+  if (!module.default_version) {
+    return <div className="empty-state">{t("categories.id.no_document_entry_points")}</div>;
+  }
+  const entries = await getEntries(module.module_key, module.default_version).catch(() => []);
   const primary = entries.find((e) => e.is_primary) || entries[0];
   if (!primary) {
     return <div className="empty-state">{t("categories.id.no_document_entry_points")}</div>;
@@ -116,15 +120,23 @@ async function SingleModuleView({ module }: { module: ModuleInfo }) {
 
 async function ModuleRow({ module }: { module: ModuleInfo }) {
   const { t } = await getServerI18n();
+  const hasPublishedDocs = !!module.default_version;
   return (
     <article className="package-row">
       <div>
-        <Link href={`/docs/${module.module_key}/${module.default_version}`} className="min-w-0">
+        {hasPublishedDocs ? (
+          <Link href={`/docs/${module.module_key}/${module.default_version}`} className="min-w-0">
+            <div className="package-name">
+              <span className="status-dot" />
+              <span>{module.name}</span>
+            </div>
+          </Link>
+        ) : (
           <div className="package-name">
             <span className="status-dot" />
             <span>{module.name}</span>
           </div>
-        </Link>
+        )}
         <p className="muted mt-3 text-sm leading-6">{module.description}</p>
         <div className="package-meta">
           <span>{module.category_path}</span>
@@ -136,7 +148,7 @@ async function ModuleRow({ module }: { module: ModuleInfo }) {
         <span className="score-pill">{t("categories.id.activePackage")}</span>
         <div>
           <dt className="muted">{t("categories.id.default_version")}</dt>
-          <dd>{module.default_version}</dd>
+          <dd>{module.default_version || "-"}</dd>
         </div>
         <div>
           <dt className="muted">{t("categories.id.documentation_type")}</dt>
@@ -147,7 +159,11 @@ async function ModuleRow({ module }: { module: ModuleInfo }) {
           <dd>{module.reads_30d}</dd>
         </div>
         <div className="flex gap-2 pt-1">
-          <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("categories.id.open")} <ArrowUpRight size={14} /></Link>
+          {hasPublishedDocs ? (
+            <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("categories.id.open")} <ArrowUpRight size={14} /></Link>
+          ) : (
+            <span className="button button-disabled">{t("categories.id.no_document_entry_points")}</span>
+          )}
         </div>
       </aside>
     </article>
@@ -165,13 +181,4 @@ function docTypeLabel(t?: string) {
 
 function countModules(modules: ModuleInfo[], categoryId: string) {
   return modules.filter((m) => (m.category_ids || []).includes(categoryId)).length;
-}
-
-function findCategory(categories: Category[], id: string): Category | null {
-  for (const cat of categories) {
-    if (cat.id === id) return cat;
-    const found = findCategory(cat.children || [], id);
-    if (found) return found;
-  }
-  return null;
 }

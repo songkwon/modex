@@ -1,22 +1,46 @@
 import type { AskResponse, AuthConfig, Category, ModuleInfo, SearchResponse, Team, User } from "@/types/modex";
 import { publicApiBaseURL } from "@/lib/runtime-config";
 
+type ApiRequestInit = RequestInit & { timeoutMs?: number };
+
 function apiBaseURL() {
   return typeof window === "undefined"
     ? process.env.INTERNAL_API_BASE_URL || publicApiBaseURL()
     : publicApiBaseURL();
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${apiBaseURL()}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {})
-    },
-    cache: "no-store"
-  });
+async function requestHeaders(init?: ApiRequestInit): Promise<Headers> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (typeof window === "undefined" && !headers.has("cookie")) {
+    const nextHeaders = await import("next/headers");
+    const cookie = (await nextHeaders.headers()).get("cookie");
+    if (cookie) headers.set("cookie", cookie);
+  }
+  return headers;
+}
+
+export async function api<T>(path: string, init?: ApiRequestInit): Promise<T> {
+  const { timeoutMs = 15_000, signal, ...fetchInit } = init || {};
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  signal?.addEventListener("abort", () => controller.abort(), { once: true });
+
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseURL()}${path}`, {
+      ...fetchInit,
+      credentials: "include",
+      headers: await requestHeaders(init),
+      cache: "no-store",
+      signal: controller.signal
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`API request failed ${path}: ${reason}`);
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) {
     throw new Error(`API ${res.status}: ${await res.text()}`);
   }

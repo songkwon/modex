@@ -53,7 +53,7 @@ export default function RecentPage() {
                       <Link href={item.href} className="font-medium">{item.title}</Link>
                       <div className="muted text-xs">{item.doc_id}</div>
                     </td>
-                    <td>{item.module_name || item.module_key}</td>
+                    <td>{item.module_name || "-"}</td>
                     <td><span className="tag">{item.docs_version}</span></td>
                     <td>{formatViewedAt(item.viewed_at)}</td>
                     <td>

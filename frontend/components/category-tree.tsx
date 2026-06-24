@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { Category } from "@/types/modex";
+import { categoryRouteSegment } from "@/lib/category-url";
 import { useI18n } from "@/lib/i18n";
 
 export function CategoryTree({
@@ -69,7 +70,7 @@ function CategoryNode({
   onSelect?: (category: Category) => void;
 }) {
   const hasChildren = !!category.children?.length;
-  const href = hrefPrefix ? `${hrefPrefix}/${encodeURIComponent(category.id)}` : undefined;
+  const href = hrefPrefix ? `${hrefPrefix}/${categoryRouteSegment(category)}` : undefined;
   const className = `cat-node${activeID === category.id ? " active" : ""}${depth === 0 ? " cat-node-root" : ""}`;
   const style = { paddingLeft: 10 + depth * 14 };
   const label = (

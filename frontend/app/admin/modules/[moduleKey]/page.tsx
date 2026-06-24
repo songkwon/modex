@@ -54,7 +54,6 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
   }
 
   const rows = [
-    [t("admin.modules.module.module_key"), module.module_key],
     [t("admin.categories.description"), module.description],
     [t("common.category"), module.category_path],
     [t("admin.modules.module.owner"), module.owner_group],
