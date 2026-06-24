@@ -8,7 +8,7 @@ export default async function VersionPage({ params }: { params: Promise<{ module
   const { t } = await getServerI18n();
   const [module, entries, versions] = await Promise.all([
     getModule(moduleKey),
-    getEntries(moduleKey, docsVersion),
+    getEntries(moduleKey, docsVersion).catch(() => []),
     getModuleVersions(moduleKey).catch(() => [])
   ]);
   return (

@@ -80,7 +80,7 @@ function maskToken(t: string) {
 }
 
 function flatten(cats: Category[], depth = 0): ComboOption[] {
-  return cats.flatMap((c) => [{ value: c.id, label: c.name, hint: c.key, depth }, ...flatten(c.children || [], depth + 1)]);
+  return cats.flatMap((c) => [{ value: c.id, label: c.name, depth }, ...flatten(c.children || [], depth + 1)]);
 }
 
 function localDeployCommand(deployUrl?: string) {
@@ -209,7 +209,7 @@ export default function AdminModulesPage() {
       <div className="admin-toolbar">
         <div className="search-inline">
           <Search size={15} />
-          <input placeholder={t("admin.modules.search_name_key_repo")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+          <input placeholder={t("admin.modules.search_name_repo")} value={keyword} onChange={(e) => setKeyword(e.target.value)} />
         </div>
         <div className="admin-toolbar-actions">
           <button className="button" onClick={() => setGuideOpen(true)}><BookOpen size={16} /> {t("admin.modules.integrationGuideAction")}</button>
@@ -235,7 +235,6 @@ export default function AdminModulesPage() {
                 <tr key={m.module_key}>
                   <td>
                     <div style={{ fontWeight: 640 }}>{m.name}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{m.module_key}</div>
                   </td>
                   <td>{m.category_path ? <span className="tag">{m.category_path}</span> : <span className="muted" style={{ fontSize: 12 }}>{t("admin.modules.unbound")}</span>}</td>
                   <td>
@@ -367,7 +366,6 @@ export default function AdminModulesPage() {
         <div className="field">
           <label>{t("admin.categories.name")}</label>
           <input value={draft.name} placeholder={t("admin.modules.e_g_r_and_d_specification")} autoFocus onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-          {isEdit ? <span className="field-hint">{t("admin.categories.id")} <span className="tree-keytag">{draft.module_key}</span></span> : <span className="field-hint">{t("admin.modules.id_module_key_is_auto_generated_by_the")}</span>}
         </div>
         <div className="field-row">
           <div className="field">

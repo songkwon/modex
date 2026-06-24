@@ -215,6 +215,7 @@
   "admin.modules.repository": "仓库",
   "admin.modules.save": "保存",
   "admin.modules.search_name_key_repo": "搜索名称 / key / 仓库",
+  "admin.modules.search_name_repo": "搜索名称 / 仓库",
   "admin.modules.select_framework": "选择框架…",
   "admin.modules.source": "来源",
   "admin.modules.source_repository_auto_filled_during_sync": "来源仓库（同步时自动填充）",

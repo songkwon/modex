@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="shell">
               <header className="topbar">
                 <Link className="brand" href="/">
-                  <Image src="/logo.svg" alt="Modex" width={28} height={28} priority style={{ borderRadius: 8 }} />
+                  <Image src="/logo.svg" alt="Modex" width={28} height={28} style={{ borderRadius: 8 }} />
                   <span>Modex</span>
                 </Link>
                 <nav className="nav">

@@ -215,6 +215,7 @@
   "admin.modules.repository": "Repository",
   "admin.modules.save": "Save",
   "admin.modules.search_name_key_repo": "Search name / key / repo",
+  "admin.modules.search_name_repo": "Search name / repo",
   "admin.modules.select_framework": "Select framework…",
   "admin.modules.source": "Source",
   "admin.modules.source_repository_auto_filled_during_sync": "Source Repository (auto-filled during sync)",
