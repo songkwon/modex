@@ -98,7 +98,6 @@ docsctl 的目标是把接入做简单：本地调试时一条命令，生产环
 ```bash 本地调试
 docsctl deploy \
   --source /path/to/docs \
-  --module rd-doc \
   --version latest \
   --deploy-url https://modex.example.com/api/deploy \
   --token "$MODEX_DEPLOY_TOKEN"
@@ -111,7 +110,6 @@ include:
     file: "deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
-  MODEX_MODULE_KEY: "rd-doc"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
 
 # MODEX_DEPLOY_TOKEN 在 GitLab Settings > CI/CD > Variables 中配置，设为 Masked + Protected。
@@ -129,7 +127,7 @@ variables:
 </CardGroup>
 
 <Note>
-部署前必须先在 Modex 后台创建同名文档源。比如命令里 `--module sparklers`，后台文档源的 module key 也必须是 `sparklers`；否则会返回 `module_not_found`。
+部署前先在 Modex 后台创建文档源并复制该文档源的 Deploy Token。同步时后端会通过 token 找到对应文档源和挂载点，不需要在 CI 里再填写内部标识。
 </Note>
 
 ### 构建失败怎么排查

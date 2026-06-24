@@ -116,6 +116,9 @@ export type AskResponse = {
   answer: string;
   provider: string;
   sources: SearchResult[];
+  reasoning?: string;
+  thinking?: string;
+  reasoning_content?: string;
 };
 
 export type SearchResponse = {

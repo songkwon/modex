@@ -199,7 +199,6 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
             <pre>{`${templateInclude}
 
 variables:
-  MODEX_MODULE_KEY: "rd-standards"
   # 只有多目录仓库才需要：
   # DOCS_SOURCE_DIR: "docs/standard"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"

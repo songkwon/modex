@@ -140,8 +140,8 @@ deploy flags:
   --deploy-url <url>    modex deploy endpoint      (env DOCS_DEPLOY_URL, default http://localhost:8671/api/deploy)
   --token <token>       deploy token              (env DOCS_DEPLOY_TOKEN)
 
-metadata flags (override cbb.toml / env):
-  --module <key>        module key & name         (env DOCS_MODULE)
+metadata flags (override cbb.toml / env; module is normally inferred by deploy token):
+  --module <key>        optional legacy module key & name (env DOCS_MODULE)
   --version <ver>       docs version              (env DOCS_VERSION, default "latest")
   --package-version <v> package version          (env DOCS_PACKAGE_VERSION)
   --description <text>  module description        (env DOCS_DESCRIPTION)
@@ -262,7 +262,7 @@ func deploy(root, buildDir, artifact, url, token string) error {
 	}
 	req.Header.Set("Content-Type", "application/zip")
 	req.Header.Set("User-Agent", "docsctl/"+docsctlVersion)
-	// Per-module / global deploy token (matches backend /api/deploy auth).
+	// The deploy token selects the target document source on the backend.
 	req.Header.Set("X-Modex-Deploy-Token", token)
 	if runningInCI() {
 		req.Header.Set("X-Modex-Deploy-Trigger", "pipeline")

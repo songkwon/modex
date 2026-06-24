@@ -4,6 +4,7 @@ import { BookText, FileText, Layers, Sparkles, CornerDownLeft } from "lucide-rea
 import { highlight } from "@/lib/highlight";
 import type { useDocSearch } from "@/lib/use-doc-search";
 import { useI18n } from "@/lib/i18n";
+import { AiMarkdown, splitAnswerParts } from "@/components/ai-markdown";
 
 function entryIcon(type: string) {
   if (type === "vuepress" || type === "fumadocs") return Layers;
@@ -17,11 +18,12 @@ type Search = ReturnType<typeof useDocSearch>;
 // inline home search and the command palette. The first row (Ask AI) is index 0.
 export function SearchResults({ s }: { s: Search }) {
   const { t } = useI18n();
-  const { query, results, loading, active, setActive, runAsk, go, answer, setAnswer } = s;
+  const { query, results, loading, asking, active, setActive, runAsk, go, answer, setAnswer } = s;
+  const answerParts = answer ? splitAnswerParts(answer) : null;
 
   return (
     <>
-      {query.trim() && !answer ? (
+      {query.trim() && !answer && !asking ? (
         <div className="ds-panel">
           <button
             className={`ds-ask-row ${active === 0 ? "active" : ""}`}
@@ -70,7 +72,9 @@ export function SearchResults({ s }: { s: Search }) {
             <span className="tag">{answer.provider}</span>
             <button className="button ds-answer-close" onClick={() => setAnswer(null)}>{t("component.searchResults.close")}</button>
           </div>
-          <div className="ds-answer-body">{answer.answer}</div>
+          <div className="ds-answer-body">
+            {answerParts ? <AiMarkdown answer={answerParts.answer} reasoning={answerParts.reasoning} /> : null}
+          </div>
           {(answer.sources?.length ?? 0) > 0 ? (
             <div className="ds-sources">
               <div className="muted ds-sources-label">{t("component.searchResults.reference_documentation")}</div>

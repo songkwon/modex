@@ -687,6 +687,24 @@ func (s *MemoryStore) Module(moduleKey string) (Module, error) {
 	return Module{}, ErrNotFound
 }
 
+func (s *MemoryStore) ModuleByDeployToken(token string) (Module, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return Module{}, ErrNotFound
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, m := range s.modules {
+		if m.DeployToken == token {
+			cp := m
+			cp.DeployTokenSet = cp.DeployToken != ""
+			cp.AvailableVers = s.versionsForLocked(m.ModuleKey)
+			return cp, nil
+		}
+	}
+	return Module{}, ErrNotFound
+}
+
 func (s *MemoryStore) Versions(moduleKey string) []Version {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

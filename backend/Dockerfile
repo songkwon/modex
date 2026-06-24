@@ -23,7 +23,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Copy source and build (static binary for alpine)
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/modex-api ./cmd/modex-api
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -o /out/modex-api ./cmd/modex-api
 
 FROM alpine:3.20
 WORKDIR /app

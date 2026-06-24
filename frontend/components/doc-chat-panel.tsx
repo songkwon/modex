@@ -6,8 +6,9 @@ import { Sparkles, X, Loader2, ArrowUp } from "lucide-react";
 import { askAI } from "@/lib/api";
 import type { SearchResult } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
+import { AiMarkdown, splitAnswerParts } from "@/components/ai-markdown";
 
-type Message = { role: "user" | "assistant"; text: string; sources?: SearchResult[] };
+type Message = { role: "user" | "assistant"; text: string; reasoning?: string; sources?: SearchResult[] };
 
 // DocChatPanel is a right-side drawer for conversing with AI about the current
 // document. Each question is answered with retrieval scoped to this module.
@@ -40,7 +41,8 @@ export function DocChatPanel({
     setBusy(true);
     try {
       const res = await askAI(q, { module_key: moduleKey });
-      setMessages((m) => [...m, { role: "assistant", text: res.answer, sources: res.sources }]);
+      const parts = splitAnswerParts(res);
+      setMessages((m) => [...m, { role: "assistant", text: parts.answer, reasoning: parts.reasoning, sources: res.sources }]);
     } catch (e) {
       setMessages((m) => [...m, { role: "assistant", text: t("component.docChatPanel.error") + String(e) }]);
     } finally {
@@ -67,7 +69,9 @@ export function DocChatPanel({
           ) : null}
           {messages.map((m, i) => (
             <div key={i} className={`doc-chat-msg ${m.role}`}>
-              <div className="doc-chat-bubble">{m.text}</div>
+              <div className="doc-chat-bubble">
+                {m.role === "assistant" ? <AiMarkdown answer={m.text} reasoning={m.reasoning} compact /> : m.text}
+              </div>
               {m.sources && m.sources.length > 0 ? (
                 <div className="doc-chat-sources">
                   {m.sources.slice(0, 4).map((src) => (

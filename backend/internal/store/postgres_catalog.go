@@ -219,6 +219,29 @@ func (p *PostgresRepository) Module(moduleKey string) (Module, error) {
 	return module, nil
 }
 
+func (p *PostgresRepository) ModuleByDeployToken(token string) (Module, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return Module{}, ErrNotFound
+	}
+	var raw []byte
+	var deployToken string
+	err := p.pool.QueryRow(context.Background(), `SELECT (to_jsonb(m)-'default_version_id'-'created_at'-'deploy_token') || jsonb_build_object('category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),'deploy_token_set',COALESCE(m.deploy_token,'')<>''),COALESCE(m.deploy_token,'') FROM docs_module m WHERE deploy_token=$1`, token).Scan(&raw, &deployToken)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Module{}, ErrNotFound
+	}
+	if err != nil {
+		return Module{}, err
+	}
+	var module Module
+	if err = json.Unmarshal(raw, &module); err != nil {
+		return Module{}, err
+	}
+	module.DeployToken = deployToken
+	module.AvailableVers = p.Versions(module.ModuleKey)
+	return module, nil
+}
+
 func (p *PostgresRepository) uniqueModuleKey(name string) string {
 	base := slugifyKey(name)
 	if base == "" {
