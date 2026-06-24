@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown } from "lucide-react";
-import { getEntries } from "@/lib/api";
+import { getEntriesSafe } from "@/lib/api";
 
 type VersionOption = { docs_version: string; display_name?: string };
 
@@ -43,7 +43,7 @@ export function VersionSwitcher({
     setSwitching(true);
     setOpen(false);
     try {
-      const targetEntries = await getEntries(moduleKey, target);
+      const targetEntries = await getEntriesSafe(moduleKey, target);
       const nextEntry = targetEntries.find((entry) => entry.entry_key === entryKey) || targetEntries[0];
       router.push(nextEntry ? `/docs/${moduleKey}/${target}/${nextEntry.entry_key}` : `/docs/${moduleKey}/${target}`);
     } finally {

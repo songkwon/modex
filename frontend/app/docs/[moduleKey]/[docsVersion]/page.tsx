@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getEntries, getModule, getModuleVersions } from "@/lib/api";
+import { getEntriesSafe, getModule, getModuleVersions } from "@/lib/api";
 import { VersionSwitcher } from "@/components/version-switcher";
 import { getServerI18n } from "@/lib/i18n-server";
 
@@ -8,7 +8,7 @@ export default async function VersionPage({ params }: { params: Promise<{ module
   const { t } = await getServerI18n();
   const [module, entries, versions] = await Promise.all([
     getModule(moduleKey),
-    getEntries(moduleKey, docsVersion).catch(() => []),
+    getEntriesSafe(moduleKey, docsVersion),
     getModuleVersions(moduleKey).catch(() => [])
   ]);
   return (

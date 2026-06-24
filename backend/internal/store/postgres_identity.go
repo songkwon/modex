@@ -125,7 +125,7 @@ func (p *PostgresRepository) CreateUser(u User) (User, error) {
 	created, err := queryJSONOne[User](ctx, tx, `INSERT INTO users
 		(id,username,display_name,email,department,avatar,roles_json,managed_categories_json,source,status,is_super_admin,mcp_token,created_at,updated_at)
 		VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,now(),now()) RETURNING to_jsonb(users)`,
-		u.ID, u.Username, u.DisplayName, u.Email, u.Department, u.Avatar, mustJSON(u.Roles), mustJSON(u.ManagedCategories), u.Source, u.Status, u.SuperAdmin, u.MCPToken)
+		u.ID, u.Username, u.DisplayName, u.Email, u.Department, u.Avatar, mustJSONArray(u.Roles), mustJSONArray(u.ManagedCategories), u.Source, u.Status, u.SuperAdmin, u.MCPToken)
 	if err != nil {
 		return User{}, postgresError(err)
 	}
@@ -162,7 +162,7 @@ func (p *PostgresRepository) UpdateUser(id string, patch User) (User, error) {
 		current.Status = patch.Status
 	}
 	current.SuperAdmin = patch.SuperAdmin
-	updated, err := queryJSONOne[User](ctx, tx, `UPDATE users SET display_name=$2,email=$3,department=$4,roles_json=$5::jsonb,managed_categories_json=$6::jsonb,status=$7,is_super_admin=$8,updated_at=now() WHERE id=$1 RETURNING to_jsonb(users)`, id, current.DisplayName, current.Email, current.Department, mustJSON(current.Roles), mustJSON(current.ManagedCategories), current.Status, current.SuperAdmin)
+	updated, err := queryJSONOne[User](ctx, tx, `UPDATE users SET display_name=$2,email=$3,department=$4,roles_json=$5::jsonb,managed_categories_json=$6::jsonb,status=$7,is_super_admin=$8,updated_at=now() WHERE id=$1 RETURNING to_jsonb(users)`, id, current.DisplayName, current.Email, current.Department, mustJSONArray(current.Roles), mustJSONArray(current.ManagedCategories), current.Status, current.SuperAdmin)
 	if err != nil {
 		return User{}, err
 	}
@@ -197,8 +197,8 @@ func (p *PostgresRepository) UpsertUser(u User) User {
 	result, err := queryJSONOne[User](ctx, tx, `INSERT INTO users
 		(id,username,display_name,email,department,avatar,roles_json,managed_categories_json,source,status,is_super_admin,last_login_at,created_at,updated_at)
 		VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,'oidc','active',$9,now(),now(),now())
-		ON CONFLICT(username) DO UPDATE SET display_name=COALESCE(NULLIF(EXCLUDED.display_name,''),users.display_name),email=COALESCE(NULLIF(EXCLUDED.email,''),users.email),department=COALESCE(NULLIF(EXCLUDED.department,''),users.department),avatar=COALESCE(NULLIF(EXCLUDED.avatar,''),users.avatar),roles_json=CASE WHEN jsonb_array_length(EXCLUDED.roles_json)>0 THEN EXCLUDED.roles_json ELSE users.roles_json END,source='oidc',status='active',last_login_at=now(),updated_at=now()
-		RETURNING to_jsonb(users)`, u.ID, u.Username, u.DisplayName, u.Email, u.Department, u.Avatar, mustJSON(u.Roles), mustJSON(u.ManagedCategories), u.SuperAdmin)
+		ON CONFLICT(username) DO UPDATE SET display_name=COALESCE(NULLIF(EXCLUDED.display_name,''),users.display_name),email=COALESCE(NULLIF(EXCLUDED.email,''),users.email),department=COALESCE(NULLIF(EXCLUDED.department,''),users.department),avatar=COALESCE(NULLIF(EXCLUDED.avatar,''),users.avatar),roles_json=CASE WHEN jsonb_typeof(EXCLUDED.roles_json)='array' AND jsonb_array_length(EXCLUDED.roles_json)>0 THEN EXCLUDED.roles_json WHEN jsonb_typeof(users.roles_json)='array' THEN users.roles_json ELSE '[]'::jsonb END,managed_categories_json=CASE WHEN jsonb_typeof(users.managed_categories_json)='array' THEN users.managed_categories_json ELSE '[]'::jsonb END,source='oidc',status='active',last_login_at=now(),updated_at=now()
+		RETURNING to_jsonb(users)`, u.ID, u.Username, u.DisplayName, u.Email, u.Department, u.Avatar, mustJSONArray(u.Roles), mustJSONArray(u.ManagedCategories), u.SuperAdmin)
 	if err != nil {
 		return u
 	}

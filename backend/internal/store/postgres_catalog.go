@@ -42,6 +42,17 @@ func (p *PostgresRepository) CategoryName(id string) string {
 	return name
 }
 
+func (p *PostgresRepository) categoryPath(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, p.CategoryName(id))
+	}
+	return strings.Join(parts, " / ")
+}
+
 func (p *PostgresRepository) CategoryTree() []Category {
 	byParent := map[string][]Category{}
 	for _, category := range p.AllCategories() {
@@ -203,7 +214,7 @@ func (p *PostgresRepository) DeleteCategory(id string) error {
 func (p *PostgresRepository) Module(moduleKey string) (Module, error) {
 	var raw []byte
 	var deployToken string
-	err := p.pool.QueryRow(context.Background(), `SELECT (to_jsonb(m)-'default_version_id'-'created_at'-'deploy_token') || jsonb_build_object('category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),'deploy_token_set',COALESCE(m.deploy_token,'')<>''),COALESCE(m.deploy_token,'') FROM docs_module m WHERE lower(module_key)=lower($1)`, moduleKey).Scan(&raw, &deployToken)
+	err := p.pool.QueryRow(context.Background(), `SELECT (to_jsonb(m)-'default_version_id'-'created_at'-'deploy_token') || jsonb_build_object('category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),'category_path',COALESCE(NULLIF(m.category_path,''),(SELECT string_agg(c.name,' / ' ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc JOIN docs_category c ON c.id=mc.category_id WHERE mc.module_id=m.id),''),'deploy_token_set',COALESCE(m.deploy_token,'')<>''),COALESCE(m.deploy_token,'') FROM docs_module m WHERE lower(module_key)=lower($1)`, moduleKey).Scan(&raw, &deployToken)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Module{}, ErrNotFound
 	}
@@ -226,7 +237,7 @@ func (p *PostgresRepository) ModuleByDeployToken(token string) (Module, error) {
 	}
 	var raw []byte
 	var deployToken string
-	err := p.pool.QueryRow(context.Background(), `SELECT (to_jsonb(m)-'default_version_id'-'created_at'-'deploy_token') || jsonb_build_object('category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),'deploy_token_set',COALESCE(m.deploy_token,'')<>''),COALESCE(m.deploy_token,'') FROM docs_module m WHERE deploy_token=$1`, token).Scan(&raw, &deployToken)
+	err := p.pool.QueryRow(context.Background(), `SELECT (to_jsonb(m)-'default_version_id'-'created_at'-'deploy_token') || jsonb_build_object('category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),'category_path',COALESCE(NULLIF(m.category_path,''),(SELECT string_agg(c.name,' / ' ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc JOIN docs_category c ON c.id=mc.category_id WHERE mc.module_id=m.id),''),'deploy_token_set',COALESCE(m.deploy_token,'')<>''),COALESCE(m.deploy_token,'') FROM docs_module m WHERE deploy_token=$1`, token).Scan(&raw, &deployToken)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Module{}, ErrNotFound
 	}
@@ -281,6 +292,9 @@ func (p *PostgresRepository) CreateModule(module Module) (Module, error) {
 	}
 	if module.DefaultVersion == "" {
 		module.DefaultVersion = "latest"
+	}
+	if module.CategoryPath == "" {
+		module.CategoryPath = p.categoryPath(module.CategoryIDs)
 	}
 	ctx := context.Background()
 	tx, err := p.pool.Begin(ctx)
@@ -361,6 +375,9 @@ func (p *PostgresRepository) UpdateModule(moduleKey string, patch Module) (Modul
 	}
 	if patch.CategoryIDs != nil {
 		current.CategoryIDs = patch.CategoryIDs
+		if patch.CategoryPath == "" {
+			current.CategoryPath = p.categoryPath(current.CategoryIDs)
+		}
 	}
 	if patch.CategoryPath != "" {
 		current.CategoryPath = patch.CategoryPath

@@ -1,6 +1,6 @@
 import { GitBranch } from "lucide-react";
 import type { ReactNode } from "react";
-import { getEntries, getModule, getModuleVersions, getNav, getPage } from "@/lib/api";
+import { getEntriesSafe, getModule, getModuleVersions, getNav, getPage } from "@/lib/api";
 import { PageViewTracker } from "@/components/page-view-tracker";
 import { DocScope } from "@/components/doc-scope";
 import { CodeBlockCopy } from "@/components/code-block-copy";
@@ -26,7 +26,7 @@ export default async function DocPage({
   const { t } = await getServerI18n();
   const [module, entries, versions, navTree, pagePayload] = await Promise.all([
     getModule(moduleKey),
-    getEntries(moduleKey, docsVersion),
+    getEntriesSafe(moduleKey, docsVersion),
     getModuleVersions(moduleKey).catch(() => []),
     getNav(moduleKey, docsVersion, entryKey).catch(() => []),
     getPage(moduleKey, docsVersion, entryKey)
