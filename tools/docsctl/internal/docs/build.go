@@ -513,33 +513,36 @@ func buildMarkdownDirectory(root, outDir string, md Metadata, baseEntry Entry, s
 	var entries []Entry
 	var full strings.Builder
 	usedKeys := map[string]int{}
+	ignore := LoadModexIgnore(root)
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
 		if info.IsDir() {
-			name := info.Name()
-			if name == ".git" || name == "node_modules" || name == ".vitepress" || name == ".vuepress" {
+			if path != src && (shouldSkipDocsDir(info.Name()) || ignore.Ignored(rel, true)) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		lower := strings.ToLower(info.Name())
-		if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".mdx") {
-			return nil
+		srcRel, srcRelErr := filepath.Rel(src, path)
+		if srcRelErr != nil {
+			return srcRelErr
 		}
-		rel, relErr := filepath.Rel(src, path)
-		if relErr != nil {
-			return relErr
+		if ignore.Ignored(rel, false) || !isIndexableMarkdownFile(srcRel) {
+			return nil
 		}
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
 		}
 		text := string(raw)
-		title := markdownFileTitle(rel)
-		key := markdownEntryKey(baseEntry.Key, filepath.ToSlash(rel), usedKeys)
-		sourceRel, _ := filepath.Rel(root, path)
+		title := markdownFileTitle(srcRel)
+		key := markdownEntryKey(baseEntry.Key, filepath.ToSlash(srcRel), usedKeys)
+		sourceRel := rel
 		pageEntry := Entry{Key: key, Title: title, Type: "markdown", Source: filepath.ToSlash(sourceRel)}
 		entryDir := filepath.Join(outDir, "site", key)
 		if err := os.MkdirAll(entryDir, 0o755); err != nil {
@@ -555,7 +558,7 @@ func buildMarkdownDirectory(root, outDir string, md Metadata, baseEntry Entry, s
 		rec := recordFor(md, pageEntry, stripMarkdown(renderText))
 		rec.ContentMD = strings.TrimSpace(stripFrontmatter(renderText))
 		records = append(records, rec)
-		insertMarkdownNav(&nav, filepath.ToSlash(rel), title, "/"+key, headings(renderText))
+		insertMarkdownNav(&nav, filepath.ToSlash(srcRel), title, "/"+key, headings(renderText))
 		entries = append(entries, pageEntry)
 		full.WriteString("# " + title + "\n\n" + stripMarkdown(renderText) + "\n\n")
 		return nil
@@ -685,21 +688,27 @@ func buildSiteMarkdownRecords(root string, md Metadata, entry Entry) ([]Document
 	base := filepath.Join(root, srcDir)
 	var recs []DocumentRecord
 	var full strings.Builder
+	ignore := LoadModexIgnore(root)
 	_ = filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil {
 			return nil
 		}
-		name := info.Name()
-		if !strings.HasSuffix(strings.ToLower(name), ".md") {
+		rootRel, rootRelErr := filepath.Rel(root, path)
+		if rootRelErr != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if path != base && (shouldSkipDocsDir(info.Name()) || ignore.Ignored(rootRel, true)) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, relErr := filepath.Rel(base, path)
 		if relErr != nil {
 			return nil
 		}
-		// Skip VitePress/VuePress internals and dotfiles.
 		relSlash := filepath.ToSlash(rel)
-		if strings.HasPrefix(relSlash, ".vitepress/") || strings.HasPrefix(relSlash, ".vuepress/") || strings.HasPrefix(relSlash, "node_modules/") {
+		if ignore.Ignored(rootRel, false) || !isIndexableMarkdownFile(relSlash) {
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)

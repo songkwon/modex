@@ -33,6 +33,18 @@ func TestDefaultMarkdownEntryPrefersDocsDirectory(t *testing.T) {
 	}
 }
 
+func TestDefaultMarkdownEntryIgnoresAgentMetadataMarkdown(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("# Agent instructions\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile CLAUDE: %v", err)
+	}
+
+	entry := DefaultEntry(root, "markdown")
+	if entry.Source == "." {
+		t.Fatalf("source = %q, want a concrete docs entry instead of repository root", entry.Source)
+	}
+}
+
 func TestDetectProjectKindSupportsCommonStaticSiteGenerators(t *testing.T) {
 	cases := []struct {
 		name string

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"modex/backend/internal/deploy"
 	"modex/backend/internal/store"
 )
 
@@ -92,8 +93,49 @@ func TestDeployTokenSelectsDocumentSource(t *testing.T) {
 	}
 }
 
+func TestCanonicalizeDeployArtifactAppliesSplitMount(t *testing.T) {
+	artifact := deployArtifactForSplitTest("WrongModule")
+
+	got := canonicalizeDeployArtifact(artifact, store.Module{
+		ModuleKey: "DemoModule",
+		Name:      "Demo Module",
+		DocType:   "markdown",
+		Mount:     "split",
+	})
+
+	if len(got.Manifest.Entries) != 2 {
+		t.Fatalf("entries = %#v, want two top-level groups", got.Manifest.Entries)
+	}
+	if got.Manifest.Entries[0].Key != "standard" || got.Manifest.Entries[1].Key != "tools" {
+		t.Fatalf("entry keys = %#v, want standard/tools", got.Manifest.Entries)
+	}
+	if len(got.Documents) != 2 {
+		t.Fatalf("documents = %#v, want two grouped documents", got.Documents)
+	}
+	if got.Documents[0].DocID != "DemoModule:latest:standard" || got.Documents[1].DocID != "DemoModule:latest:tools" {
+		t.Fatalf("doc ids = %#v", got.Documents)
+	}
+	if !strings.Contains(got.Documents[0].ContentMD, "Standard A") || !strings.Contains(got.Documents[1].ContentMD, "Tools B") {
+		t.Fatalf("grouped markdown content missing source text: %#v", got.Documents)
+	}
+}
+
 func testDeployZip(t *testing.T) []byte {
 	return testDeployZipForModule(t, "DemoModule")
+}
+
+func deployArtifactForSplitTest(moduleKey string) deploy.Artifact {
+	return deploy.Artifact{
+		Metadata: deploy.Metadata{ModuleKey: moduleKey, ModuleName: moduleKey, DocsVersion: "latest", PackageVersion: "1.0.0"},
+		Manifest: deploy.Manifest{Entries: []deploy.Entry{
+			{Key: "guide-standard-a", Title: "Standard A", Type: "markdown", Source: "docs/standard/a.md"},
+			{Key: "guide-tools-b", Title: "Tools B", Type: "markdown", Source: "docs/tools/b.md"},
+		}},
+		Documents: []deploy.DocumentRecord{
+			{DocID: moduleKey + ":latest:guide-standard-a", ModuleKey: moduleKey, ModuleName: moduleKey, DocsVersion: "latest", EntryKey: "guide-standard-a", EntryType: "markdown", Title: "Standard A", SourceFile: "docs/standard/a.md", Content: "Standard text", ContentMD: "# Standard A"},
+			{DocID: moduleKey + ":latest:guide-tools-b", ModuleKey: moduleKey, ModuleName: moduleKey, DocsVersion: "latest", EntryKey: "guide-tools-b", EntryType: "markdown", Title: "Tools B", SourceFile: "docs/tools/b.md", Content: "Tools text", ContentMD: "# Tools B"},
+		},
+	}
 }
 
 func testDeployZipForModule(t *testing.T, moduleKey string) []byte {

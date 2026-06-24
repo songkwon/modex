@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -123,6 +124,7 @@ func canonicalizeDeployArtifact(artifact deploy.Artifact, module store.Module) d
 	if artifact.Metadata.Description == "" {
 		artifact.Metadata.Description = module.Description
 	}
+	artifact = applyModuleMount(artifact, module)
 	for i := range artifact.Documents {
 		entryKey := firstNonEmptyStr(artifact.Documents[i].EntryKey, entryKeyFromDocID(artifact.Documents[i].DocID))
 		artifact.Documents[i].ModuleKey = moduleKey
@@ -140,6 +142,199 @@ func canonicalizeDeployArtifact(artifact deploy.Artifact, module store.Module) d
 		}
 	}
 	return artifact
+}
+
+func applyModuleMount(artifact deploy.Artifact, module store.Module) deploy.Artifact {
+	if !strings.EqualFold(strings.TrimSpace(module.Mount), "split") || !moduleUsesMarkdown(module, artifact) || len(artifact.Documents) <= 1 {
+		return artifact
+	}
+	return splitMarkdownArtifactByTopLevel(artifact)
+}
+
+func moduleUsesMarkdown(module store.Module, artifact deploy.Artifact) bool {
+	if strings.EqualFold(strings.TrimSpace(module.DocType), "markdown") {
+		return true
+	}
+	for _, entry := range artifact.Manifest.Entries {
+		if !strings.EqualFold(strings.TrimSpace(entry.Type), "markdown") {
+			return false
+		}
+	}
+	return len(artifact.Manifest.Entries) > 0
+}
+
+func splitMarkdownArtifactByTopLevel(artifact deploy.Artifact) deploy.Artifact {
+	prefix := commonSourcePrefix(artifact.Documents)
+	type group struct {
+		key    string
+		title  string
+		source string
+		docs   []deploy.DocumentRecord
+	}
+	groups := map[string]*group{}
+	var order []string
+	for _, doc := range artifact.Documents {
+		rel := trimSourcePrefix(doc.SourceFile, prefix)
+		key, title, source := splitGroupForSource(rel, doc)
+		g := groups[key]
+		if g == nil {
+			g = &group{key: key, title: title, source: source}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.docs = append(g.docs, doc)
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		if order[i] == "guide" {
+			return true
+		}
+		if order[j] == "guide" {
+			return false
+		}
+		return order[i] < order[j]
+	})
+
+	entries := make([]deploy.Entry, 0, len(order))
+	nav := make([]deploy.NavItem, 0, len(order))
+	documents := make([]deploy.DocumentRecord, 0, len(order))
+	for _, key := range order {
+		g := groups[key]
+		entries = append(entries, deploy.Entry{Key: g.key, Title: g.title, Type: "markdown", Source: g.source})
+		nav = append(nav, deploy.NavItem{Title: g.title, Path: "/" + g.key})
+		documents = append(documents, mergeMarkdownGroup(artifact, *g))
+	}
+	artifact.Manifest.Entries = entries
+	artifact.Nav = nav
+	artifact.Documents = documents
+	return artifact
+}
+
+func mergeMarkdownGroup(artifact deploy.Artifact, g struct {
+	key    string
+	title  string
+	source string
+	docs   []deploy.DocumentRecord
+}) deploy.DocumentRecord {
+	var content strings.Builder
+	var contentMD strings.Builder
+	for _, doc := range g.docs {
+		title := firstNonEmptyStr(doc.Title, doc.SourceFile)
+		content.WriteString("# " + title + "\n\n" + strings.TrimSpace(doc.Content) + "\n\n")
+		md := firstNonEmptyStr(doc.ContentMD, doc.Content)
+		contentMD.WriteString("# " + title + "\n\n" + strings.TrimSpace(md) + "\n\n")
+	}
+	text := strings.TrimSpace(content.String())
+	desc := text
+	if len(desc) > 140 {
+		desc = desc[:140]
+	}
+	return deploy.DocumentRecord{
+		DocID:          artifact.Metadata.ModuleKey + ":" + artifact.Metadata.DocsVersion + ":" + g.key,
+		ModuleKey:      artifact.Metadata.ModuleKey,
+		ModuleName:     artifact.Metadata.ModuleName,
+		DocsVersion:    artifact.Metadata.DocsVersion,
+		PackageVersion: artifact.Metadata.PackageVersion,
+		EntryKey:       g.key,
+		EntryType:      "markdown",
+		Title:          g.title,
+		Description:    desc,
+		Content:        text,
+		ContentMD:      strings.TrimSpace(contentMD.String()),
+		Path:           "/" + g.key,
+		SourceFile:     g.source,
+		Status:         "active",
+		Keywords:       artifact.Metadata.Keywords,
+	}
+}
+
+func commonSourcePrefix(docs []deploy.DocumentRecord) string {
+	counts := map[string]int{}
+	for _, doc := range docs {
+		parts := splitSourcePath(doc.SourceFile)
+		if len(parts) > 1 {
+			counts[parts[0]]++
+		}
+	}
+	for first, count := range counts {
+		if count == len(docs) {
+			return first
+		}
+	}
+	return ""
+}
+
+func trimSourcePrefix(source, prefix string) string {
+	source = strings.Trim(strings.ReplaceAll(source, "\\", "/"), "/")
+	if prefix != "" && (source == prefix || strings.HasPrefix(source, prefix+"/")) {
+		return strings.TrimPrefix(strings.TrimPrefix(source, prefix), "/")
+	}
+	return source
+}
+
+func splitGroupForSource(rel string, doc deploy.DocumentRecord) (string, string, string) {
+	parts := splitSourcePath(rel)
+	if len(parts) == 0 {
+		return firstNonEmptyStr(doc.EntryKey, "guide"), firstNonEmptyStr(doc.Title, "Guide"), doc.SourceFile
+	}
+	if len(parts) == 1 {
+		name := strings.TrimSuffix(parts[0], sourceExt(parts[0]))
+		if strings.EqualFold(name, "readme") || strings.EqualFold(name, "index") {
+			return "guide", "Guide", doc.SourceFile
+		}
+		key := slugForMount(name)
+		return key, firstNonEmptyStr(doc.Title, name), doc.SourceFile
+	}
+	key := slugForMount(parts[0])
+	return key, titleForMount(parts[0]), strings.Trim(strings.TrimSuffix(doc.SourceFile, strings.Join(parts[1:], "/")), "/")
+}
+
+func splitSourcePath(source string) []string {
+	source = strings.Trim(strings.ReplaceAll(source, "\\", "/"), "/")
+	if source == "" {
+		return nil
+	}
+	return strings.Split(source, "/")
+}
+
+func sourceExt(name string) string {
+	lower := strings.ToLower(name)
+	for _, ext := range []string{".mdx", ".md"} {
+		if strings.HasSuffix(lower, ext) {
+			return name[len(name)-len(ext):]
+		}
+	}
+	return ""
+}
+
+func slugForMount(s string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "guide"
+	}
+	return out
+}
+
+func titleForMount(s string) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, "-", " "))
+	if s == "" {
+		return "Guide"
+	}
+	runes := []rune(s)
+	runes[0] = []rune(strings.ToUpper(string(runes[0])))[0]
+	return string(runes)
 }
 
 func rewriteDeployAssetBases(files map[string]string, fromModule, toModule, fromVersion, toVersion string) map[string]string {

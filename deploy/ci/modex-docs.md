@@ -69,6 +69,26 @@ variables:
   DOCS_SOURCE_DIR: "dist"
 ```
 
+## 排除非文档 Markdown
+
+如果仓库里有 `CLAUDE.md`、`AGENTS.md`、草稿、内部备注等不希望同步到 Modex 的 Markdown，可以在 `DOCS_SOURCE_DIR` 所在目录放 `.modexignore`：
+
+```gitignore
+CLAUDE.md
+AGENTS.md
+drafts/
+*.local.md
+**/*.draft.md
+```
+
+规则按同步根目录匹配；如果 `DOCS_SOURCE_DIR` 是仓库根目录，排除 `docs/runtime/*.mdx` 需要写完整相对路径；如果 `DOCS_SOURCE_DIR` 是 `docs`，则写 `runtime/*.mdx` 即可。
+
+## split 挂载方式
+
+后台文档源的挂载方式为 `split` 时，GitLab CI 仍然使用同一套模板和同一个 deploy token，不需要额外配置 CI 变量。`docsctl` 上传标准 artifact 后，Modex 后端会根据 token 找到文档源配置，并在入库时把 Markdown 按顶层目录拆成多个入口。
+
+`split` 只对普通 Markdown 文档源生效；VitePress、VuePress、Fumadocs、Docusaurus、MkDocs、静态站点等编译型文档固定按 `single` 处理。
+
 其他低频覆盖项：
 
 ```yaml
