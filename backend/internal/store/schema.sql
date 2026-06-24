@@ -122,6 +122,10 @@ CREATE TABLE IF NOT EXISTS docs_module (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS docs_module_deploy_token_uidx
+  ON docs_module(deploy_token)
+  WHERE deploy_token IS NOT NULL AND deploy_token <> '';
+
 CREATE TABLE IF NOT EXISTS docs_module_category (
   module_id TEXT REFERENCES docs_module(id),
   category_id TEXT REFERENCES docs_category(id),
@@ -365,6 +369,10 @@ ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS last_synced_commit TEXT;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS reads_7d INT NOT NULL DEFAULT 0;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS reads_30d INT NOT NULL DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS docs_module_deploy_token_uidx
+  ON docs_module(deploy_token)
+  WHERE deploy_token IS NOT NULL AND deploy_token <> '';
 
 ALTER TABLE docs_page ADD COLUMN IF NOT EXISTS category_ids JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE docs_page ADD COLUMN IF NOT EXISTS content_html TEXT;

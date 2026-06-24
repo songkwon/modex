@@ -482,11 +482,15 @@ func (s *Server) docPageHTML(ctx context.Context, moduleKey, docsVersion, entryK
 		if fallback := s.app.Store().PageHTML(moduleKey, docsVersion, entryKey); fallback != "" {
 			return fallback, nil
 		}
-		if err == nil {
-			err = store.ErrNotFound
+		// Markdown/static entries legitimately have no site/index.html object: they
+		// render from content_md/content_text on the frontend, and site-builder
+		// entries render from the iframe (site route), not this HTML. So a missing
+		// object is not fatal — degrade to empty HTML instead of failing the whole
+		// page render. Only log so genuine MinIO outages remain visible.
+		if err != nil {
+			log.Printf("minio page html read failed bucket=%s key=%s error=%v", s.minioBucket, key, err)
 		}
-		log.Printf("minio page html read failed bucket=%s key=%s error=%v", s.minioBucket, key, err)
-		return "", fmt.Errorf("read MinIO object %s: %w", key, err)
+		return "", nil
 	}
 	return s.app.Store().PageHTML(moduleKey, docsVersion, entryKey), nil
 }

@@ -68,15 +68,43 @@ func TestDeployErrorIncludesStageReport(t *testing.T) {
 	}
 }
 
+func TestDeployTokenSelectsDocumentSource(t *testing.T) {
+	st := store.NewSeededTestStore()
+	if _, err := st.UpdateModule("DemoModule", store.Module{DeployToken: "secret"}); err != nil {
+		t.Fatalf("UpdateModule: %v", err)
+	}
+	srv := New(st)
+	req := httptest.NewRequest(http.MethodPost, "/api/deploy", bytes.NewReader(testDeployZipForModule(t, "WrongModule")))
+	req.Header.Set("Content-Type", "application/zip")
+	req.Header.Set("X-Modex-Deploy-Token", "secret")
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202: %s", rr.Code, rr.Body.String())
+	}
+	if _, err := st.Page("DemoModule:latest:guide"); err != nil {
+		t.Fatalf("expected page to be indexed under token-owned module: %v", err)
+	}
+	if _, err := st.Page("WrongModule:latest:guide"); err == nil {
+		t.Fatal("page was indexed under artifact module instead of token-owned module")
+	}
+}
+
 func testDeployZip(t *testing.T) []byte {
+	return testDeployZipForModule(t, "DemoModule")
+}
+
+func testDeployZipForModule(t *testing.T, moduleKey string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	files := map[string]string{
-		"metadata.json":   `{"module_key":"DemoModule","module_name":"DemoModule","docs_version":"latest","package_version":"1.2.3"}`,
+		"metadata.json":   `{"module_key":"` + moduleKey + `","module_name":"` + moduleKey + `","docs_version":"latest","package_version":"1.2.3"}`,
 		"manifest.json":   `{"schema_version":"modex.docs/v1","generated_by":"test","entries":[{"key":"guide","title":"Guide","type":"markdown","source":"README.md"}]}`,
 		"nav.json":        `[{"title":"Guide","path":"/guide"}]`,
-		"documents.jsonl": `{"doc_id":"DemoModule:latest:guide","module_key":"DemoModule","module_name":"DemoModule","docs_version":"latest","entry_key":"guide","entry_type":"markdown","title":"Guide","content":"Hello","path":"/docs/DemoModule/latest/guide"}` + "\n",
+		"documents.jsonl": `{"doc_id":"` + moduleKey + `:latest:guide","module_key":"` + moduleKey + `","module_name":"` + moduleKey + `","docs_version":"latest","entry_key":"guide","entry_type":"markdown","title":"Guide","content":"Hello","path":"/docs/` + moduleKey + `/latest/guide"}` + "\n",
 		"llms.txt":        "Guide\n",
 	}
 	for name, content := range files {

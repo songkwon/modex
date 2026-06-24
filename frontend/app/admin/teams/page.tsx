@@ -152,8 +152,8 @@ export default function AdminTeamsPage() {
                 return (
                   <tr key={team.key}>
                     <td>
-                      <div style={{ fontWeight: 640 }}>{team.name || team.key}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{team.key}{team.description ? " · " + team.description : ""}</div>
+                      <div style={{ fontWeight: 640 }}>{team.name || t("admin.teams.unnamed_team")}</div>
+                      {team.description ? <div className="muted" style={{ fontSize: 12 }}>{team.description}</div> : null}
                     </td>
                     <td>
                       {(team.leaders || []).length > 0 ? (

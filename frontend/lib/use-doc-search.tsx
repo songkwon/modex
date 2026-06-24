@@ -74,6 +74,10 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
     logSearch();
     setAsking(true);
     setAnswer(null);
+    setResults([]);
+    setActive(0);
+    searchSeq.current += 1;
+    clearTimeout(debounce.current);
     try {
       const scopeArg = moduleKey || categoryId ? { module_key: moduleKey, category_ids: categoryId ? [categoryId] : undefined } : undefined;
       setAnswer(await askAI(query, scopeArg));

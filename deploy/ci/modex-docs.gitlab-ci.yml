@@ -10,7 +10,6 @@ variables:
 .modex-docs-base:
   image: "$MODEX_DOCS_IMAGE"
   variables:
-    DOCS_MODULE: "$MODEX_MODULE_KEY"
     DOCS_DEPLOY_URL: "$MODEX_DEPLOY_URL"
     DOCS_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN"
     DOCS_REPO_URL: "$CI_PROJECT_URL"
@@ -18,8 +17,8 @@ variables:
     DOCS_BRANCH: "$CI_COMMIT_REF_NAME"
     DOCS_COMMIT_SHA: "$CI_COMMIT_SHA"
   before_script:
-    - 'test -n "$MODEX_MODULE_KEY" || { echo "MODEX_MODULE_KEY 未设置"; exit 1; }'
     - 'test -n "$MODEX_DEPLOY_URL" || { echo "MODEX_DEPLOY_URL 未设置"; exit 1; }'
+    - 'test -n "$MODEX_DEPLOY_TOKEN" || { echo "MODEX_DEPLOY_TOKEN 未设置"; exit 1; }'
     - 'curl -fsSL "$MODEX_DOCSCTL_URL" -o /usr/local/bin/docsctl'
     - 'chmod +x /usr/local/bin/docsctl'
     - 'docsctl version || true'

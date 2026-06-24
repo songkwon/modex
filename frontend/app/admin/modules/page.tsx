@@ -24,7 +24,7 @@ const INTEGRATION_FLOW = `sequenceDiagram
     participant CI as 文档仓库 CI
     participant Docsctl as docsctl
     User->>Modex: 创建文档源并复制 Deploy Token
-    User->>CI: 配置 Token、module key 和构建参数
+    User->>CI: 配置 Deploy Token 和构建参数
     CI->>Docsctl: 执行 docsctl deploy
     Docsctl->>Docsctl: 注入 DOCS_BASE 并构建、打包
     Docsctl->>Modex: 上传文档制品和仓库元数据
@@ -83,22 +83,20 @@ function flatten(cats: Category[], depth = 0): ComboOption[] {
   return cats.flatMap((c) => [{ value: c.id, label: c.name, hint: c.key, depth }, ...flatten(c.children || [], depth + 1)]);
 }
 
-function localDeployCommand(moduleKey: string, deployUrl?: string) {
+function localDeployCommand(deployUrl?: string) {
   return [
     "docsctl deploy \\",
     "  --source /path/to/docs \\",
-    `  --module ${moduleKey || "<module_key>"} \\`,
     "  --version latest \\",
     `  --deploy-url ${deployUrl || "https://modex.example.com/api/deploy"} \\`,
     "  --token $MODEX_DEPLOY_TOKEN",
   ].join("\n");
 }
 
-function gitlabSnippet(moduleKey: string, deployUrl: string | undefined, templateInclude: string) {
+function gitlabSnippet(deployUrl: string | undefined, templateInclude: string) {
   return `${templateInclude}
 
 variables:
-  MODEX_MODULE_KEY: "${moduleKey || "<module_key>"}"
   MODEX_DEPLOY_URL: "${deployUrl || "https://modex.example.com/api/deploy"}"
 
 # 在 GitLab Settings > CI/CD > Variables 中添加：
@@ -436,16 +434,16 @@ export default function AdminModulesPage() {
             <div className="docs-source-code">
               <div className="docs-source-code__head">
                 <span>{t("admin.modules.local_one_time_deployment")}</span>
-                <CopyButton value={localDeployCommand(draft.module_key, token.deploy_url)} title={t("admin.modules.copy_on_premises_deployment_command")} label={t("component.ui.copyButton.copy")} className="button" />
+                <CopyButton value={localDeployCommand(token.deploy_url)} title={t("admin.modules.copy_on_premises_deployment_command")} label={t("component.ui.copyButton.copy")} className="button" />
               </div>
-              <pre>{localDeployCommand(draft.module_key, token.deploy_url)}</pre>
+              <pre>{localDeployCommand(token.deploy_url)}</pre>
             </div>
             <div className="docs-source-code">
               <div className="docs-source-code__head">
                 <span>GitLab CI</span>
-                <CopyButton value={gitlabSnippet(draft.module_key, token.deploy_url, templateInclude)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
+                <CopyButton value={gitlabSnippet(token.deploy_url, templateInclude)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
               </div>
-              <pre>{gitlabSnippet(draft.module_key, token.deploy_url, templateInclude)}</pre>
+              <pre>{gitlabSnippet(token.deploy_url, templateInclude)}</pre>
             </div>
           </div>
         ) : null}

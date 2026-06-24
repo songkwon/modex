@@ -15,6 +15,8 @@ Optional:
   BUILDER           docker buildx builder name (default: modex-harbor-builder)
   GOPROXY           Go module proxy for backend and mcp builds
                     (default: https://goproxy.cn,direct)
+  CACHE_TO          Export BuildKit cache to Harbor (default: true)
+  CACHE_FROM        Import BuildKit cache from Harbor (default: true)
 
 Examples:
   docker login harbor.example.com
@@ -57,6 +59,8 @@ tag="${TAG:-latest}"
 platform="${PLATFORM:-linux/amd64}"
 builder="${BUILDER:-modex-harbor-builder}"
 goproxy="${GOPROXY:-https://goproxy.cn,direct}"
+cache_to="${CACHE_TO:-true}"
+cache_from="${CACHE_FROM:-true}"
 
 image_prefix="${harbor_registry}/${harbor_project}"
 
@@ -71,12 +75,17 @@ docker buildx inspect --bootstrap >/dev/null
 
 build_backend() {
   local image="${image_prefix}/backend:${tag}"
+  local cache_ref="${image_prefix}/build-cache:backend-${platform//\//-}"
+  local -a cache_args=()
+  [[ "$cache_from" == "true" ]] && cache_args+=("--cache-from=type=registry,ref=${cache_ref}")
+  [[ "$cache_to" == "true" ]] && cache_args+=("--cache-to=type=registry,ref=${cache_ref},mode=max")
   echo "Building and pushing ${image} (${platform})"
   docker buildx build \
     --platform "$platform" \
     --provenance=false \
     --sbom=false \
     --build-arg "GOPROXY=${goproxy}" \
+    "${cache_args[@]}" \
     -t "$image" \
     --push \
     "$repo_root/backend"
@@ -96,12 +105,17 @@ build_frontend() {
 
 build_mcp() {
   local image="${image_prefix}/mcp:${tag}"
+  local cache_ref="${image_prefix}/build-cache:mcp-${platform//\//-}"
+  local -a cache_args=()
+  [[ "$cache_from" == "true" ]] && cache_args+=("--cache-from=type=registry,ref=${cache_ref}")
+  [[ "$cache_to" == "true" ]] && cache_args+=("--cache-to=type=registry,ref=${cache_ref},mode=max")
   echo "Building and pushing ${image} (${platform})"
   docker buildx build \
     --platform "$platform" \
     --provenance=false \
     --sbom=false \
     --build-arg "GOPROXY=${goproxy}" \
+    "${cache_args[@]}" \
     -t "$image" \
     --push \
     "$repo_root/mcp"

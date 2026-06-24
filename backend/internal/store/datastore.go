@@ -37,6 +37,7 @@ type DataStore interface {
 	DeleteCategory(string) error
 	Modules(string, string) []Module
 	Module(string) (Module, error)
+	ModuleByDeployToken(string) (Module, error)
 	CreateModule(Module) (Module, error)
 	UpdateModule(string, Module) (Module, error)
 	Versions(string) []Version

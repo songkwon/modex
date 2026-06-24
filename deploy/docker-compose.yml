@@ -147,7 +147,7 @@ services:
       context: ../frontend
     environment:
       PORT: 3456
-      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8671}
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:${BACKEND_PORT:-8671}}
       MODEX_PUBLIC_API_BASE_URL: ${MODEX_PUBLIC_API_BASE_URL:-http://localhost:8671}
       MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE: '${MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE:-include:\n  - project: "songkwon/modex-fscut"\n    ref: "main"\n    file: "deploy/ci/modex-docs.gitlab-ci.yml"}'
       MODEX_PUBLIC_POSTHOG_KEY: ${POSTHOG_PROJECT_API_KEY:-}
@@ -177,7 +177,7 @@ services:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     profiles: ["mcp"]
     environment:
-      MODEX_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:8671}
+      MODEX_API_BASE_URL: ${MCP_API_BASE_URL:-http://backend:${BACKEND_PORT:-8671}}
       MODEX_MCP_TOKEN: ${MODEX_MCP_TOKEN:-}
       MODEX_MCP_TRANSPORT: http
       MODEX_MCP_ADDR: :8787

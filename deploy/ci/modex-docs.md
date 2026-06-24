@@ -9,7 +9,6 @@ include:
     file: "deploy/ci/modex-docs.gitlab-ci.yml"
 
 variables:
-  MODEX_MODULE_KEY: "rd-doc"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
 ```
 
@@ -65,7 +64,6 @@ variables:
 
 ```yaml
 variables:
-  MODEX_MODULE_KEY: "rd-doc"
   MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
   DOCS_BUILDER: "static"
   DOCS_SOURCE_DIR: "dist"
@@ -82,18 +80,18 @@ variables:
 
 ## 多目录仓库
 
-同一个仓库发布多个文档源时，可以建多个 job，并分别设置 `MODEX_MODULE_KEY` 和 `DOCS_SOURCE_DIR`。
+同一个仓库发布多个文档源时，可以建多个 job，并为每个 job 配置对应文档源的 `MODEX_DEPLOY_TOKEN` 和 `DOCS_SOURCE_DIR`。
 
 ```yaml
 rd-standards:
   extends: .modex-docs-base
   variables:
-    MODEX_MODULE_KEY: "rd-standards"
     DOCS_SOURCE_DIR: "docs/standards"
+    MODEX_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN_RD_STANDARDS"
 
 rd-guides:
   extends: .modex-docs-base
   variables:
-    MODEX_MODULE_KEY: "rd-guides"
     DOCS_SOURCE_DIR: "docs/guides"
+    MODEX_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN_RD_GUIDES"
 ```

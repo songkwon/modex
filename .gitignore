@@ -49,3 +49,4 @@ yarn-error.log*
 # Local app config (may contain secrets); copy from config.example.yaml
 deploy/config.yaml
 config.yaml
+/dist/

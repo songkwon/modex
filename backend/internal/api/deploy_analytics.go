@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,29 +48,26 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	report.ok("parse_artifact")
 
 	// Deploy auth (GitLab CI / docsctl integration). Each document source owns
-	// an independent token; the artifact module key selects the token to verify.
+	// an independent token, and the token selects the target document source.
 	// Token can be sent as X-Modex-Deploy-Token header or Authorization: Bearer <token>
-	moduleKey := artifact.Metadata.ModuleKey
 	provided := r.Header.Get("X-Modex-Deploy-Token")
 	if provided == "" {
 		provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-	m, moduleErr := s.app.Store().Module(moduleKey)
+	provided = strings.TrimSpace(provided)
+	if provided == "" {
+		report.fail("authenticate", errors.New("deploy token is required"))
+		writeDeployError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid", report)
+		return
+	}
+	m, moduleErr := s.app.Store().ModuleByDeployToken(provided)
 	if moduleErr != nil {
 		report.fail("authenticate", moduleErr)
-		writeDeployError(w, http.StatusNotFound, "module_not_found", "document source not found", report)
+		writeDeployError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid", report)
 		return
 	}
-	if m.DeployToken == "" {
-		report.fail("authenticate", errors.New("deploy token is not configured"))
-		writeDeployError(w, http.StatusForbidden, "deploy_token_not_configured", "generate a deploy token for this document source first", report)
-		return
-	}
-	if subtle.ConstantTimeCompare([]byte(provided), []byte(m.DeployToken)) != 1 {
-		report.fail("authenticate", errors.New("deploy token mismatch"))
-		writeDeployError(w, http.StatusForbidden, "invalid_deploy_token", "deploy token required or invalid for this module", report)
-		return
-	}
+	artifact = canonicalizeDeployArtifact(artifact, m)
+	moduleKey := m.ModuleKey
 	report.ok("authenticate")
 
 	uploadedSiteFiles := artifact.SiteFiles
@@ -113,6 +109,73 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	report.ok("ingest_metadata")
 	s.writeMutation(w, map[string]any{"status": "published", "result": result, "deploy": report}, http.StatusAccepted, nil)
+}
+
+func canonicalizeDeployArtifact(artifact deploy.Artifact, module store.Module) deploy.Artifact {
+	artifactModuleKey := strings.TrimSpace(artifact.Metadata.ModuleKey)
+	artifactDocsVersion := firstNonEmptyStr(artifact.Metadata.DocsVersion, "latest")
+	moduleKey := module.ModuleKey
+	moduleName := firstNonEmptyStr(module.Name, module.ModuleKey)
+	docsVersion := firstNonEmptyStr(artifact.Metadata.DocsVersion, module.DefaultVersion, "latest")
+	artifact.Metadata.ModuleKey = moduleKey
+	artifact.Metadata.ModuleName = moduleName
+	artifact.Metadata.DocsVersion = docsVersion
+	if artifact.Metadata.Description == "" {
+		artifact.Metadata.Description = module.Description
+	}
+	for i := range artifact.Documents {
+		entryKey := firstNonEmptyStr(artifact.Documents[i].EntryKey, entryKeyFromDocID(artifact.Documents[i].DocID))
+		artifact.Documents[i].ModuleKey = moduleKey
+		artifact.Documents[i].ModuleName = moduleName
+		artifact.Documents[i].DocsVersion = docsVersion
+		if entryKey != "" {
+			artifact.Documents[i].DocID = moduleKey + ":" + docsVersion + ":" + entryKey
+		}
+	}
+	artifact.SiteHTML = rewriteDeployAssetBases(artifact.SiteHTML, artifactModuleKey, moduleKey, artifactDocsVersion, docsVersion)
+	for name, content := range artifact.SiteFiles {
+		rewritten := rewriteDeployAssetBaseBytes(content, artifactModuleKey, moduleKey, artifactDocsVersion, docsVersion)
+		if rewritten != nil {
+			artifact.SiteFiles[name] = rewritten
+		}
+	}
+	return artifact
+}
+
+func rewriteDeployAssetBases(files map[string]string, fromModule, toModule, fromVersion, toVersion string) map[string]string {
+	if len(files) == 0 || fromModule == "" || toModule == "" || (fromModule == toModule && fromVersion == toVersion) {
+		return files
+	}
+	out := make(map[string]string, len(files))
+	for name, content := range files {
+		out[name] = rewriteDeployAssetBaseString(content, fromModule, toModule, fromVersion, toVersion)
+	}
+	return out
+}
+
+func rewriteDeployAssetBaseBytes(content []byte, fromModule, toModule, fromVersion, toVersion string) []byte {
+	if len(content) == 0 || fromModule == "" || toModule == "" || (fromModule == toModule && fromVersion == toVersion) {
+		return nil
+	}
+	rewritten := rewriteDeployAssetBaseString(string(content), fromModule, toModule, fromVersion, toVersion)
+	if rewritten == string(content) {
+		return nil
+	}
+	return []byte(rewritten)
+}
+
+func rewriteDeployAssetBaseString(content, fromModule, toModule, fromVersion, toVersion string) string {
+	from := "/api/docs/" + fromModule + "/" + fromVersion + "/"
+	to := "/api/docs/" + toModule + "/" + toVersion + "/"
+	return strings.ReplaceAll(content, from, to)
+}
+
+func entryKeyFromDocID(docID string) string {
+	parts := strings.Split(docID, ":")
+	if len(parts) >= 3 {
+		return strings.Join(parts[2:], ":")
+	}
+	return ""
 }
 
 func deployTriggerType(r *http.Request) string {

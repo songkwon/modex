@@ -136,9 +136,6 @@ func ParseZip(r io.Reader, maxBytes int64) (Artifact, error) {
 		}
 		a.Documents = docs
 	}
-	if strings.TrimSpace(a.Metadata.ModuleKey) == "" {
-		return Artifact{}, fmt.Errorf("metadata.module_key is required")
-	}
 	if strings.TrimSpace(a.Metadata.DocsVersion) == "" {
 		a.Metadata.DocsVersion = "latest"
 	}
