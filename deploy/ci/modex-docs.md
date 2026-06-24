@@ -73,6 +73,21 @@ variables:
 
 如果仓库里有 `CLAUDE.md`、`AGENTS.md`、草稿、内部备注等不希望同步到 Modex 的 Markdown，可以在 `DOCS_SOURCE_DIR` 所在目录放 `.modexignore`：
 
+`docsctl` 默认会过滤常见非文档 Markdown 文件：
+
+```text
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+QWEN.md
+CURSOR.md
+COPILOT.md
+```
+
+也会默认跳过 `.git/`、`.modex/`、`.cursor/`、`.claude/`、`.github/`、`.vscode/`、`node_modules/`、`dist/`、`build/` 等工具或构建目录。
+
+如果还有仓库自定义的草稿、临时文档或内部备注，再用 `.modexignore` 补充：
+
 ```gitignore
 CLAUDE.md
 AGENTS.md
