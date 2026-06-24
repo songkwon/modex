@@ -141,19 +141,22 @@ func hasMarkdownFiles(root string) bool {
 		return false
 	}
 	found := false
+	ignore := LoadModexIgnore(root)
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || found {
 			return nil
 		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return nil
+		}
 		if d.IsDir() {
-			name := d.Name()
-			if name == ".git" || name == "node_modules" || name == ".vitepress" || name == ".vuepress" {
+			if path != root && (shouldSkipDocsDir(d.Name()) || ignore.Ignored(rel, true)) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		name := strings.ToLower(d.Name())
-		if strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".mdx") {
+		if !ignore.Ignored(rel, false) && isIndexableMarkdownFile(rel) {
 			found = true
 		}
 		return nil

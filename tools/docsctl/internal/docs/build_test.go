@@ -49,6 +49,12 @@ Root doc.
 	if err := os.WriteFile(filepath.Join(docsDir, "runtime", "threadpool.md"), []byte("# Threadpool\n\nPool doc."), 0o644); err != nil {
 		t.Fatalf("WriteFile threadpool: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(docsDir, "CLAUDE.md"), []byte("# Agent instructions\n\nDo not publish."), 0o644); err != nil {
+		t.Fatalf("WriteFile CLAUDE: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "runtime", "AGENTS.md"), []byte("# Agent instructions\n\nDo not publish."), 0o644); err != nil {
+		t.Fatalf("WriteFile AGENTS: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "docs.yaml"), []byte(`metadata:
   module_key: demo
   docs_version: v1
@@ -81,6 +87,11 @@ entries:
 	}
 	if records[0].Title != "README" || records[1].Title != "threadpool" {
 		t.Fatalf("record titles = %#v", records)
+	}
+	for _, r := range records {
+		if strings.Contains(r.SourceFile, "CLAUDE.md") || strings.Contains(r.SourceFile, "AGENTS.md") || strings.Contains(r.Content, "Do not publish") {
+			t.Fatalf("agent metadata markdown was indexed: %#v", r)
+		}
 	}
 	var nav []NavItem
 	readJSONFile(t, filepath.Join(out, "nav.json"), &nav)
@@ -141,6 +152,66 @@ entries:
 	}
 	if !contains(records[0].ContentMD, "/api/docs/UnknownModule/latest/guide-runtime-threadpool/site/assets/diagram.svg") {
 		t.Fatalf("record content was not rewritten: %s", records[0].ContentMD)
+	}
+}
+
+func TestBuildMarkdownDirectoryHonorsModexIgnore(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs", "drafts"), 0o755); err != nil {
+		t.Fatalf("MkdirAll drafts: %v", err)
+	}
+	files := map[string]string{
+		"docs/README.md":           "# Overview\n",
+		"docs/drafts/hidden.md":    "# Hidden\n",
+		"docs/keep.draft.md":       "# Keep\n",
+		"docs/notes.local.md":      "# Local\n",
+		"docs/runtime/visible.md":  "# Visible\n",
+		"docs/runtime/hidden.mdx":  "# Hidden MDX\n",
+		"docs/runtime/private.tmp": "private",
+	}
+	for name, content := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", name, err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", name, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ".modexignore"), []byte("drafts/\n*.local.md\n**/*.draft.md\ndocs/runtime/*.mdx\n!docs/keep.draft.md\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile .modexignore: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs.yaml"), []byte(`entries:
+  - key: guide
+    title: Guide
+    type: markdown
+    source: docs
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile docs.yaml: %v", err)
+	}
+
+	out := filepath.Join(t.TempDir(), "build")
+	if err := Build(root, out); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	records := readDocumentsJSONL(t, filepath.Join(out, "documents.jsonl"))
+	if got, want := len(records), 3; got != want {
+		t.Fatalf("records = %d, want %d: %#v", got, want, records)
+	}
+	var sources []string
+	for _, r := range records {
+		sources = append(sources, filepath.ToSlash(r.SourceFile))
+	}
+	joined := strings.Join(sources, "\n")
+	for _, want := range []string{"docs/README.md", "docs/keep.draft.md", "docs/runtime/visible.md"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("sources missing %s: %s", want, joined)
+		}
+	}
+	for _, hidden := range []string{"hidden.md", "notes.local.md", "hidden.mdx"} {
+		if strings.Contains(joined, hidden) {
+			t.Fatalf("ignored source %s was indexed: %s", hidden, joined)
+		}
 	}
 }
 

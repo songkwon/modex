@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowUpRight, BookOpen } from "lucide-react";
+import { ArrowUpRight, BookOpen, FolderTree } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { CategoryInfoButton } from "@/components/category-info-button";
 import { getCategories, getEntries, getModules } from "@/lib/api";
@@ -18,6 +18,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
   // A category with no direct modules (e.g. a parent that only holds
   // sub-categories) returns null from the API — coalesce so .length is safe.
   const modules = (await getModules(`?category_id=${encodeURIComponent(id)}`)) ?? [];
+  const childCategories = category.children || [];
 
   return (
     <main className="main">
@@ -46,7 +47,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
               ) : null}
             </div>
           </div>
-          {modules.length === 1 ? (
+          {childCategories.length > 0 ? (
+            <SubcategoryCards categories={childCategories} modules={modules} />
+          ) : null}
+          {modules.length === 1 && childCategories.length === 0 ? (
             <SingleModuleView module={modules[0]} />
           ) : (
             <div className="package-list">
@@ -59,6 +63,40 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
         </div>
       </section>
     </main>
+  );
+}
+
+async function SubcategoryCards({ categories, modules }: { categories: Category[]; modules: ModuleInfo[] }) {
+  const { t } = await getServerI18n();
+  return (
+    <section className="subcategory-section">
+      <div className="shelf-toolbar mb-3">
+        <div>
+          <h2>{t("categories.id.subcategories")}</h2>
+          <p>{t("categories.id.subcategories_hint")}</p>
+        </div>
+      </div>
+      <div className="subcategory-grid">
+        {categories.map((cat) => {
+          const total = countModules(modules, cat.id);
+          const childCount = cat.children?.length || 0;
+          return (
+            <Link className="subcategory-card" href={`/categories/${encodeURIComponent(cat.id)}`} key={cat.id}>
+              <span className="subcategory-icon"><FolderTree size={18} /></span>
+              <span className="subcategory-body">
+                <span className="subcategory-name">{cat.name}</span>
+                {cat.description ? <span className="subcategory-desc">{cat.description}</span> : null}
+                <span className="subcategory-meta">
+                  {total} {t("categories.id.document_collections_short")}
+                  {childCount > 0 ? ` · ${childCount} ${t("categories.id.subcategories_short")}` : ""}
+                </span>
+              </span>
+              <ArrowUpRight size={15} className="subcategory-arrow" />
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -123,6 +161,10 @@ function docTypeLabel(t?: string) {
     case "fumadocs": return "Fumadocs";
     default: return "Markdown";
   }
+}
+
+function countModules(modules: ModuleInfo[], categoryId: string) {
+  return modules.filter((m) => (m.category_ids || []).includes(categoryId)).length;
 }
 
 function findCategory(categories: Category[], id: string): Category | null {

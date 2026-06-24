@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Boxes, GitBranch, Info, Pencil, Plus, Search } from "lucide-react";
+import { BookOpen, Boxes, GitBranch, HelpCircle, Info, Pencil, Plus, Search } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Modal } from "@/components/ui/modal";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -120,6 +120,7 @@ export default function AdminModulesPage() {
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [mountHelpOpen, setMountHelpOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [token, setToken] = useState<{ deploy_token: string; deploy_url: string } | null>(null);
   const [templateInclude, setTemplateInclude] = useState(() => gitlabCiTemplateInclude());
@@ -375,7 +376,12 @@ export default function AdminModulesPage() {
             <span className="field-hint">{draft.doc_type === "static" ? t("admin.modules.static_upload_an_existing_static_site_directory_directly") : compiled ? t("admin.modules.compiled_ci_builds_a_static_site_before_upload") : t("admin.modules.markdown_modex_renders_directly")}</span>
           </div>
           <div className="field">
-            <label>{t("admin.modules.mount_method")}</label>
+            <label className="field-label-row">
+              <span>{t("admin.modules.mount_method")}</span>
+              <button className="icon-btn field-help-btn" type="button" onClick={() => setMountHelpOpen(true)} aria-label={t("admin.modules.mountHelpTitle")}>
+                <HelpCircle size={14} />
+              </button>
+            </label>
             <Combobox
               options={[{ value: "single", label: "single", hint: t("admin.modules.entire_site_as_one_document") }, { value: "split", label: "split", hint: t("admin.modules.split_top_level_directory_into_subdirectories") }]}
               value={[compiled ? "single" : draft.mount]}
@@ -447,6 +453,62 @@ export default function AdminModulesPage() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={mountHelpOpen}
+        onClose={() => setMountHelpOpen(false)}
+        title={t("admin.modules.mountHelpTitle")}
+        subtitle={t("admin.modules.mountHelpSubtitle")}
+        width={820}
+        footer={<button className="button button-primary" onClick={() => setMountHelpOpen(false)}>{t("common.gotIt")}</button>}
+      >
+        <div className="mount-help">
+          <div className="mount-help-source">
+            <div>
+              <strong>{t("admin.modules.mountHelpSourceTitle")}</strong>
+              <p>{t("admin.modules.mountHelpSourceCopy")}</p>
+            </div>
+            <pre>{`docs/
+  README.md
+  standard/
+    code-style.md
+    review.md
+  tools/
+    git.md
+    ci.md`}</pre>
+          </div>
+          <div className="mount-help-grid">
+            <article className="mount-help-card">
+              <span className="badge">{t("admin.modules.mount_single")}</span>
+              <h3>single</h3>
+              <p>{t("admin.modules.mountHelpSingleCopy")}</p>
+              <pre>{`Guide
+  README
+  standard
+    code-style
+    review
+  tools
+    git
+    ci`}</pre>
+            </article>
+            <article className="mount-help-card">
+              <span className="badge">{t("admin.modules.mount_split")}</span>
+              <h3>split</h3>
+              <p>{t("admin.modules.mountHelpSplitCopy")}</p>
+              <pre>{`Guide
+Standard
+Tools`}</pre>
+            </article>
+          </div>
+          <div className="docs-integration-callout">
+            <Info size={18} />
+            <div>
+              <strong>{t("admin.modules.mountHelpNoteTitle")}</strong>
+              <p>{t("admin.modules.mountHelpNoteCopy")}</p>
+            </div>
+          </div>
+        </div>
       </Modal>
     </AdminShell>
   );
