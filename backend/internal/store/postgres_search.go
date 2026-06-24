@@ -49,6 +49,7 @@ func (p *PostgresRepository) Modules(categoryID, keyword string) []Module {
 	query := `SELECT (to_jsonb(m)-'default_version_id'-'created_at'-'deploy_token') ||
 		jsonb_build_object(
 			'category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),
+			'category_path',COALESCE(NULLIF(m.category_path,''),(SELECT string_agg(c.name,' / ' ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc JOIN docs_category c ON c.id=mc.category_id WHERE mc.module_id=m.id),''),
 			'deploy_token_set',COALESCE(m.deploy_token,'')<>''
 		)
 		FROM docs_module m WHERE ` + strings.Join(where, " AND ") + ` ORDER BY m.updated_at DESC,m.id`

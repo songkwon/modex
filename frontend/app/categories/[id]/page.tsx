@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowUpRight, BookOpen, FolderTree } from "lucide-react";
 import { CategoryTree } from "@/components/category-tree";
 import { CategoryInfoButton } from "@/components/category-info-button";
-import { getCategories, getEntries, getModules } from "@/lib/api";
+import { getCategories, getEntriesSafe, getModules } from "@/lib/api";
 import { categoryHref, findCategoryByRouteSegment } from "@/lib/category-url";
 import { getServerI18n } from "@/lib/i18n-server";
 import type { Category, ModuleInfo } from "@/types/modex";
@@ -18,7 +18,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
 
   // A category with no direct modules (e.g. a parent that only holds
   // sub-categories) returns null from the API — coalesce so .length is safe.
-  const modules = (await getModules(`?category_id=${encodeURIComponent(id)}`)) ?? [];
+  const modules = (await getModules(`?category_id=${encodeURIComponent(id)}`).catch(() => [])) ?? [];
   const childCategories = category.children || [];
 
   return (
@@ -110,7 +110,7 @@ async function SingleModuleView({ module }: { module: ModuleInfo }) {
   if (!module.default_version) {
     return <div className="empty-state">{t("categories.id.no_document_entry_points")}</div>;
   }
-  const entries = await getEntries(module.module_key, module.default_version).catch(() => []);
+  const entries = await getEntriesSafe(module.module_key, module.default_version);
   const primary = entries.find((e) => e.is_primary) || entries[0];
   if (!primary) {
     return <div className="empty-state">{t("categories.id.no_document_entry_points")}</div>;

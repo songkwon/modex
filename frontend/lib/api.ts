@@ -61,6 +61,10 @@ export const getDeployToken = (moduleKey: string) => api<{ deploy_token: string;
 export const rotateDeployToken = (moduleKey: string) => api<{ deploy_token: string; deploy_url: string; module_key: string }>(`/api/admin/modules/${moduleKey}/deploy-token`, { method: "POST", body: "{}" });
 export const getModule = (moduleKey: string) => api<ModuleInfo>(`/api/modules/${moduleKey}/info`);
 export const getEntries = (moduleKey: string, version: string) => api<any[]>(`/api/modules/${moduleKey}/versions/${version}/entries`);
+export const getEntriesSafe = async (moduleKey: string, version: string) => {
+  const entries = await getEntries(moduleKey, version).catch(() => []);
+  return Array.isArray(entries) ? entries : [];
+};
 export const getModuleVersions = (moduleKey: string) => api<{ docs_version: string; display_name?: string; is_default?: boolean }[]>(`/api/modules/${moduleKey}/versions`);
 export const getNav = (moduleKey: string, version: string, entry: string) => api<{ title: string; path: string; children?: { title: string; path: string }[] }[]>(`/api/docs/${moduleKey}/${version}/${entry}/nav`);
 export const getPage = (moduleKey: string, version: string, entry: string) => api<any>(`/api/docs/${moduleKey}/${version}/${entry}`);

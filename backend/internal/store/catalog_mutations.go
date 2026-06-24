@@ -279,6 +279,9 @@ func (s *MemoryStore) CreateModule(m Module) (Module, error) {
 	if m.DefaultVersion == "" {
 		m.DefaultVersion = "latest"
 	}
+	if m.CategoryPath == "" {
+		m.CategoryPath = s.categoryPathLocked(m.CategoryIDs)
+	}
 	m.UpdatedAt = time.Now().UTC()
 	m.AvailableVers = nil
 	m.DeployTokenSet = m.DeployToken != ""
@@ -333,6 +336,9 @@ func (s *MemoryStore) UpdateModule(moduleKey string, patch Module) (Module, erro
 			}
 			if patch.CategoryIDs != nil {
 				m.CategoryIDs = patch.CategoryIDs
+				if patch.CategoryPath == "" {
+					m.CategoryPath = s.categoryPathLocked(m.CategoryIDs)
+				}
 			}
 			if patch.CategoryPath != "" {
 				m.CategoryPath = patch.CategoryPath

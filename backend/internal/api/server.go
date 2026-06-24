@@ -354,7 +354,11 @@ func (s *Server) handleModuleRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 4 && parts[1] == "versions" && parts[3] == "entries" {
-		writeJSON(w, http.StatusOK, s.app.Store().Entries(moduleKey, parts[2]))
+		entries := s.app.Store().Entries(moduleKey, parts[2])
+		if entries == nil {
+			entries = []store.Entry{}
+		}
+		writeJSON(w, http.StatusOK, entries)
 		return
 	}
 	writeError(w, http.StatusNotFound, "not_found", "module route not found")
@@ -376,7 +380,11 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 {
-		writeJSON(w, http.StatusOK, map[string]any{"module": module, "version": parts[1], "entries": s.app.Store().Entries(module.ModuleKey, parts[1])})
+		entries := s.app.Store().Entries(module.ModuleKey, parts[1])
+		if entries == nil {
+			entries = []store.Entry{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"module": module, "version": parts[1], "entries": entries})
 		return
 	}
 	if len(parts) >= 3 {

@@ -714,7 +714,7 @@ func (s *MemoryStore) Versions(moduleKey string) []Version {
 func (s *MemoryStore) Entries(moduleKey, docsVersion string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var out []Entry
+	out := make([]Entry, 0)
 	for _, e := range s.entries {
 		if strings.EqualFold(e.ModuleKey, moduleKey) && e.DocsVersion == docsVersion {
 			out = append(out, e)

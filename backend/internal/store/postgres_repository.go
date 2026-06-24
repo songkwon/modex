@@ -80,6 +80,13 @@ func mustJSON(value any) string {
 	return string(encoded)
 }
 
+func mustJSONArray[T any](value []T) string {
+	if value == nil {
+		value = []T{}
+	}
+	return mustJSON(value)
+}
+
 func timeText(value time.Time) string {
 	if value.IsZero() {
 		return ""
