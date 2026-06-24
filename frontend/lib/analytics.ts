@@ -5,6 +5,7 @@
 // optionally MODEX_PUBLIC_POSTHOG_HOST.
 
 import { runtimeConfig } from "@/lib/runtime-config";
+import type { PostHog, PostHogConfig } from "posthog-js";
 
 export type AnalyticsEvent =
   | "docs_home_view"
@@ -21,6 +22,22 @@ export type AnalyticsEvent =
   | "docs_mcp_get_page";
 
 let initialized = false;
+let posthogPromise: Promise<PostHog> | null = null;
+
+const posthogNoRemoteConfig: Pick<
+  PostHogConfig,
+  | "advanced_disable_decide"
+  | "advanced_disable_flags"
+  | "advanced_disable_feature_flags"
+  | "advanced_disable_feature_flags_on_first_load"
+  | "disable_external_dependency_loading"
+> = {
+  advanced_disable_decide: true,
+  advanced_disable_flags: true,
+  advanced_disable_feature_flags: true,
+  advanced_disable_feature_flags_on_first_load: true,
+  disable_external_dependency_loading: true,
+};
 
 function analyticsEnabled(): boolean {
   const cfg = runtimeConfig();
@@ -29,22 +46,49 @@ function analyticsEnabled(): boolean {
   return !local || cfg.posthogEnableLocal;
 }
 
-export function initAnalytics(): void {
-  if (initialized || !analyticsEnabled()) return;
+function posthogClient(): Promise<PostHog> | null {
+  if (!analyticsEnabled()) return null;
+  if (posthogPromise) return posthogPromise;
   const cfg = runtimeConfig();
   const key = cfg.posthogKey;
-  initialized = true;
-  import("posthog-js").then((posthog) => {
-    posthog.default.init(key, { api_host: cfg.posthogHost });
+  posthogPromise = import("posthog-js").then((posthog) => {
+    if (!initialized) {
+      initialized = true;
+      posthog.default.init(key, {
+        ...posthogNoRemoteConfig,
+        loaded: (client) => {
+          client.set_config(posthogNoRemoteConfig);
+        },
+        ip: false,
+        capture_pageview: false,
+        autocapture: false,
+        disable_session_recording: true,
+        disable_surveys: true,
+        disable_product_tours: true,
+        disable_web_experiments: true,
+        disable_conversations: true,
+        opt_in_site_apps: false,
+        request_batching: false,
+        persistence: "localStorage",
+        api_host: cfg.posthogHost,
+      });
+    }
+    return posthog.default;
   }).catch(() => {
     initialized = false;
+    posthogPromise = null;
+    throw new Error("posthog_unavailable");
   });
+  return posthogPromise;
+}
+
+export function initAnalytics(): void {
+  posthogClient()?.catch(() => {});
 }
 
 export function identify(user: { id: string; displayName?: string; email?: string; department?: string }): void {
-  if (!analyticsEnabled()) return;
-  import("posthog-js").then((posthog) => {
-    posthog.default.identify(user.id, {
+  posthogClient()?.then((posthog) => {
+    posthog.identify(user.id, {
       name: user.displayName,
       email: user.email,
       department: user.department,
@@ -54,11 +98,9 @@ export function identify(user: { id: string; displayName?: string; email?: strin
 
 export function capture(event: AnalyticsEvent, props: Record<string, unknown> = {}): void {
   if (typeof window === "undefined") return;
-  if (analyticsEnabled()) {
-    import("posthog-js").then((posthog) => {
-      posthog.default.capture(event, props);
-    }).catch(() => {});
-  }
+  posthogClient()?.then((posthog) => {
+    posthog.capture(event, props);
+  }).catch(() => {});
   if (process.env.NODE_ENV !== "production") {
     // Helpful during MVP development before PostHog is enabled.
     console.debug("[analytics]", event, props);
