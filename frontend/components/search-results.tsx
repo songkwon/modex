@@ -73,6 +73,7 @@ export function SearchResults({ s }: { s: Search }) {
             <button className="button ds-answer-close" onClick={() => setAnswer(null)}>{t("component.searchResults.close")}</button>
           </div>
           <div className="ds-answer-body">
+            {answer.warning ? <div className="panel badge-warn" style={{ marginBottom: 10, borderRadius: 10 }}>{answer.warning}</div> : null}
             {answerParts ? <AiMarkdown answer={answerParts.answer} reasoning={answerParts.reasoning} /> : null}
           </div>
           {(answer.sources?.length ?? 0) > 0 ? (

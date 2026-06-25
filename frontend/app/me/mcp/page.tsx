@@ -12,6 +12,7 @@ export default function McpUsagePage() {
   const [apiBase, setApiBase] = useState(publicApiBaseURL());
   const [loading, setLoading] = useState(true);
   const [copiedCmd, setCopiedCmd] = useState(false);
+  const [copiedCodex, setCopiedCodex] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [copiedSkill, setCopiedSkill] = useState(false);
 
@@ -37,6 +38,11 @@ export default function McpUsagePage() {
   --env MODEX_MCP_TOKEN=${displayToken} \\
   -- npx -y ${tarballUrl}`;
   const skillCmd = `npx skills add ${apiBase}`;
+  const codexOAuthCmd = `codex mcp add modex \\
+  --url ${apiBase}/mcp \\
+  --oauth-client-id codex-cli
+
+codex mcp login modex --scopes modex:mcp:read,modex:docs:read`;
 
   const cursorJson = `{
   "mcpServers": {
@@ -104,6 +110,27 @@ export default function McpUsagePage() {
               </button>
             )}
           </div>
+        </section>
+
+        <section className="card">
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>Codex OAuth</h2>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            推荐用于 Codex CLI / Codex app / IDE extension：不需要复制个人 MCP Token，Codex 会通过浏览器完成 OAuth 登录并保存凭据。
+          </p>
+          <div style={{ position: "relative" }}>
+            <pre className="mcp-code">{codexOAuthCmd}</pre>
+            <button
+              className="icon-btn"
+              style={{ position: "absolute", top: 8, right: 8, background: "hsl(var(--panel))" }}
+              onClick={() => copyText(codexOAuthCmd, setCopiedCodex)}
+              aria-label={t("me.mcp.copy_command")}
+            >
+              {copiedCodex ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            如果本地 compose 的 MCP 服务暴露在 <code className="code-chip">http://localhost:8787/mcp</code>，请把上面的 <code className="code-chip">--url</code> 替换成本地地址。
+          </p>
         </section>
 
         <section className="card">

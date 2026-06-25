@@ -239,3 +239,36 @@ func TestIngestArtifactPublishesPagesNavAndHTML(t *testing.T) {
 		t.Fatalf("content type = %q", file.ContentType)
 	}
 }
+
+func TestUpdateModulePropagatesCategoriesToIndexedPages(t *testing.T) {
+	s := NewSeededTestStore()
+	if _, err := s.CreateModule(Module{ModuleKey: "RuntimeDocs", Name: "Runtime Docs", CategoryIDs: []string{"engineering"}}); err != nil {
+		t.Fatalf("CreateModule: %v", err)
+	}
+	if _, err := s.IngestArtifact(DeployArtifact{
+		ModuleKey:   "RuntimeDocs",
+		ModuleName:  "Runtime Docs",
+		DocsVersion: "latest",
+		Entries:     []DeployEntry{{Key: "guide", Title: "Guide", Type: "markdown"}},
+		Documents:   []DeployDocument{{DocID: "RuntimeDocs:latest:guide", EntryKey: "guide", Title: "Guide", Content: "runtime documentation content"}},
+	}); err != nil {
+		t.Fatalf("IngestArtifact: %v", err)
+	}
+	page, err := s.Page("RuntimeDocs:latest:guide")
+	if err != nil {
+		t.Fatalf("Page before update: %v", err)
+	}
+	if len(page.CategoryIDs) != 1 || page.CategoryIDs[0] != "engineering" {
+		t.Fatalf("initial page categories = %#v", page.CategoryIDs)
+	}
+	if _, err := s.UpdateModule("RuntimeDocs", Module{CategoryIDs: []string{"frontend", "frontend.docs"}}); err != nil {
+		t.Fatalf("UpdateModule: %v", err)
+	}
+	page, err = s.Page("RuntimeDocs:latest:guide")
+	if err != nil {
+		t.Fatalf("Page after update: %v", err)
+	}
+	if len(page.CategoryIDs) != 2 || page.CategoryIDs[0] != "frontend" || page.CategoryIDs[1] != "frontend.docs" {
+		t.Fatalf("updated page categories = %#v", page.CategoryIDs)
+	}
+}

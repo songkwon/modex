@@ -34,10 +34,16 @@ func Build(root, outDir string) error {
 	var records []DocumentRecord
 	var manifestEntries []Entry
 	var full strings.Builder
+	// Entry keys become doc IDs (module:version:key), which are globally UNIQUE
+	// in the store. Markdown directories generate keys dynamically, so dedupe
+	// them across every entry (not just within one mount) — otherwise two
+	// split mounts can emit the same key and the deploy fails on a duplicate
+	// docs_page.doc_id.
+	usedKeys := map[string]int{}
 	for _, entry := range cfg.Entries {
 		switch entry.Type {
 		case "markdown":
-			recs, navItems, entries, text, err := buildMarkdown(root, outDir, md, entry)
+			recs, navItems, entries, text, err := buildMarkdown(root, outDir, md, entry, usedKeys)
 			if err != nil {
 				return err
 			}
@@ -53,6 +59,7 @@ func Build(root, outDir string) error {
 			records = append(records, rec)
 			nav = append(nav, navItem)
 			manifestEntries = append(manifestEntries, entry)
+			usedKeys[entry.Key]++
 			full.WriteString("# " + entry.Title + "\n\n" + text + "\n\n")
 		case "vitepress", "vuepress", "fumadocs", "docusaurus", "mkdocs", "honkit", "gitbook":
 			if _, err := buildCommandEntry(root, outDir, md, entry); err != nil {
@@ -87,6 +94,7 @@ func Build(root, outDir string) error {
 			records = append(records, pageRecs...)
 			nav = append(nav, NavItem{Title: entry.Title, Path: "/" + entry.Key})
 			manifestEntries = append(manifestEntries, entry)
+			usedKeys[entry.Key]++
 			full.WriteString("# " + entry.Title + "\n\n" + fullText + "\n\n")
 		default:
 			return fmt.Errorf("unsupported entry type %q", entry.Type)
@@ -143,13 +151,12 @@ func buildCommandEntry(root, outDir string, md Metadata, entry Entry) (string, e
 		}
 	}
 	siteDir := filepath.Join(outDir, "site", entry.Key)
-	outputPath := filepath.Join(root, entry.Output)
-	info, err := os.Stat(outputPath)
+	outputPath, detected, err := resolveBuildOutputPath(root, entry)
 	if err != nil {
-		return "", fmt.Errorf("entry %q build output not found: %s; command completed but DOCS_OUTPUT/output points to a missing path (configured output: %q): %w", entry.Key, outputPath, entry.Output, err)
+		return "", err
 	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("entry %q build output is not a directory: %s", entry.Key, outputPath)
+	if detected {
+		fmt.Printf("docsctl build entry=%s detected build output: %s\n", entry.Key, outputPath)
 	}
 	if err := copyDir(outputPath, siteDir); err != nil {
 		return "", fmt.Errorf("entry %q copy build output from %s to %s: %w", entry.Key, outputPath, siteDir, err)
@@ -164,6 +171,99 @@ func buildCommandEntry(root, outDir string, md Metadata, entry Entry) (string, e
 		}
 	}
 	return extractSiteText(siteDir), nil
+}
+
+func resolveBuildOutputPath(root string, entry Entry) (string, bool, error) {
+	configured := filepath.Join(root, entry.Output)
+	if info, err := os.Stat(configured); err == nil {
+		if !info.IsDir() {
+			return "", false, fmt.Errorf("entry %q build output is not a directory: %s", entry.Key, configured)
+		}
+		return configured, false, nil
+	}
+	for _, candidate := range outputCandidates(root, entry) {
+		if candidate == configured {
+			continue
+		}
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			if site := findSiteOutputDir(candidate); site != "" {
+				return site, true, nil
+			}
+			return candidate, true, nil
+		}
+	}
+	return "", false, fmt.Errorf("entry %q build output not found: %s; command completed but DOCS_OUTPUT/output points to a missing path (configured output: %q). If your docs config sets a custom outDir, set DOCS_OUTPUT to that directory, for example DOCS_OUTPUT=docs/dist/rd/standards", entry.Key, configured, entry.Output)
+}
+
+func outputCandidates(root string, entry Entry) []string {
+	source := strings.Trim(filepath.ToSlash(entry.Source), "/")
+	var rels []string
+	add := func(v string) {
+		v = strings.Trim(filepath.ToSlash(v), "/")
+		if v != "" {
+			rels = append(rels, v)
+		}
+	}
+	add(entry.Output)
+	switch entry.Type {
+	case "vitepress":
+		add(filepath.Join(source, ".vitepress", "dist"))
+		add(filepath.Join(source, "dist"))
+		add(".vitepress/dist")
+		add("dist")
+	case "vuepress":
+		add(filepath.Join(source, ".vuepress", "dist"))
+		add(filepath.Join(source, "dist"))
+		add(".vuepress/dist")
+		add("dist")
+	case "docusaurus":
+		add("build")
+		add(filepath.Join(source, "build"))
+		add("dist")
+	case "mkdocs":
+		add("site")
+		add(filepath.Join(source, "site"))
+	default:
+		add("dist")
+		add(filepath.Join(source, "dist"))
+		add("build")
+		add(filepath.Join(source, "build"))
+		add("out")
+	}
+	out := make([]string, 0, len(rels))
+	seen := map[string]bool{}
+	for _, rel := range rels {
+		path := filepath.Join(root, rel)
+		if !seen[path] {
+			seen[path] = true
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func findSiteOutputDir(dir string) string {
+	if exists(filepath.Join(dir, "index.html")) {
+		return dir
+	}
+	found := ""
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || found != "" {
+			return nil
+		}
+		if info.IsDir() {
+			if path != dir && shouldSkipDocsDir(info.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.EqualFold(info.Name(), "index.html") {
+			found = filepath.Dir(path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	return found
 }
 
 type tailBuffer struct {
@@ -477,11 +577,12 @@ func Package(buildDir, artifact string) error {
 	})
 }
 
-func buildMarkdown(root, outDir string, md Metadata, entry Entry) ([]DocumentRecord, []NavItem, []Entry, string, error) {
+func buildMarkdown(root, outDir string, md Metadata, entry Entry, usedKeys map[string]int) ([]DocumentRecord, []NavItem, []Entry, string, error) {
 	src := filepath.Join(root, entry.Source)
 	if fi, err := os.Stat(src); err == nil && fi.IsDir() {
-		return buildMarkdownDirectory(root, outDir, md, entry, src)
+		return buildMarkdownDirectory(root, outDir, md, entry, src, usedKeys)
 	}
+	usedKeys[entry.Key]++
 	b, err := os.ReadFile(src)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -507,13 +608,26 @@ func buildMarkdown(root, outDir string, md Metadata, entry Entry) ([]DocumentRec
 	return []DocumentRecord{rec}, []NavItem{{Title: entry.Title, Path: "/" + entry.Key, Children: headings(text)}}, []Entry{entry}, stripMarkdown(text), nil
 }
 
-func buildMarkdownDirectory(root, outDir string, md Metadata, baseEntry Entry, src string) ([]DocumentRecord, []NavItem, []Entry, string, error) {
+type markdownPage struct {
+	path    string // absolute path on disk
+	srcRel  string // path relative to the mount root (slash form)
+	rootRel string // path relative to the repo root (slash form)
+	key     string // generated entry key / route segment
+}
+
+func buildMarkdownDirectory(root, outDir string, md Metadata, baseEntry Entry, src string, usedKeys map[string]int) ([]DocumentRecord, []NavItem, []Entry, string, error) {
 	var records []DocumentRecord
 	var nav []NavItem
 	var entries []Entry
 	var full strings.Builder
-	usedKeys := map[string]int{}
 	ignore := LoadModexIgnore(root)
+
+	// First pass: enumerate every indexable file and assign its key. Links
+	// between docs can only be rewritten once the whole tree is known, since a
+	// page may reference a sibling that the walk hasn't reached yet. Keys are
+	// assigned here (once) so the dedupe counter in usedKeys stays correct.
+	var pages []markdownPage
+	keyBySource := map[string]string{} // mount-relative source path -> route key
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -535,41 +649,95 @@ func buildMarkdownDirectory(root, outDir string, md Metadata, baseEntry Entry, s
 		if ignore.Ignored(rel, false) || !isIndexableMarkdownFile(srcRel) {
 			return nil
 		}
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		text := string(raw)
-		title := markdownFileTitle(srcRel)
-		key := markdownEntryKey(baseEntry.Key, filepath.ToSlash(srcRel), usedKeys)
-		sourceRel := rel
-		pageEntry := Entry{Key: key, Title: title, Type: "markdown", Source: filepath.ToSlash(sourceRel)}
-		entryDir := filepath.Join(outDir, "site", key)
-		if err := os.MkdirAll(entryDir, 0o755); err != nil {
-			return err
-		}
-		base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, key)
-		renderText := bundleMarkdownResources(text, path, entryDir, base)
-		body := markdownToHTML(renderText)
-		page := "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + html.EscapeString(title) + "</title></head><body><main>" + body + "</main></body></html>"
-		if err := os.WriteFile(filepath.Join(entryDir, "index.html"), []byte(page), 0o644); err != nil {
-			return err
-		}
-		rec := recordFor(md, pageEntry, stripMarkdown(renderText))
-		rec.ContentMD = strings.TrimSpace(stripFrontmatter(renderText))
-		records = append(records, rec)
-		insertMarkdownNav(&nav, filepath.ToSlash(srcRel), title, "/"+key, headings(renderText))
-		entries = append(entries, pageEntry)
-		full.WriteString("# " + title + "\n\n" + stripMarkdown(renderText) + "\n\n")
+		srcRelSlash := filepath.ToSlash(srcRel)
+		key := markdownEntryKey(baseEntry.Key, srcRelSlash, usedKeys)
+		keyBySource[srcRelSlash] = key
+		pages = append(pages, markdownPage{path: path, srcRel: srcRelSlash, rootRel: filepath.ToSlash(rel), key: key})
 		return nil
 	})
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
+
+	// Second pass: render each page, rewriting intra-repo Markdown links to the
+	// target doc's route so cross-references resolve instead of 404ing.
+	for _, p := range pages {
+		raw, readErr := os.ReadFile(p.path)
+		if readErr != nil {
+			return nil, nil, nil, "", readErr
+		}
+		text := string(raw)
+		title := markdownFileTitle(p.srcRel)
+		pageEntry := Entry{Key: p.key, Title: title, Type: "markdown", Source: p.rootRel}
+		entryDir := filepath.Join(outDir, "site", p.key)
+		if err := os.MkdirAll(entryDir, 0o755); err != nil {
+			return nil, nil, nil, "", err
+		}
+		base := fmt.Sprintf("/api/docs/%s/%s/%s/site/", md.ModuleKey, md.DocsVersion, p.key)
+		renderText := bundleMarkdownResources(text, p.path, entryDir, base)
+		renderText = rewriteInternalDocLinks(renderText, p.srcRel, keyBySource, md)
+		body := markdownToHTML(renderText)
+		page := "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + html.EscapeString(title) + "</title></head><body><main>" + body + "</main></body></html>"
+		if err := os.WriteFile(filepath.Join(entryDir, "index.html"), []byte(page), 0o644); err != nil {
+			return nil, nil, nil, "", err
+		}
+		rec := recordFor(md, pageEntry, stripMarkdown(renderText))
+		rec.ContentMD = strings.TrimSpace(stripFrontmatter(renderText))
+		records = append(records, rec)
+		insertMarkdownNav(&nav, p.srcRel, title, "/"+p.key, headings(renderText))
+		entries = append(entries, pageEntry)
+		full.WriteString("# " + title + "\n\n" + stripMarkdown(renderText) + "\n\n")
+	}
 	if len(records) == 0 {
 		return nil, nil, nil, "", fmt.Errorf("no markdown files found under %s", src)
 	}
 	return records, nav, entries, strings.TrimSpace(full.String()), nil
+}
+
+// rewriteInternalDocLinks rewrites Markdown links that point to another Markdown
+// file in the same mount to that file's Modex doc route, so cross-references
+// resolve to a real page instead of 404ing on the raw source path. srcRel is the
+// current file's path relative to the mount root (slash form).
+func rewriteInternalDocLinks(text, srcRel string, keyBySource map[string]string, md Metadata) string {
+	dir := pathpkg.Dir(srcRel)
+	return mdResourceRe.ReplaceAllStringFunc(text, func(m string) string {
+		sub := mdResourceRe.FindStringSubmatch(m)
+		if len(sub) < 4 || strings.HasPrefix(sub[1], "!") {
+			// Image links (![...]) are handled by the resource bundler.
+			return m
+		}
+		route, ok := internalDocRoute(strings.TrimSpace(sub[2]), dir, keyBySource, md)
+		if !ok {
+			return m
+		}
+		return sub[1] + route + sub[3]
+	})
+}
+
+// internalDocRoute maps a Markdown link target (resolved relative to dir) to the
+// in-app doc route for the referenced page, or reports false when the target is
+// not a local Markdown file tracked in keyBySource (remote, anchor-only, asset,
+// or a page that doesn't exist yet).
+func internalDocRoute(target, dir string, keyBySource map[string]string, md Metadata) (string, bool) {
+	if target == "" || strings.HasPrefix(target, "#") || strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") {
+		return "", false
+	}
+	low := strings.ToLower(target)
+	if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") || strings.HasPrefix(low, "mailto:") ||
+		strings.HasPrefix(low, "tel:") || strings.HasPrefix(low, "data:") {
+		return "", false
+	}
+	pathPart, suffix := splitResourceSuffix(target)
+	pathPart = strings.ReplaceAll(pathPart, "\\", "/")
+	if !strings.HasSuffix(strings.ToLower(pathPart), ".md") {
+		return "", false
+	}
+	resolved := strings.TrimPrefix(pathpkg.Join(dir, pathPart), "./")
+	key, ok := keyBySource[resolved]
+	if !ok {
+		return "", false
+	}
+	return "/docs/" + md.ModuleKey + "/" + md.DocsVersion + "/" + key + suffix, true
 }
 
 func markdownEntryKey(prefix, rel string, used map[string]int) string {

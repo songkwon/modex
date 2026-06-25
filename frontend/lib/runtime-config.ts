@@ -1,4 +1,5 @@
 export type RuntimeConfig = {
+  appTitle: string;
   apiBaseUrl: string;
   krokiUrl: string;
   gitlabCiTemplateInclude: string;
@@ -21,6 +22,7 @@ declare global {
 }
 
 const SERVER_DEFAULT_API_BASE_URL = "http://localhost:8671";
+const DEFAULT_APP_TITLE = "Modex";
 const DEFAULT_KROKI_URL = "https://kroki.io";
 const DEFAULT_POSTHOG_HOST = "https://app.posthog.com";
 const DEFAULT_DOCSCTL_URL = "https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64";
@@ -89,6 +91,7 @@ function browserConfig(): RuntimeConfigWindow {
 export function runtimeConfig(): RuntimeConfig {
   const cfg = browserConfig();
   return {
+    appTitle: cfg.appTitle || envValue("MODEX_PUBLIC_APP_TITLE", "NEXT_PUBLIC_APP_TITLE", DEFAULT_APP_TITLE),
     apiBaseUrl: normalizeApiBaseURL(
       cfg.apiBaseUrl || envValue("MODEX_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", defaultApiBaseURL())
     ),
@@ -114,6 +117,10 @@ export function runtimeConfig(): RuntimeConfig {
 
 export function publicApiBaseURL(): string {
   return runtimeConfig().apiBaseUrl;
+}
+
+export function publicAppTitle(): string {
+  return runtimeConfig().appTitle;
 }
 
 export function publicKrokiURL(): string {

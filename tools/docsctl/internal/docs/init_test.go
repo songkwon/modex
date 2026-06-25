@@ -45,6 +45,37 @@ func TestDefaultMarkdownEntryIgnoresAgentMetadataMarkdown(t *testing.T) {
 	}
 }
 
+func TestDefaultVitePressSourceFollowsConfigLocation(t *testing.T) {
+	// Config at repo root => built (and indexed) from root, even when an
+	// unrelated docs/ subdir exists. Indexing docs/ here would miss the rest of
+	// the site and emit routes missing their real path prefix (search 404s).
+	rootCfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(rootCfg, ".vitepress"), 0o755); err != nil {
+		t.Fatalf("MkdirAll .vitepress: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rootCfg, ".vitepress", "config.mjs"), []byte("export default {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(rootCfg, "docs"), 0o755); err != nil {
+		t.Fatalf("MkdirAll docs: %v", err)
+	}
+	if entry := DefaultEntry(rootCfg, "vitepress"); entry.Source != "." {
+		t.Fatalf("root-config source = %q, want .", entry.Source)
+	}
+
+	// Config under docs/ => content root is docs/.
+	docsCfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(docsCfg, "docs", ".vitepress"), 0o755); err != nil {
+		t.Fatalf("MkdirAll docs/.vitepress: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(docsCfg, "docs", ".vitepress", "config.ts"), []byte("export default {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	if entry := DefaultEntry(docsCfg, "vitepress"); entry.Source != "docs" {
+		t.Fatalf("docs-config source = %q, want docs", entry.Source)
+	}
+}
+
 func TestDetectProjectKindSupportsCommonStaticSiteGenerators(t *testing.T) {
 	cases := []struct {
 		name string

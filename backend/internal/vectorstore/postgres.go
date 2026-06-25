@@ -102,13 +102,46 @@ func (p *Postgres) Upsert(ctx context.Context, docID string, vector []float32) e
 	if err != nil {
 		return err
 	}
+	vectorValue := vectorLiteral(vector)
+	tag, err := p.pool.Exec(ctx, `
+		INSERT INTO docs_embedding (
+			page_id, doc_id, module_id, version_id, entry_id, content,
+			embedding, embedding_json, metadata_json, updated_at
+		)
+		SELECT
+			p.id, p.doc_id, p.module_id, p.version_id, p.entry_id,
+			trim(concat_ws(E'\n', p.title, p.description, p.content_text)),
+			$2::vector,
+			$3::jsonb,
+			jsonb_build_object(
+				'title', p.title,
+				'path', p.path,
+				'source_file', p.source_file,
+				'doc_type', p.doc_type
+			),
+			now()
+		FROM docs_page p
+		WHERE p.doc_id=$1
+		ON CONFLICT (doc_id) DO UPDATE
+		SET page_id = EXCLUDED.page_id,
+		    module_id = EXCLUDED.module_id,
+		    version_id = EXCLUDED.version_id,
+		    entry_id = EXCLUDED.entry_id,
+		    content = EXCLUDED.content,
+		    embedding = EXCLUDED.embedding,
+		    embedding_json = EXCLUDED.embedding_json,
+		    metadata_json = EXCLUDED.metadata_json,
+		    updated_at = now()`, docID, vectorValue, string(raw))
+	if err != nil || tag.RowsAffected() > 0 {
+		return err
+	}
 	_, err = p.pool.Exec(ctx, `
 		INSERT INTO docs_embedding (doc_id, embedding, embedding_json, updated_at)
 		VALUES ($1, $2::vector, $3::jsonb, now())
 		ON CONFLICT (doc_id) DO UPDATE
 		SET embedding = EXCLUDED.embedding,
 		    embedding_json = EXCLUDED.embedding_json,
-		    updated_at = now()`, docID, vectorLiteral(vector), string(raw))
+		    updated_at = now()`, docID, vectorValue, string(raw))
 	return err
 }
 

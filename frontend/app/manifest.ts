@@ -1,9 +1,11 @@
 import type { MetadataRoute } from "next";
+import { publicAppTitle } from "@/lib/runtime-config";
 
 export default function manifest(): MetadataRoute.Manifest {
+  const appTitle = publicAppTitle();
   return {
-    name: "Modex",
-    short_name: "Modex",
+    name: appTitle,
+    short_name: appTitle,
     description: "Module Documentation Experience",
     start_url: "/",
     display: "standalone",

@@ -24,6 +24,7 @@ function normalizeGitlabCiTemplateInclude(value) {
 }
 
 const config = {
+  appTitle: pick("MODEX_PUBLIC_APP_TITLE", "NEXT_PUBLIC_APP_TITLE", "Modex"),
   apiBaseUrl: pick("MODEX_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "http://localhost:8671").replace(/\/+$/, ""),
   krokiUrl: pick("MODEX_PUBLIC_KROKI_URL", "NEXT_PUBLIC_KROKI_URL", "https://kroki.io").replace(/\/+$/, ""),
   gitlabCiTemplateInclude: normalizeGitlabCiTemplateInclude(pick(

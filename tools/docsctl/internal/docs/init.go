@@ -62,9 +62,9 @@ func DetectProjectKind(root string) string {
 func DefaultEntry(root, kind string) Entry {
 	switch kind {
 	case "vitepress":
-		return Entry{Key: "guide", Title: "VitePress 文档", Type: "vitepress", Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vitepress/dist", ".vitepress/dist", "dist")}
+		return Entry{Key: "guide", Title: "VitePress 文档", Type: "vitepress", Source: configSiteSourceDir(root, ".vitepress"), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vitepress/dist", ".vitepress/dist", "dist")}
 	case "vuepress":
-		return Entry{Key: "guide", Title: "VuePress 文档", Type: "vuepress", Source: firstExistingDir(root, "docs", "."), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vuepress/dist", ".vuepress/dist", "dist")}
+		return Entry{Key: "guide", Title: "VuePress 文档", Type: "vuepress", Source: configSiteSourceDir(root, ".vuepress"), Build: detectBuildCommand(root, "docs:build", "build"), Output: firstOutput("docs/.vuepress/dist", ".vuepress/dist", "dist")}
 	case "fumadocs":
 		return Entry{Key: "guide", Title: "Fumadocs 文档", Type: "fumadocs", Source: firstExistingDir(root, "content/docs", "docs"), Build: detectBuildCommand(root, "build", "docs:build"), Output: firstOutput("out", ".next/server/app", "dist")}
 	case "docusaurus":
@@ -105,6 +105,30 @@ func detectBuildCommand(root string, candidates ...string) string {
 		}
 	}
 	return ""
+}
+
+// configSiteSourceDir resolves the content root for a config-driven site builder
+// (VitePress/VuePress) to the directory that holds its config dir. This must
+// match where the framework builds from so indexed page routes line up with the
+// built site: a VitePress site whose config is at <root>/.vitepress is built
+// from <root> and serves pages like /standards/x — indexing an unrelated docs/
+// subdir (that merely happens to exist) would index the wrong files AND emit
+// routes missing the real path prefix, so search hits 404.
+func configSiteSourceDir(root, configDir string) string {
+	configNames := []string{"config.mjs", "config.mts", "config.ts", "config.js"}
+	atRoot := make([]string, len(configNames))
+	atDocs := make([]string, len(configNames))
+	for i, name := range configNames {
+		atRoot[i] = filepath.Join(root, configDir, name)
+		atDocs[i] = filepath.Join(root, "docs", configDir, name)
+	}
+	if existsAny(atRoot...) {
+		return "."
+	}
+	if existsAny(atDocs...) {
+		return "docs"
+	}
+	return firstExistingDir(root, "docs", ".")
 }
 
 func firstExistingDir(root string, candidates ...string) string {

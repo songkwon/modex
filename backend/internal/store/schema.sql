@@ -55,6 +55,26 @@ CREATE TABLE IF NOT EXISTS connected_app (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Built-in public OAuth client for Codex MCP OAuth login. Codex CLI supports
+-- `--oauth-client-id` but does not take a client secret for MCP login, so this
+-- client intentionally has an empty secret and only allows local loopback
+-- callbacks.
+INSERT INTO connected_app(id,name,description,client_id,client_secret_hash,redirect_uris,scopes,trusted,enabled,created_at,updated_at)
+VALUES(
+  'app-codex-cli',
+  'Codex CLI MCP OAuth',
+  'Built-in public OAuth client for Codex MCP login.',
+  'codex-cli',
+  '',
+  '["http://localhost","http://127.0.0.1","http://[::1]"]'::jsonb,
+  '["modex:mcp:read","modex:docs:read"]'::jsonb,
+  true,
+  true,
+  now(),
+  now()
+)
+ON CONFLICT(client_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS oauth_grant (
   id TEXT PRIMARY KEY,
   app_id TEXT REFERENCES connected_app(id),
@@ -347,6 +367,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS mcp_token TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+-- Older deployments briefly allowed non-array JSON values in these fields.
+-- Keep them normalized so login upserts and user serialization can safely treat
+-- them as string arrays.
+UPDATE users SET roles_json='[]'::jsonb WHERE jsonb_typeof(roles_json) <> 'array';
+UPDATE users SET managed_categories_json='[]'::jsonb WHERE jsonb_typeof(managed_categories_json) <> 'array';
 
 -- Drop the legacy Keycloak group mirror. Team membership (teams + responsible_team)
 -- is the only authorization model; SSO groups were never consulted for access.

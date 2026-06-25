@@ -120,6 +120,98 @@ func TestCanonicalizeDeployArtifactAppliesSplitMount(t *testing.T) {
 	}
 }
 
+func TestCanonicalizeDeployArtifactRewritesContentResourceBase(t *testing.T) {
+	artifact := deploy.Artifact{
+		Metadata: deploy.Metadata{ModuleKey: "UnknownModule", ModuleName: "UnknownModule", DocsVersion: "latest", PackageVersion: "1.0.0"},
+		Manifest: deploy.Manifest{Entries: []deploy.Entry{{Key: "guide", Title: "Guide", Type: "markdown", Source: "docs"}}},
+		Documents: []deploy.DocumentRecord{{
+			DocID:       "UnknownModule:latest:guide",
+			ModuleKey:   "UnknownModule",
+			DocsVersion: "latest",
+			EntryKey:    "guide",
+			EntryType:   "markdown",
+			Title:       "Guide",
+			Content:     "see /api/docs/UnknownModule/latest/guide/site/images/shot.png",
+			ContentMD:   "![shot](/api/docs/UnknownModule/latest/guide/site/images/shot.png)",
+		}},
+	}
+
+	got := canonicalizeDeployArtifact(artifact, store.Module{ModuleKey: "standards", Name: "Standards"})
+
+	if strings.Contains(got.Documents[0].ContentMD, "UnknownModule") || strings.Contains(got.Documents[0].Content, "UnknownModule") {
+		t.Fatalf("placeholder module not rewritten: %#v", got.Documents[0])
+	}
+	if !strings.Contains(got.Documents[0].ContentMD, "/api/docs/standards/latest/guide/site/images/shot.png") {
+		t.Fatalf("content not rewritten to resolved module: %q", got.Documents[0].ContentMD)
+	}
+}
+
+func TestCanonicalizeDeployArtifactPreservesSitePageDocIDs(t *testing.T) {
+	artifact := deploy.Artifact{
+		Metadata: deploy.Metadata{ModuleKey: "UnknownModule", ModuleName: "UnknownModule", DocsVersion: "latest"},
+		Manifest: deploy.Manifest{Entries: []deploy.Entry{{Key: "guide", Title: "Guide", Type: "vitepress", Source: "."}}},
+		Documents: []deploy.DocumentRecord{
+			{DocID: "UnknownModule:latest:guide/", ModuleKey: "UnknownModule", DocsVersion: "latest", EntryKey: "guide", EntryType: "vitepress", Title: "Home", Content: "home"},
+			{DocID: "UnknownModule:latest:guide/standards/coding/memory-safety", ModuleKey: "UnknownModule", DocsVersion: "latest", EntryKey: "guide", EntryType: "vitepress", Title: "Memory Safety", Content: "memory safety"},
+		},
+	}
+
+	got := canonicalizeDeployArtifact(artifact, store.Module{ModuleKey: "standards", Name: "Standards"})
+
+	if len(got.Documents) != 2 {
+		t.Fatalf("documents = %#v, want two pages", got.Documents)
+	}
+	if got.Documents[0].DocID != "standards:latest:guide/" {
+		t.Fatalf("first doc id = %q", got.Documents[0].DocID)
+	}
+	if got.Documents[1].DocID != "standards:latest:guide/standards/coding/memory-safety" {
+		t.Fatalf("second doc id = %q", got.Documents[1].DocID)
+	}
+}
+
+func TestModelEndpointAppendsExpectedSuffixOnce(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		suffix string
+		want   string
+	}{
+		{name: "embedding base", base: "https://api.example.com/v1", suffix: "/embeddings", want: "https://api.example.com/v1/embeddings"},
+		{name: "embedding endpoint", base: "https://api.example.com/v1/embeddings", suffix: "/embeddings", want: "https://api.example.com/v1/embeddings"},
+		{name: "rerank base", base: "https://api.example.com/v1/", suffix: "/rerank", want: "https://api.example.com/v1/rerank"},
+		{name: "rerank endpoint", base: "https://api.example.com/v1/rerank", suffix: "/rerank", want: "https://api.example.com/v1/rerank"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := modelEndpoint(tt.base, tt.suffix); got != tt.want {
+				t.Fatalf("modelEndpoint() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChatEndpointUsesSelectedProtocol(t *testing.T) {
+	tests := []struct {
+		name     string
+		protocol string
+		base     string
+		model    string
+		want     string
+	}{
+		{name: "openai chat", protocol: "openai-chat", base: "https://api.example.com/v1", model: "gpt", want: "https://api.example.com/v1/chat/completions"},
+		{name: "responses", protocol: "openai-responses", base: "https://api.example.com/v1/", model: "gpt", want: "https://api.example.com/v1/responses"},
+		{name: "anthropic", protocol: "anthropic", base: "https://api.anthropic.com", model: "claude", want: "https://api.anthropic.com/v1/messages"},
+		{name: "gemini", protocol: "gemini", base: "https://generativelanguage.googleapis.com", model: "gemini pro", want: "https://generativelanguage.googleapis.com/v1beta/models/gemini%20pro:generateContent"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := chatEndpoint(tt.base, tt.protocol, tt.model); got != tt.want {
+				t.Fatalf("chatEndpoint() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func testDeployZip(t *testing.T) []byte {
 	return testDeployZipForModule(t, "DemoModule")
 }
