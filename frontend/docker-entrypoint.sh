@@ -31,6 +31,11 @@ const config = {
     "NEXT_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE",
     defaultGitlabCiTemplateInclude
   )),
+  docsctlUrl: pick(
+    "MODEX_PUBLIC_DOCSCTL_URL",
+    "NEXT_PUBLIC_DOCSCTL_URL",
+    "https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64"
+  ).replace(/\/+$/, ""),
   posthogKey: pick("MODEX_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_KEY"),
   posthogHost: pick("MODEX_PUBLIC_POSTHOG_HOST", "NEXT_PUBLIC_POSTHOG_HOST", "https://app.posthog.com").replace(/\/+$/, ""),
   posthogEnableLocal: pick("MODEX_PUBLIC_POSTHOG_ENABLE_LOCAL", "NEXT_PUBLIC_POSTHOG_ENABLE_LOCAL", "false") === "true",

@@ -1,5 +1,5 @@
 import "katex/dist/katex.min.css";
-import type { ImgHTMLAttributes, ReactElement } from "react";
+import type { AnchorHTMLAttributes, ImgHTMLAttributes, ReactElement } from "react";
 import { compileMDX } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -70,7 +70,14 @@ async function loadUploadedPlugins(): Promise<UploadedPlugin[]> {
 
 const on = (cfg: PluginConfig, key: string) => !(key in cfg) || cfg[key].enabled;
 
-export async function MdxContent({ source, assetBase }: { source: string; assetBase?: string }) {
+export type DocLinkContext = {
+  moduleKey: string;
+  docsVersion: string;
+  sourceFile?: string;
+  sourceMap?: Record<string, string>;
+};
+
+export async function MdxContent({ source, assetBase, docLinks }: { source: string; assetBase?: string; docLinks?: DocLinkContext }) {
   const { t } = await getServerI18n();
   // Drop a leading Confluence-style [TOC]/[[toc]] macro (and stray leading
   // <br/>) — the right-rail "本页目录" replaces an inline table of contents.
@@ -156,7 +163,7 @@ export async function MdxContent({ source, assetBase }: { source: string; assetB
   const compile = (format: "mdx" | "md") =>
     compileMDX({
       source,
-      components: { ...mdxComponents, ...dynamicComponents, img: imageComponent(assetBase) },
+      components: { ...mdxComponents, ...dynamicComponents, a: linkComponent(docLinks), img: imageComponent(assetBase) },
       options: {
         parseFrontmatter: true,
         // Mintlify-style components rely on JSX expression props (cols={2}) and
@@ -202,6 +209,13 @@ export async function MdxContent({ source, assetBase }: { source: string; assetB
   );
 }
 
+function linkComponent(docLinks?: DocLinkContext) {
+  return function Link(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
+    const href = typeof props.href === "string" ? resolveDocLink(props.href, docLinks) : props.href;
+    return <a {...props} href={href} />;
+  };
+}
+
 function imageComponent(assetBase?: string) {
   return function Image(props: ImgHTMLAttributes<HTMLImageElement>) {
     const src = typeof props.src === "string" ? resolveAssetURL(props.src, assetBase) : props.src;
@@ -235,4 +249,64 @@ function resolveAssetURL(src: string, assetBase?: string) {
   }
   const base = assetBase.endsWith("/") ? assetBase : `${assetBase}/`;
   return new URL(src.replace(/^\.\/+/, ""), base).toString();
+}
+
+function resolveDocLink(href: string, ctx?: DocLinkContext) {
+  if (!ctx || !href || href.startsWith("#") || href.startsWith("/") || href.startsWith("//") || isExternalURL(href)) {
+    return href;
+  }
+  const { pathPart, suffix } = splitHrefSuffix(href);
+  if (!isMarkdownPath(pathPart)) {
+    return href;
+  }
+  const currentDir = dirname(ctx.sourceFile || "");
+  const target = normalizePath(joinPath(currentDir, pathPart));
+  const sourceMap = ctx.sourceMap || {};
+  const entryKey = sourceMap[target] || sourceMap[target.toLowerCase()];
+  if (!entryKey) {
+    return href;
+  }
+  return `/docs/${encodeURIComponent(ctx.moduleKey)}/${encodeURIComponent(ctx.docsVersion)}/${encodeURIComponent(entryKey)}${suffix}`;
+}
+
+function isExternalURL(href: string) {
+  return /^(?:[a-z][a-z0-9+.-]*:)/i.test(href);
+}
+
+function isMarkdownPath(pathPart: string) {
+  return /\.(?:md|mdx)$/i.test(pathPart);
+}
+
+function splitHrefSuffix(href: string) {
+  const q = href.indexOf("?");
+  const h = href.indexOf("#");
+  const cut = [q, h].filter((n) => n >= 0).sort((a, b) => a - b)[0];
+  if (cut === undefined) {
+    return { pathPart: href, suffix: "" };
+  }
+  return { pathPart: href.slice(0, cut), suffix: href.slice(cut) };
+}
+
+function dirname(path: string) {
+  const normalized = normalizePath(path);
+  const idx = normalized.lastIndexOf("/");
+  return idx >= 0 ? normalized.slice(0, idx) : "";
+}
+
+function joinPath(base: string, rel: string) {
+  if (!base) return rel;
+  return `${base}/${rel}`;
+}
+
+function normalizePath(path: string) {
+  const parts: string[] = [];
+  for (const part of path.replace(/\\/g, "/").split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join("/");
 }

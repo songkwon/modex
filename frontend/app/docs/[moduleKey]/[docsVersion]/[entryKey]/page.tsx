@@ -43,6 +43,7 @@ export default async function DocPage({
   const toLink = (e: any) => (e ? { title: e.title, href: `/docs/${moduleKey}/${docsVersion}/${e.entry_key}` } : undefined);
   const prevDoc = idx > 0 ? toLink(entries[idx - 1]) : undefined;
   const nextDoc = idx >= 0 && idx < entries.length - 1 ? toLink(entries[idx + 1]) : undefined;
+  const sourceMap = buildSourceMap(entries);
 
   // VitePress/VuePress/Fumadocs entries ship a full static site (with their own
   // sidebar, search, theme, mermaid/plantuml). Serve it as-is in an iframe from
@@ -109,7 +110,11 @@ export default async function DocPage({
           </div>
           {contentMD ? (
             <DocSourceToggle source={contentMD}>
-              <MdxContent source={contentMD} assetBase={assetBase} />
+              <MdxContent
+                source={contentMD}
+                assetBase={assetBase}
+                docLinks={{ moduleKey, docsVersion, sourceFile: page.source_file, sourceMap }}
+              />
             </DocSourceToggle>
           ) : contentHTML ? (
             <>
@@ -135,6 +140,31 @@ export default async function DocPage({
       </section>
     </main>
   );
+}
+
+function buildSourceMap(entries: any[]) {
+  const out: Record<string, string> = {};
+  for (const entry of entries || []) {
+    const source = normalizeSourcePath(entry?.source || "");
+    const key = String(entry?.entry_key || "");
+    if (!source || !key) continue;
+    out[source] = key;
+    out[source.toLowerCase()] = key;
+  }
+  return out;
+}
+
+function normalizeSourcePath(source: string) {
+  const parts: string[] = [];
+  for (const part of source.replace(/\\/g, "/").split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join("/");
 }
 
 type DocNavItem = { title: string; path: string; children?: DocNavItem[] };

@@ -1,5 +1,5 @@
 # Modex docs deploy template.
-# Usage and optional variables: deploy/ci/modex-docs.md
+# Usage and optional variables are shown in the in-app Modex usage guide.
 
 variables:
   DOCS_VERSION: "latest"

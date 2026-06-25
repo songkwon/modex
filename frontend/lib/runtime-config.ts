@@ -2,6 +2,7 @@ export type RuntimeConfig = {
   apiBaseUrl: string;
   krokiUrl: string;
   gitlabCiTemplateInclude: string;
+  docsctlUrl: string;
   posthogKey: string;
   posthogHost: string;
   posthogEnableLocal: boolean;
@@ -22,6 +23,7 @@ declare global {
 const SERVER_DEFAULT_API_BASE_URL = "http://localhost:8671";
 const DEFAULT_KROKI_URL = "https://kroki.io";
 const DEFAULT_POSTHOG_HOST = "https://app.posthog.com";
+const DEFAULT_DOCSCTL_URL = "https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64";
 const DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE = `include:
   - project: "songkwon/modex-fscut"
     ref: "main"
@@ -97,6 +99,9 @@ export function runtimeConfig(): RuntimeConfig {
       cfg.gitlabCiTemplateInclude ||
         envValue("MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE", "NEXT_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE", DEFAULT_GITLAB_CI_TEMPLATE_INCLUDE)
     ),
+    docsctlUrl: trimTrailingSlash(
+      cfg.docsctlUrl || envValue("MODEX_PUBLIC_DOCSCTL_URL", "NEXT_PUBLIC_DOCSCTL_URL", DEFAULT_DOCSCTL_URL)
+    ),
     posthogKey: cfg.posthogKey || envValue("MODEX_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_KEY"),
     posthogHost: trimTrailingSlash(
       cfg.posthogHost || envValue("MODEX_PUBLIC_POSTHOG_HOST", "NEXT_PUBLIC_POSTHOG_HOST", DEFAULT_POSTHOG_HOST)
@@ -117,4 +122,8 @@ export function publicKrokiURL(): string {
 
 export function gitlabCiTemplateInclude(): string {
   return runtimeConfig().gitlabCiTemplateInclude;
+}
+
+export function publicDocsctlURL(): string {
+  return runtimeConfig().docsctlUrl;
 }

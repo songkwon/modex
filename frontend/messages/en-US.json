@@ -578,7 +578,7 @@
   "home.categoriesDescription": "Browse documentation collections by category or subcategory.",
   "home.categoriesTitle": "Categories",
   "home.emptyAction": "Connect docs",
-  "home.emptyGuide": "View project guide",
+  "home.emptyGuide": "View usage guide",
   "home.emptyHint": "This workspace has no categories or documentation sources. Create a source in the admin console, bind it to a category, and deploy with docsctl; the homepage will then show searchable document collections.",
   "home.emptyTitle": "No documents connected yet",
   "home.kicker": "Modex Registry",
@@ -593,7 +593,7 @@
   "me.favorites.no_modules_followed_yet": "No modules followed yet.",
   "me.favorites.these_modules_may_have_been_deprecated_or_renamed": "These modules may have been deprecated or renamed.",
   "me.favorites.unfollow": "Unfollow",
-  "me.guide.modex_project_guide": "Modex Project Guide",
+  "me.guide.modex_project_guide": "Modex Usage Guide",
   "me.markdownGuide.title": "Markdown authoring examples",
   "me.mcp.add_to_mcp_configuration_file_e_g": "Add to MCP configuration file (e.g., ",
   "me.mcp.ai_tool_integration": "AI Tool Integration",
@@ -644,6 +644,10 @@
   "user.markdownGuide": "Markdown examples",
   "user.mcp": "MCP usage",
   "user.oidcNotConfigured": "Keycloak OIDC is not fully configured. Check KEYCLOAK_BASE_URL, KEYCLOAK_REALM, OIDC_CLIENT_ID, and related environment variables.",
-  "user.projectGuide": "Project guide",
-  "user.superAdmin": "Super admin"
+  "user.projectGuide": "Usage guide",
+  "user.superAdmin": "Super admin",
+  "welcomeGuide.action": "See how to use it",
+  "welcomeGuide.dismiss": "Maybe later",
+  "welcomeGuide.subtitle": "Search team docs, read the usage guide, and connect Modex to your AI tools.",
+  "welcomeGuide.title": "New here?"
 }

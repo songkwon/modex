@@ -578,7 +578,7 @@
   "home.categoriesDescription": "按分类组织的文档集合，点击分类或子分类进入。",
   "home.categoriesTitle": "分类",
   "home.emptyAction": "接入文档源",
-  "home.emptyGuide": "查看项目指南",
+  "home.emptyGuide": "查看使用指南",
   "home.emptyHint": "当前空间暂无分类或文档源。先在管理控制台创建文档源并绑定分类，完成 docsctl 部署后，首页会自动展示可检索的文档集合。",
   "home.emptyTitle": "还没有接入文档",
   "home.kicker": "Modex Registry",
@@ -593,7 +593,7 @@
   "me.favorites.no_modules_followed_yet": "还没有关注模块",
   "me.favorites.these_modules_may_have_been_deprecated_or_renamed": "这些模块可能已被下线或改名。",
   "me.favorites.unfollow": "取消关注",
-  "me.guide.modex_project_guide": "Modex 项目指南",
+  "me.guide.modex_project_guide": "Modex 使用指南",
   "me.markdownGuide.title": "Markdown 写法示例",
   "me.mcp.add_to_mcp_configuration_file_e_g": "加入 MCP 配置文件（如",
   "me.mcp.ai_tool_integration": "AI 工具接入",
@@ -644,6 +644,10 @@
   "user.markdownGuide": "Markdown 写法示例",
   "user.mcp": "MCP 使用",
   "user.oidcNotConfigured": "Keycloak OIDC 未完整配置：请检查 KEYCLOAK_BASE_URL / KEYCLOAK_REALM / OIDC_CLIENT_ID 等环境变量。",
-  "user.projectGuide": "项目指南",
-  "user.superAdmin": "超级管理员"
+  "user.projectGuide": "使用指南",
+  "user.superAdmin": "超级管理员",
+  "welcomeGuide.action": "查看如何使用",
+  "welcomeGuide.dismiss": "稍后再说",
+  "welcomeGuide.subtitle": "这里可以搜索团队文档、阅读使用指南，并把 Modex 接入 AI 工具。",
+  "welcomeGuide.title": "初来乍到"
 }

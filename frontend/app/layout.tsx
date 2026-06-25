@@ -8,6 +8,7 @@ import { SearchProvider } from "@/components/search-provider";
 import { TopbarSearchButton } from "@/components/topbar-search";
 import { TopbarChatButton } from "@/components/topbar-chat";
 import { AnalyticsInit } from "@/components/analytics-init";
+import { WelcomeGuideToast } from "@/components/welcome-guide-toast";
 import { I18nProvider } from "@/lib/i18n";
 import { getServerLocale } from "@/lib/i18n-server";
 
@@ -53,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </nav>
               </header>
               {children}
+              <WelcomeGuideToast />
             </div>
           </SearchProvider>
         </I18nProvider>
