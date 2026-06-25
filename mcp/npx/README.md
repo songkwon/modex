@@ -39,6 +39,38 @@ For local compose deployments with the `mcp` profile enabled:
 http://localhost:8787/mcp
 ```
 
+### Codex OAuth
+
+Codex supports streamable HTTP MCP servers with OAuth. Modex ships a built-in
+public OAuth client for Codex named `codex-cli`, so users do not need to copy a
+personal MCP token into their Codex config.
+
+Hosted deployment:
+
+```bash
+codex mcp add modex \
+  --url https://modex.example.com/mcp \
+  --oauth-client-id codex-cli
+
+codex mcp login modex --scopes modex:mcp:read,modex:docs:read
+```
+
+Local compose deployment with the `mcp` profile:
+
+```bash
+codex mcp add modex \
+  --url http://localhost:8787/mcp \
+  --oauth-client-id codex-cli
+
+codex mcp login modex --scopes modex:mcp:read,modex:docs:read
+```
+
+During login, Codex opens a browser, Modex redirects through your OIDC login if
+needed, and Codex stores the resulting MCP OAuth credentials in its own
+credential store. If Codex uses a fixed callback port, set
+`mcp_oauth_callback_port` in `~/.codex/config.toml`; Modex allows loopback
+callbacks for `localhost`, `127.0.0.1`, and `::1`.
+
 ### Claude Code
 
 ```bash

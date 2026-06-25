@@ -215,6 +215,138 @@ func TestBuildMarkdownDirectoryHonorsModexIgnore(t *testing.T) {
 	}
 }
 
+func TestBuildSplitMountsProduceUniqueDocIDs(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"a", "b"} {
+		if err := os.MkdirAll(filepath.Join(root, "docs", dir), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+		// Each mount has a top-level README and an identically-named nested file,
+		// which previously collided into the same doc_id across mounts.
+		if err := os.WriteFile(filepath.Join(root, "docs", dir, "README.md"), []byte("# Root\n\nroot"), 0o644); err != nil {
+			t.Fatalf("WriteFile README %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "docs", dir, "intro.md"), []byte("# Intro\n\nintro"), 0o644); err != nil {
+			t.Fatalf("WriteFile intro %s: %v", dir, err)
+		}
+	}
+	config := `metadata:
+  module_key: demo
+  docs_version: v1
+entries:
+  - key: guide
+    title: Guide A
+    type: markdown
+    source: docs/a
+  - key: guide
+    title: Guide B
+    type: markdown
+    source: docs/b
+`
+	if err := os.WriteFile(filepath.Join(root, "docs.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatalf("WriteFile docs.yaml: %v", err)
+	}
+
+	out := filepath.Join(t.TempDir(), "build")
+	if err := Build(root, out); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	records := readDocumentsJSONL(t, filepath.Join(out, "documents.jsonl"))
+	if len(records) != 4 {
+		t.Fatalf("documents = %d, want 4", len(records))
+	}
+	seen := map[string]bool{}
+	for _, r := range records {
+		if r.DocID == "" {
+			t.Fatalf("empty doc id: %#v", r)
+		}
+		if seen[r.DocID] {
+			t.Fatalf("duplicate doc id %q across split mounts", r.DocID)
+		}
+		seen[r.DocID] = true
+	}
+}
+
+func TestBuildMarkdownRewritesInternalDocLinks(t *testing.T) {
+	t.Setenv("DOCS_MODULE", "standards")
+	t.Setenv("DOCS_VERSION", "latest")
+	root := t.TempDir()
+	mkdir := func(p string) {
+		if err := os.MkdirAll(filepath.Join(root, p), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", p, err)
+		}
+	}
+	write := func(p, body string) {
+		if err := os.WriteFile(filepath.Join(root, p), []byte(body), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", p, err)
+		}
+	}
+	mkdir("coding/general-programming")
+	// Root README links to a nested doc (exists) and a not-yet-written doc.
+	write("README.md", "# Standards\n\n- [mem](./coding/general-programming/memory-safety.md) - safety\n- [todo](./coding/todo.md) - later\n")
+	// Nested README uses a sibling-relative link and an anchor.
+	write("coding/README.md", "# Coding\n\n- [mem](./general-programming/memory-safety.md#p0) - safety\n")
+	write("coding/general-programming/memory-safety.md", "# Memory Safety\n\nbody")
+
+	out := filepath.Join(t.TempDir(), "build")
+	if err := Build(root, out); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	records := readDocumentsJSONL(t, filepath.Join(out, "documents.jsonl"))
+	byKey := map[string]DocumentRecord{}
+	for _, r := range records {
+		byKey[r.EntryKey] = r
+	}
+
+	root0, ok := byKey["guide"]
+	if !ok {
+		t.Fatalf("missing root README record; keys: %v", byKey)
+	}
+	wantRoute := "/docs/standards/latest/guide-coding-general-programming-memory-safety"
+	if !contains(root0.ContentMD, "("+wantRoute+")") {
+		t.Fatalf("root README not rewritten to %q:\n%s", wantRoute, root0.ContentMD)
+	}
+	// A link to a doc that does not exist must be left untouched (no false route).
+	if !contains(root0.ContentMD, "./coding/todo.md") {
+		t.Fatalf("link to missing doc should be left as-is:\n%s", root0.ContentMD)
+	}
+
+	coding, ok := byKey["guide-coding"]
+	if !ok {
+		t.Fatalf("missing coding README record; keys: %v", byKey)
+	}
+	if !contains(coding.ContentMD, wantRoute+"#p0)") {
+		t.Fatalf("sibling-relative link with anchor not rewritten:\n%s", coding.ContentMD)
+	}
+}
+
+func TestBuildCommandEntryDetectsCustomNestedOutput(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		t.Fatalf("MkdirAll docs: %v", err)
+	}
+	config := `entries:
+  - key: guide
+    title: Guide
+    type: vitepress
+    source: docs
+    build: mkdir -p docs/dist/rd/standards && printf '<h1>Standards</h1>' > docs/dist/rd/standards/index.html
+    output: docs/.vitepress/dist
+`
+	if err := os.WriteFile(filepath.Join(root, "docs.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatalf("WriteFile docs.yaml: %v", err)
+	}
+
+	out := filepath.Join(t.TempDir(), "build")
+	if err := Build(root, out); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "site", "guide", "index.html")); err != nil {
+		t.Fatalf("expected detected custom output to be copied: %v", err)
+	}
+}
+
 func TestBuildCommandFailureIncludesActionableContext(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {

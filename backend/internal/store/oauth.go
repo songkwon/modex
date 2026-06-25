@@ -7,6 +7,24 @@ import (
 	"time"
 )
 
+const CodexOAuthClientID = "codex-cli"
+
+func builtinCodexOAuthApp(now time.Time) ConnectedApp {
+	return ConnectedApp{
+		ID:               "app-codex-cli",
+		Name:             "Codex CLI MCP OAuth",
+		Description:      "Built-in public OAuth client for Codex MCP login.",
+		ClientID:         CodexOAuthClientID,
+		ClientSecretHash: "",
+		RedirectURIs:     []string{"http://localhost", "http://127.0.0.1", "http://[::1]"},
+		Scopes:           []string{"modex:mcp:read", "modex:docs:read"},
+		Trusted:          true,
+		Enabled:          true,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+}
+
 func (s *MemoryStore) ConnectedApps() []ConnectedApp {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -414,6 +414,9 @@ func (p *PostgresRepository) UpdateModule(moduleKey string, patch Module) (Modul
 		if err = p.syncModuleCategories(ctx, tx, current.ID, current.CategoryIDs); err != nil {
 			return Module{}, err
 		}
+		if _, err = tx.Exec(ctx, `UPDATE docs_page SET category_ids=$2::jsonb WHERE module_id=$1`, current.ID, mustJSON(current.CategoryIDs)); err != nil {
+			return Module{}, err
+		}
 	}
 	updated.CategoryIDs = current.CategoryIDs
 	updated.AvailableVers = current.AvailableVers

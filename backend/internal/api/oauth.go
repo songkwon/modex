@@ -55,7 +55,7 @@ func (s *Server) handleOAuthMetadata(w http.ResponseWriter, r *http.Request) {
 		"revocation_endpoint":                   base + "/oauth/revoke",
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
+		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post", "none"},
 		"scopes_supported":                      []string{"modex:mcp:read", "modex:docs:read"},
 	})
 }
@@ -212,7 +212,7 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID, secret := oauthClientCredentials(r)
-	app, err := s.app.Store().VerifyConnectedAppSecret(clientID, secret)
+	app, err := s.authenticateOAuthClient(clientID, secret)
 	if err != nil {
 		writeOAuthTokenError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return
@@ -257,12 +257,26 @@ func (s *Server) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID, secret := oauthClientCredentials(r)
-	if _, err := s.app.Store().VerifyConnectedAppSecret(clientID, secret); err != nil {
+	if _, err := s.authenticateOAuthClient(clientID, secret); err != nil {
 		writeOAuthTokenError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return
 	}
 	s.app.Store().RevokeOAuthToken(clientID, r.Form.Get("token"))
 	writeJSON(w, http.StatusOK, map[string]any{"revoked": true})
+}
+
+func (s *Server) authenticateOAuthClient(clientID, secret string) (store.ConnectedApp, error) {
+	if strings.TrimSpace(secret) != "" {
+		return s.app.Store().VerifyConnectedAppSecret(clientID, secret)
+	}
+	app, err := s.app.Store().ConnectedAppByClientID(clientID)
+	if err != nil {
+		return store.ConnectedApp{}, err
+	}
+	if !app.Enabled || app.ClientSecretHash != "" {
+		return store.ConnectedApp{}, store.ErrNotFound
+	}
+	return app, nil
 }
 
 func oauthClientCredentials(r *http.Request) (string, string) {
@@ -299,12 +313,30 @@ func requestedScopes(raw string, allowed []string) ([]string, bool) {
 }
 
 func redirectURIAllowed(allowed []string, redirectURI string) bool {
+	parsed, err := url.Parse(redirectURI)
 	for _, u := range allowed {
 		if u == redirectURI {
 			return true
 		}
+		if err == nil && isLoopbackRedirectBase(u) && parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname()) {
+			return true
+		}
 	}
 	return false
+}
+
+func isLoopbackRedirectBase(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "http" && u.Path == "" && u.RawQuery == "" && isLoopbackHost(u.Hostname())
+}
+
+func isLoopbackHost(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }
 
 func writeOAuthConsentPage(w http.ResponseWriter, r *http.Request, app store.ConnectedApp, scopes []string) {

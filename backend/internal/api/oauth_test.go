@@ -112,3 +112,68 @@ func TestConnectedAppOAuthAuthorizationCodeFlow(t *testing.T) {
 		t.Fatalf("oauth bearer should not enter admin APIs, status = %d, body=%s", admin.Code, admin.Body.String())
 	}
 }
+
+func TestCodexOAuthPublicClientAuthorizationCodeFlow(t *testing.T) {
+	t.Setenv("SUPER_ADMIN_USERS", "dev")
+	t.Setenv("APP_BASE_URL", "http://modex.test")
+
+	srv := New(store.NewSeededTestStore())
+	handler := srv.Handler()
+
+	user := srv.app.Store().UpsertUser(store.User{
+		ID: "u-dev", Username: "dev", DisplayName: "Dev User",
+		Email: "dev@example.com", Status: "active",
+	})
+	login := httptest.NewRecorder()
+	if err := srv.app.Auth().CreateSession(login, user); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	cookies := login.Result().Cookies()
+
+	redirectURI := "http://127.0.0.1:49152/callback/modex"
+	authURL := "/oauth/authorize?response_type=code&client_id=" + url.QueryEscape(store.CodexOAuthClientID) +
+		"&redirect_uri=" + url.QueryEscape(redirectURI) +
+		"&scope=" + url.QueryEscape("modex:mcp:read modex:docs:read") +
+		"&state=codex-state"
+	auth := httptest.NewRecorder()
+	authReq := httptest.NewRequest(http.MethodGet, authURL, nil)
+	for _, c := range cookies {
+		authReq.AddCookie(c)
+	}
+	handler.ServeHTTP(auth, authReq)
+	if auth.Code != http.StatusFound {
+		t.Fatalf("authorize status = %d, body=%s", auth.Code, auth.Body.String())
+	}
+	loc, err := url.Parse(auth.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := loc.Query().Get("code")
+	if code == "" || loc.Query().Get("state") != "codex-state" {
+		t.Fatalf("bad authorize redirect: %s", loc.String())
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("client_id", store.CodexOAuthClientID)
+	form.Set("code", code)
+	form.Set("redirect_uri", redirectURI)
+	token := httptest.NewRecorder()
+	tokenReq := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handler.ServeHTTP(token, tokenReq)
+	if token.Code != http.StatusOK {
+		t.Fatalf("token status = %d, body=%s", token.Code, token.Body.String())
+	}
+	var tok struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		Scope        string `json:"scope"`
+	}
+	if err := json.Unmarshal(token.Body.Bytes(), &tok); err != nil {
+		t.Fatal(err)
+	}
+	if tok.AccessToken == "" || tok.RefreshToken == "" || !strings.Contains(tok.Scope, "modex:mcp:read") {
+		t.Fatalf("bad token response: %+v", tok)
+	}
+}

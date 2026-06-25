@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, KeyRound, ListChecks, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { Combobox } from "@/components/ui/combobox";
-import { fetchModels, getSettings, runRecallTest, saveSettings, type AISettings, type RecallTestResult } from "@/lib/api";
+import { fetchModels, getSettings, runRecallTest, saveSettings, testModelConnection, type AISettings, type ModelConnectionTestResult, type RecallTestResult } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 // Supported chat API formats. "openai-chat" covers OpenAI and every
@@ -52,6 +52,9 @@ export default function AdminSettingsPage() {
   const [promptDefault, setPromptDefault] = useState("");
   const [recallLoading, setRecallLoading] = useState(false);
   const [recallResult, setRecallResult] = useState<RecallTestResult | null>(null);
+  const [testingConnection, setTestingConnection] = useState<"" | "chat" | "embedding" | "rerank">("");
+  const [connectionResult, setConnectionResult] = useState<{ chat?: ModelConnectionTestResult; embedding?: ModelConnectionTestResult; rerank?: ModelConnectionTestResult }>({});
+  const [connectionError, setConnectionError] = useState<{ chat?: string; embedding?: string; rerank?: string }>({});
 
   const protocol = ai.ask_protocol || "openai-chat";
 
@@ -131,6 +134,24 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function handleConnectionTest(kind: "chat" | "embedding" | "rerank") {
+    const base_url = kind === "chat" ? ai.ask_base_url : kind === "embedding" ? ai.embedding_base_url : ai.rerank_base_url;
+    const model = kind === "chat" ? ai.ask_model : kind === "embedding" ? ai.embedding_model : ai.rerank_model;
+    const api_key = kind === "chat" ? ai.ask_api_key : kind === "embedding" ? ai.embedding_api_key : ai.rerank_api_key;
+    setTestingConnection(kind);
+    setError("");
+    setConnectionResult((prev) => ({ ...prev, [kind]: undefined }));
+    setConnectionError((prev) => ({ ...prev, [kind]: undefined }));
+    try {
+      const result = await testModelConnection({ kind, protocol: ai.ask_protocol, base_url, model, api_key });
+      setConnectionResult((prev) => ({ ...prev, [kind]: result }));
+    } catch (e) {
+      setConnectionError((prev) => ({ ...prev, [kind]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setTestingConnection("");
+    }
+  }
+
   return (
     <AdminShell
       title={t("component.adminShell.model_settings")}
@@ -206,6 +227,18 @@ export default function AdminSettingsPage() {
           <span className="field-hint">{t("admin.settings.models_are_fetched_in_real_time_from_the")}</span>
         </div>
 
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <button className="button" onClick={() => handleConnectionTest("chat")} disabled={testingConnection === "chat"}>
+            {testingConnection === "chat" ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 测试问答模型
+          </button>
+          {connectionResult.chat ? (
+            <span className="badge badge-success">
+              连接成功：endpoint {connectionResult.chat.endpoint}，返回 {connectionResult.chat.sample}
+            </span>
+          ) : null}
+          {connectionError.chat ? <span className="badge badge-danger">测试失败：{connectionError.chat}</span> : null}
+        </div>
+
         <div style={{ display: "flex", gap: 16 }}>
           <div className="field" style={{ flex: 1 }}>
             <label>{t("admin.settings.max_response_tokens_optional")}</label>
@@ -266,7 +299,7 @@ export default function AdminSettingsPage() {
                 placeholder="https://api.example.com/v1"
                 onChange={(e) => setAI({ ...ai, embedding_base_url: e.target.value })}
               />
-              <span className="field-hint">{t("admin.settings.vector_generation_api_for_semantic_and_hybrid_retrieval")}</span>
+              <span className="field-hint">填写服务根地址，例如 <code className="code-chip">https://api.example.com/v1</code>；系统会实际请求 <code className="code-chip">/embeddings</code>。</span>
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>{t("admin.settings.embedding_model")}</label>
@@ -295,6 +328,17 @@ export default function AdminSettingsPage() {
               <span className="field-hint">{t("admin.settings.embeddingDimensionsHint")}</span>
             </div>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button className="button" onClick={() => handleConnectionTest("embedding")} disabled={testingConnection === "embedding"}>
+              {testingConnection === "embedding" ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 测试嵌入模型
+            </button>
+            {connectionResult.embedding ? (
+              <span className="badge badge-success">
+                连接成功：{connectionResult.embedding.dimension} 维，endpoint {connectionResult.embedding.endpoint}
+              </span>
+            ) : null}
+            {connectionError.embedding ? <span className="badge badge-danger">测试失败：{connectionError.embedding}</span> : null}
+          </div>
         </div>
 
         <div style={{ borderTop: "1px solid hsl(var(--border))", paddingTop: 18, display: "grid", gap: 16 }}>
@@ -307,6 +351,7 @@ export default function AdminSettingsPage() {
                 placeholder="https://api.example.com/v1"
                 onChange={(e) => setAI({ ...ai, rerank_base_url: e.target.value })}
               />
+              <span className="field-hint">填写重排序服务根地址；系统会实际请求 <code className="code-chip">/rerank</code>，不要填成嵌入模型的 <code className="code-chip">/embeddings</code>。</span>
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>{t("admin.settings.rerank_model")}</label>
@@ -316,6 +361,17 @@ export default function AdminSettingsPage() {
                 onChange={(e) => setAI({ ...ai, rerank_model: e.target.value })}
               />
             </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button className="button" onClick={() => handleConnectionTest("rerank")} disabled={testingConnection === "rerank"}>
+              {testingConnection === "rerank" ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 测试重排序模型
+            </button>
+            {connectionResult.rerank ? (
+              <span className="badge badge-success">
+                连接成功：top index {connectionResult.rerank.top_index}，endpoint {connectionResult.rerank.endpoint}
+              </span>
+            ) : null}
+            {connectionError.rerank ? <span className="badge badge-danger">测试失败：{connectionError.rerank}</span> : null}
           </div>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>

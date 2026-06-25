@@ -52,6 +52,36 @@ func TestHTTPRPCNotificationReturnsAccepted(t *testing.T) {
 	}
 }
 
+func TestOAuthMetadataForCodex(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil)
+	rr := httptest.NewRecorder()
+
+	writeOAuthAuthorizationMetadata(client.Client{BaseURL: "https://modex.example.com/"}, rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		`"authorization_endpoint":"https://modex.example.com/oauth/authorize"`,
+		`"token_endpoint_auth_methods_supported":["none","client_secret_basic","client_secret_post"]`,
+		`"modex:mcp:read"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metadata missing %s: %s", want, body)
+		}
+	}
+}
+
+func TestBearerToken(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer oauth-access-token")
+
+	if got := bearerToken(req); got != "oauth-access-token" {
+		t.Fatalf("bearerToken = %q, want oauth-access-token", got)
+	}
+}
+
 func TestToolsListExposesStrictSchemas(t *testing.T) {
 	result, err := handle(client.Client{}, rpcRequest{Method: "tools/list"})
 	if err != nil {

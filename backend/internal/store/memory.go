@@ -73,7 +73,7 @@ func (s *MemoryStore) SaveAISettings(ai AISettings) Settings {
 func NewTestStore() *MemoryStore {
 	return &MemoryStore{
 		users:      []User{},
-		apps:       []ConnectedApp{},
+		apps:       []ConnectedApp{builtinCodexOAuthApp(time.Now().UTC())},
 		grants:     []OAuthGrant{},
 		teams:      []Team{},
 		categories: []Category{},
@@ -104,7 +104,7 @@ func NewSeededTestStore() *MemoryStore {
 			{ID: "u-alice", Username: "alice", DisplayName: "Alice", Email: "alice@example.com", Department: "CAD", Roles: []string{"maintainer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
 			{ID: "u-bob", Username: "bob", DisplayName: "Bob", Email: "bob@example.com", Department: "前端", Roles: []string{"viewer"}, Source: "seed", Status: "active", CreatedAt: now, UpdatedAt: now},
 		},
-		apps:   []ConnectedApp{},
+		apps:   []ConnectedApp{builtinCodexOAuthApp(now)},
 		grants: []OAuthGrant{},
 		teams: []Team{
 			{ID: "t-cad", Key: "cad-team", Name: "CAD 团队", Description: "CAD 内核与插件文档维护团队", Leaders: []string{"alice"}, Members: []string{"alice", "bob"}, CreatedAt: now, UpdatedAt: now},

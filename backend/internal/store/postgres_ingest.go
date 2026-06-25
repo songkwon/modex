@@ -112,12 +112,39 @@ func (p *PostgresRepository) IngestArtifact(artifact DeployArtifact) (DeployResu
 			return DeployResult{}, err
 		}
 	}
+	seenDocIDs := make(map[string]bool, len(artifact.Documents))
 	for _, document := range artifact.Documents {
 		entryKey := firstNonEmpty(document.EntryKey, entryKeyFromDocID(document.DocID))
 		docID := firstNonEmpty(document.DocID, artifact.ModuleKey+":"+artifact.DocsVersion+":"+entryKey)
+		// docs_page.doc_id is globally UNIQUE; a duplicate within one artifact
+		// would abort the whole deploy. Skip repeats (keeping the first) so a
+		// malformed artifact degrades to a partial index instead of a 400.
+		if seenDocIDs[docID] {
+			continue
+		}
+		seenDocIDs[docID] = true
 		entryType := firstNonEmpty(document.EntryType, entryTypeForEntry(artifact.Entries, entryKey))
 		contentHTML := htmlForEntry(artifact.SiteHTML, entryKey)
-		if _, err = tx.Exec(ctx, `INSERT INTO docs_page(id,module_id,version_id,entry_id,doc_id,title,description,path,source_file,doc_type,status,owner_group,tags,category_ids,content_text,content_html,content_md,updated_at,created_at) VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15,$16,$17,$18,$18)`, databaseID("p"), module.ID, version.ID, entryIDs[entryKey], docID, firstNonEmpty(document.Title, titleForEntry(artifact.Entries, entryKey)), document.Description, docPagePath(artifact.ModuleKey, artifact.DocsVersion, entryKey, entryType, document.Path), document.SourceFile, entryType, firstNonEmpty(document.Status, "active"), module.OwnerGroup, mustJSON(coalesceStrings(document.Keywords, artifact.Keywords)), mustJSON(categoryIDs), document.Content, contentHTML, document.ContentMD, now); err != nil {
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO docs_page(id,module_id,version_id,entry_id,doc_id,title,description,path,source_file,doc_type,status,owner_group,tags,category_ids,content_text,content_html,content_md,updated_at,created_at)
+			VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15,$16,$17,$18,$18)
+			ON CONFLICT(doc_id) DO UPDATE SET
+				module_id=EXCLUDED.module_id,
+				version_id=EXCLUDED.version_id,
+				entry_id=EXCLUDED.entry_id,
+				title=EXCLUDED.title,
+				description=EXCLUDED.description,
+				path=EXCLUDED.path,
+				source_file=EXCLUDED.source_file,
+				doc_type=EXCLUDED.doc_type,
+				status=EXCLUDED.status,
+				owner_group=EXCLUDED.owner_group,
+				tags=EXCLUDED.tags,
+				category_ids=EXCLUDED.category_ids,
+				content_text=EXCLUDED.content_text,
+				content_html=EXCLUDED.content_html,
+				content_md=EXCLUDED.content_md,
+				updated_at=EXCLUDED.updated_at`, databaseID("p"), module.ID, version.ID, entryIDs[entryKey], docID, firstNonEmpty(document.Title, titleForEntry(artifact.Entries, entryKey)), document.Description, docPagePath(artifact.ModuleKey, artifact.DocsVersion, entryKey, entryType, document.Path), document.SourceFile, entryType, firstNonEmpty(document.Status, "active"), module.OwnerGroup, mustJSON(coalesceStrings(document.Keywords, artifact.Keywords)), mustJSON(categoryIDs), document.Content, contentHTML, document.ContentMD, now); err != nil {
 			return DeployResult{}, err
 		}
 	}

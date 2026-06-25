@@ -339,6 +339,7 @@ func (s *MemoryStore) UpdateModule(moduleKey string, patch Module) (Module, erro
 				if patch.CategoryPath == "" {
 					m.CategoryPath = s.categoryPathLocked(m.CategoryIDs)
 				}
+				s.syncPageCategoriesForModuleLocked(m.ModuleKey, m.CategoryIDs)
 			}
 			if patch.CategoryPath != "" {
 				m.CategoryPath = patch.CategoryPath
@@ -369,6 +370,14 @@ func (s *MemoryStore) UpdateModule(moduleKey string, patch Module) (Module, erro
 		}
 	}
 	return Module{}, ErrNotFound
+}
+
+func (s *MemoryStore) syncPageCategoriesForModuleLocked(moduleKey string, categoryIDs []string) {
+	for i := range s.pages {
+		if strings.EqualFold(s.pages[i].ModuleKey, moduleKey) {
+			s.pages[i].CategoryIDs = cloneStrings(categoryIDs)
+		}
+	}
 }
 
 func (s *MemoryStore) CreateVersion(moduleKey string, v Version) (Version, error) {

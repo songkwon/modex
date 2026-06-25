@@ -6,7 +6,6 @@ import { DocScope } from "@/components/doc-scope";
 import { CodeBlockCopy } from "@/components/code-block-copy";
 import { DocReadStats } from "@/components/doc-read-stats";
 import { MdxContent } from "@/components/mdx/mdx-content";
-import { ImmersiveChrome } from "@/components/immersive-chrome";
 import { DocToc } from "@/components/doc-toc";
 import { VersionSwitcher } from "@/components/version-switcher";
 import { DocFooter, FloatingDocFeedback } from "@/components/doc-footer";
@@ -62,7 +61,6 @@ export default async function DocPage({
       <main className="doc-fullscreen">
         <PageViewTracker docId={page.doc_id} title={page.title || module.name} moduleKey={module.module_key} moduleName={module.name} docsVersion={docsVersion} entryKey={actualEntryKey} />
         <DocScope moduleKey={module.module_key} moduleName={module.name} />
-        <ImmersiveChrome />
         <div className="doc-version-dock">
           <VersionSwitcher moduleKey={moduleKey} current={docsVersion} entryKey={actualEntryKey} versions={versions} />
         </div>

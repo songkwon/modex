@@ -125,13 +125,24 @@ func canonicalizeDeployArtifact(artifact deploy.Artifact, module store.Module) d
 		artifact.Metadata.Description = module.Description
 	}
 	artifact = applyModuleMount(artifact, module)
+	// docsctl builds without knowing the target module (the deploy token selects
+	// it), so resource URLs in document content are baked with the placeholder
+	// module/version. Rewrite them to the resolved module so embedded images and
+	// attachments resolve under the real /api/docs/<module>/<version>/ path.
+	rewriteBase := artifactModuleKey != "" && (artifactModuleKey != moduleKey || artifactDocsVersion != docsVersion)
 	for i := range artifact.Documents {
 		entryKey := firstNonEmptyStr(artifact.Documents[i].EntryKey, entryKeyFromDocID(artifact.Documents[i].DocID))
 		artifact.Documents[i].ModuleKey = moduleKey
 		artifact.Documents[i].ModuleName = moduleName
 		artifact.Documents[i].DocsVersion = docsVersion
-		if entryKey != "" {
+		if artifact.Documents[i].DocID != "" {
+			artifact.Documents[i].DocID = rewriteDocIDModuleVersion(artifact.Documents[i].DocID, artifactModuleKey, moduleKey, artifactDocsVersion, docsVersion)
+		} else if entryKey != "" {
 			artifact.Documents[i].DocID = moduleKey + ":" + docsVersion + ":" + entryKey
+		}
+		if rewriteBase {
+			artifact.Documents[i].Content = rewriteDeployAssetBaseString(artifact.Documents[i].Content, artifactModuleKey, moduleKey, artifactDocsVersion, docsVersion)
+			artifact.Documents[i].ContentMD = rewriteDeployAssetBaseString(artifact.Documents[i].ContentMD, artifactModuleKey, moduleKey, artifactDocsVersion, docsVersion)
 		}
 	}
 	artifact.SiteHTML = rewriteDeployAssetBases(artifact.SiteHTML, artifactModuleKey, moduleKey, artifactDocsVersion, docsVersion)
@@ -142,6 +153,20 @@ func canonicalizeDeployArtifact(artifact deploy.Artifact, module store.Module) d
 		}
 	}
 	return artifact
+}
+
+func rewriteDocIDModuleVersion(docID, fromModule, toModule, fromVersion, toVersion string) string {
+	parts := strings.SplitN(docID, ":", 3)
+	if len(parts) != 3 {
+		return docID
+	}
+	if fromModule != "" && !strings.EqualFold(parts[0], fromModule) {
+		return docID
+	}
+	if fromVersion != "" && parts[1] != fromVersion {
+		return docID
+	}
+	return toModule + ":" + toVersion + ":" + parts[2]
 }
 
 func applyModuleMount(artifact deploy.Artifact, module store.Module) deploy.Artifact {

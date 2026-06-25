@@ -18,6 +18,11 @@ type Client struct {
 	HTTP    *http.Client
 }
 
+func (c Client) WithToken(token string) Client {
+	c.Token = token
+	return c
+}
+
 func FromEnv() Client {
 	return Client{
 		BaseURL: env("MODEX_API_BASE_URL", env("DOCS_API_BASE_URL", "http://localhost:8671")),

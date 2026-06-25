@@ -74,6 +74,15 @@ func runHTTP(c client.Client, addr, path string) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		writeOAuthAuthorizationMetadata(c, w, r)
+	})
+	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
+		writeOAuthProtectedResourceMetadata(c, w, r)
+	})
+	mux.HandleFunc("/.well-known/oauth-protected-resource"+path, func(w http.ResponseWriter, r *http.Request) {
+		writeOAuthProtectedResourceMetadata(c, w, r)
+	})
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		handleHTTPRPC(c, w, r)
 	})
@@ -103,6 +112,9 @@ func handleHTTPRPC(c client.Client, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "use POST", http.StatusMethodNotAllowed)
 		return
+	}
+	if token := bearerToken(r); token != "" {
+		c = c.WithToken(token)
 	}
 	defer r.Body.Close()
 	var raw json.RawMessage
@@ -147,6 +159,59 @@ func handleHTTPRPC(c client.Client, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, handleRPC(c, req))
+}
+
+func writeOAuthAuthorizationMetadata(c client.Client, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "use GET", http.StatusMethodNotAllowed)
+		return
+	}
+	base := strings.TrimRight(c.BaseURL, "/")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"issuer":                                base,
+		"authorization_endpoint":                base + "/oauth/authorize",
+		"token_endpoint":                        base + "/oauth/token",
+		"revocation_endpoint":                   base + "/oauth/revoke",
+		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "client_secret_post"},
+		"scopes_supported":                      []string{"modex:mcp:read", "modex:docs:read"},
+	})
+}
+
+func writeOAuthProtectedResourceMetadata(c client.Client, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "use GET", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"resource":              resourceURL(r),
+		"authorization_servers": []string{strings.TrimRight(c.BaseURL, "/")},
+		"scopes_supported":      []string{"modex:mcp:read", "modex:docs:read"},
+	})
+}
+
+func resourceURL(r *http.Request) string {
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = strings.Split(proto, ",")[0]
+	}
+	host := r.Host
+	if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
+		host = strings.Split(forwarded, ",")[0]
+	}
+	return strings.TrimRight(scheme+"://"+strings.TrimSpace(host)+r.URL.Path, "/")
+}
+
+func bearerToken(r *http.Request) string {
+	auth := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		return strings.TrimSpace(auth[len("Bearer "):])
+	}
+	return ""
 }
 
 func handleRPC(c client.Client, req rpcRequest) rpcResponse {

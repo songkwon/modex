@@ -42,9 +42,24 @@ export async function api<T>(path: string, init?: ApiRequestInit): Promise<T> {
     clearTimeout(timeout);
   }
   if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
+    throw new Error(`API ${res.status}: ${await formatAPIError(res)}`);
   }
   return res.json();
+}
+
+async function formatAPIError(res: Response) {
+  const text = await res.text();
+  try {
+    const parsed = JSON.parse(text);
+    const err = parsed?.error;
+    if (err) {
+      return [err.message, err.detail, err.code].filter(Boolean).join(" / ");
+    }
+    if (parsed?.message) return String(parsed.message);
+  } catch {
+    // Fall through to raw text.
+  }
+  return text || res.statusText;
 }
 
 export const getMe = () => api<User>("/api/auth/me");
@@ -168,10 +183,22 @@ export type PlatformSettings = {
   rerank_api_key_set?: boolean;
   ask_system_prompt_default: string;
 };
+export type ModelConnectionTestResult = {
+  kind: "chat" | "embedding" | "rerank";
+  status: string;
+  endpoint: string;
+  model: string;
+  sample?: string;
+  dimension?: number;
+  top_index?: number;
+  score?: number;
+};
 export const getSettings = () => api<PlatformSettings>("/api/admin/settings");
 export const saveSettings = (ai: AISettings) => api<PlatformSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify(ai) });
 export const fetchModels = (base_url: string, api_key?: string, protocol?: string) =>
   api<{ models: string[] }>("/api/admin/settings/models", { method: "POST", body: JSON.stringify({ base_url, api_key: api_key || "", protocol: protocol || "" }) });
+export const testModelConnection = (body: { kind: "chat" | "embedding" | "rerank"; protocol?: string; base_url?: string; model?: string; api_key?: string }) =>
+  api<ModelConnectionTestResult>("/api/admin/settings/test-connection", { method: "POST", body: JSON.stringify(body) });
 
 export type ConnectedApp = {
   id: string;

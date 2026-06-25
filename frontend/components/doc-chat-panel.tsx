@@ -8,7 +8,7 @@ import type { SearchResult } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
 import { AiMarkdown, splitAnswerParts } from "@/components/ai-markdown";
 
-type Message = { role: "user" | "assistant"; text: string; reasoning?: string; sources?: SearchResult[] };
+type Message = { role: "user" | "assistant"; text: string; reasoning?: string; warning?: string; sources?: SearchResult[] };
 
 // DocChatPanel is a right-side drawer for conversing with AI about the current
 // document. Each question is answered with retrieval scoped to this module.
@@ -42,7 +42,7 @@ export function DocChatPanel({
     try {
       const res = await askAI(q, { module_key: moduleKey });
       const parts = splitAnswerParts(res);
-      setMessages((m) => [...m, { role: "assistant", text: parts.answer, reasoning: parts.reasoning, sources: res.sources }]);
+      setMessages((m) => [...m, { role: "assistant", text: parts.answer, reasoning: parts.reasoning, warning: res.warning, sources: res.sources }]);
     } catch (e) {
       setMessages((m) => [...m, { role: "assistant", text: t("component.docChatPanel.error") + String(e) }]);
     } finally {
@@ -70,6 +70,7 @@ export function DocChatPanel({
           {messages.map((m, i) => (
             <div key={i} className={`doc-chat-msg ${m.role}`}>
               <div className="doc-chat-bubble">
+                {m.warning ? <div className="panel badge-warn" style={{ marginBottom: 8, borderRadius: 10 }}>{m.warning}</div> : null}
                 {m.role === "assistant" ? <AiMarkdown answer={m.text} reasoning={m.reasoning} compact /> : m.text}
               </div>
               {m.sources && m.sources.length > 0 ? (

@@ -176,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/.well-known/agent-skills/index.json", s.handleSkillDiscovery)
 	mux.HandleFunc("/.well-known/skills/index.json", s.handleSkillDiscovery)
 	mux.HandleFunc("/api/admin/settings/models", s.handleAdminModels)
+	mux.HandleFunc("/api/admin/settings/test-connection", s.handleAdminModelConnectionTest)
 	mux.HandleFunc("/api/admin/settings/recall-test", s.handleAdminRecallTest)
 	mux.HandleFunc("/api/admin/settings", s.handleAdminSettings)
 	mux.HandleFunc("/api/admin/plugins", s.handleAdminPlugins)
@@ -567,28 +568,39 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "ask_failed", err.Error())
 		return
 	}
-	answer, provider := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
+	answer, provider, warning := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
 	user, _ := s.currentUser(r)
 	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
-	writeJSON(w, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"query":    req.Query,
 		"answer":   answer,
 		"provider": provider,
 		"sources":  resp.Results,
-	})
+	}
+	if warning != "" {
+		payload["warning"] = warning
+	}
+	writeJSON(w, http.StatusOK, payload)
 }
 
-func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []search.Result) (string, string) {
+func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []search.Result) (string, string, string) {
 	// 1) Admin-configured OpenAI-compatible chat model (preferred).
 	if ai := s.app.Store().Settings().AI; strings.TrimSpace(ai.AskBaseURL) != "" && strings.TrimSpace(ai.AskModel) != "" {
 		if answer, err := s.askOpenAICompatible(ctx, ai, query, results); err == nil && strings.TrimSpace(answer) != "" {
-			return answer, "llm"
+			return answer, "llm", ""
 		} else if err != nil {
 			log.Printf("ask llm failed: %v", err)
+			return s.extractiveAnswer(results), "extractive", "大模型调用失败，已退回本地文档摘要：" + err.Error()
 		}
+	} else {
+		return s.extractiveAnswer(results), "extractive", "问答大模型未配置完整，请在模型设置中配置 API Base URL 和模型名称。"
 	}
+	return s.extractiveAnswer(results), "extractive", "大模型返回空答案，已退回本地文档摘要。"
+}
+
+func (s *Server) extractiveAnswer(results []search.Result) string {
 	if len(results) == 0 {
-		return "未在文档库中找到与该问题相关的内容。可以换个关键词，或在左侧按平台浏览。", "extractive"
+		return "未在文档库中找到与该问题相关的内容。可以换个关键词，或在左侧按平台浏览。"
 	}
 	var b strings.Builder
 	b.WriteString("根据文档库中最相关的内容，整理如下：\n\n")
@@ -602,7 +614,7 @@ func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []s
 		}
 	}
 	b.WriteString("\n以上内容来自下方引用文档，点击可查看完整页面。")
-	return b.String(), "extractive"
+	return b.String()
 }
 
 // askOpenAICompatible calls any OpenAI-compatible /chat/completions endpoint
@@ -876,6 +888,190 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"models": ids})
+}
+
+func (s *Server) handleAdminModelConnectionTest(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSuperAdmin(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
+		return
+	}
+	var body struct {
+		Kind     string `json:"kind"`
+		Protocol string `json:"protocol"`
+		BaseURL  string `json:"base_url"`
+		Model    string `json:"model"`
+		APIKey   string `json:"api_key"`
+	}
+	if err := decodeBody(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	kind := strings.TrimSpace(body.Kind)
+	base := strings.TrimSpace(body.BaseURL)
+	model := strings.TrimSpace(body.Model)
+	if base == "" || model == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "base_url and model are required")
+		return
+	}
+	ai := s.app.Store().Settings().AI
+	key := strings.TrimSpace(body.APIKey)
+	switch kind {
+	case "chat":
+		if key == "" {
+			key = ai.AskAPIKey
+		}
+		protocol := strings.TrimSpace(body.Protocol)
+		if protocol == "" {
+			protocol = ai.AskProtocol
+		}
+		result, err := testChatEndpoint(r.Context(), protocol, base, model, key)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "chat_test_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	case "embedding":
+		if key == "" {
+			key = ai.EmbeddingAPIKey
+		}
+		result, err := testEmbeddingEndpoint(r.Context(), base, model, key)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "embedding_test_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	case "rerank":
+		if key == "" {
+			key = ai.RerankAPIKey
+		}
+		result, err := testRerankEndpoint(r.Context(), base, model, key)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "rerank_test_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	default:
+		writeError(w, http.StatusBadRequest, "bad_request", "kind must be chat, embedding or rerank")
+	}
+}
+
+func testChatEndpoint(ctx context.Context, protocol, base, model, key string) (map[string]any, error) {
+	temp := 0.0
+	answer, err := chatComplete(ctx, store.AISettings{
+		AskProtocol:    protocol,
+		AskBaseURL:     base,
+		AskModel:       model,
+		AskAPIKey:      key,
+		AskMaxTokens:   64,
+		AskTemperature: &temp,
+	}, "你是连接测试助手。", "请只回复 OK。")
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(answer) == "" {
+		return nil, fmt.Errorf("chat endpoint returned an empty answer")
+	}
+	return map[string]any{
+		"kind":     "chat",
+		"status":   "ok",
+		"endpoint": chatEndpoint(base, protocol, model),
+		"model":    model,
+		"sample":   truncateRunes(strings.TrimSpace(answer), 80),
+	}, nil
+}
+
+func chatEndpoint(base, protocol, model string) string {
+	endpoint := strings.TrimRight(strings.TrimSpace(base), "/")
+	switch normalizeProtocol(protocol) {
+	case protoAnthropic:
+		return endpoint + "/v1/messages"
+	case protoGemini:
+		return endpoint + "/v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	case protoOpenAIResponses:
+		return endpoint + "/responses"
+	default:
+		return endpoint + "/chat/completions"
+	}
+}
+
+func testEmbeddingEndpoint(ctx context.Context, base, model, key string) (map[string]any, error) {
+	endpoint := modelEndpoint(base, "/embeddings")
+	raw, code, err := httpJSON(ctx, http.MethodPost, endpoint,
+		map[string]string{"Content-Type": "application/json", "Authorization": bearer(key)},
+		map[string]any{"model": model, "input": []string{"Modex embedding connection test"}})
+	if err != nil {
+		return nil, err
+	}
+	if code >= 300 {
+		return nil, fmt.Errorf("%s returned HTTP %d: %s", endpoint, code, strings.TrimSpace(string(raw)))
+	}
+	var out struct {
+		Data []struct {
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decode embedding response from %s: %w", endpoint, err)
+	}
+	if len(out.Data) == 0 || len(out.Data[0].Embedding) == 0 {
+		return nil, fmt.Errorf("%s returned no embedding vector", endpoint)
+	}
+	return map[string]any{
+		"kind":      "embedding",
+		"status":    "ok",
+		"endpoint":  endpoint,
+		"model":     model,
+		"dimension": len(out.Data[0].Embedding),
+	}, nil
+}
+
+func testRerankEndpoint(ctx context.Context, base, model, key string) (map[string]any, error) {
+	endpoint := modelEndpoint(base, "/rerank")
+	raw, code, err := httpJSON(ctx, http.MethodPost, endpoint,
+		map[string]string{"Content-Type": "application/json", "Authorization": bearer(key)},
+		map[string]any{
+			"model":     model,
+			"query":     "Modex rerank connection test",
+			"documents": []string{"Modex rerank connection test document", "unrelated document"},
+			"top_n":     2,
+		})
+	if err != nil {
+		return nil, err
+	}
+	if code >= 300 {
+		return nil, fmt.Errorf("%s returned HTTP %d: %s", endpoint, code, strings.TrimSpace(string(raw)))
+	}
+	var out struct {
+		Results []struct {
+			Index          int     `json:"index"`
+			RelevanceScore float64 `json:"relevance_score"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("decode rerank response from %s: %w", endpoint, err)
+	}
+	if len(out.Results) == 0 {
+		return nil, fmt.Errorf("%s returned no rerank results", endpoint)
+	}
+	return map[string]any{
+		"kind":      "rerank",
+		"status":    "ok",
+		"endpoint":  endpoint,
+		"model":     model,
+		"top_index": out.Results[0].Index,
+		"score":     out.Results[0].RelevanceScore,
+	}, nil
+}
+
+func modelEndpoint(base, suffix string) string {
+	endpoint := strings.TrimRight(strings.TrimSpace(base), "/")
+	if !strings.HasSuffix(endpoint, suffix) {
+		endpoint += suffix
+	}
+	return endpoint
 }
 
 // maskedSettings hides the stored API key but reports whether one is set.
