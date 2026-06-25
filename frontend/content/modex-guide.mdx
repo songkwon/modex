@@ -26,9 +26,14 @@ Modex 用来把团队文档从 Git 仓库同步到统一门户，并让 AI 工�
 
 ## 同步文档
 
-文档仓库通过 GitLab CI 自动同步到 Modex。执行流水线的 Runner 需要支持 Docker；如果团队 Runner 用 tag 区分机器，示例里可以使用 `docker`。
+文档仓库可以通过 GitLab CI 自动同步，也可以由维护人下载 `docsctl` 后手动同步。生产环境推荐 GitLab CI；临时补发、首次排查或没有 CI 权限时，可以用手动方式。
 
-把下面内容复制到文档仓库的 `.gitlab-ci.yml`。`MODEX_DEPLOY_URL` 使用当前 Modex 服务的实际地址：
+<Tabs>
+  <Tab title="GitLab CI 自动同步">
+
+执行流水线的 Runner 需要支持 Docker；如果团队 Runner 用 tag 区分机器，示例里可以使用 `docker`。
+
+把下面内容复制到文档仓库的 `.gitlab-ci.yml`。`MODEX_DEPLOY_URL` 和 `MODEX_DOCSCTL_URL` 使用当前 Modex 服务提供的实际地址：
 
 ```yaml
 include:
@@ -57,6 +62,33 @@ MODEX_DEPLOY_TOKEN=<从 Modex 文档源复制的 Deploy Token>
 <Note>
 如果你的 GitLab Runner 不使用 `docker` 这个 tag，把示例里的 `tags` 改成团队实际可用、且支持 Docker 的 Runner tag。
 </Note>
+
+  </Tab>
+  <Tab title="docsctl 手动同步">
+
+在文档仓库根目录执行下面命令。`MODEX_DEPLOY_TOKEN` 使用对应文档源的 Deploy Token：
+
+```bash
+curl -fsSL "{{MODEX_DOCSCTL_URL}}" -o docsctl
+chmod +x docsctl
+
+export MODEX_DEPLOY_URL="{{MODEX_DEPLOY_URL}}"
+export MODEX_DEPLOY_TOKEN="<从 Modex 文档源复制的 Deploy Token>"
+export MODEX_DOCSCTL_URL="{{MODEX_DOCSCTL_URL}}"
+export DOCS_SOURCE_DIR="."
+export DOCS_VERSION="latest"
+
+./docsctl deploy
+```
+
+如果文档不在仓库根目录，把 `DOCS_SOURCE_DIR` 改成真实文档目录，例如 `docs` 或 `website`。
+
+<Warning>
+手动同步适合临时补发和排查问题。长期维护的文档源仍建议接入 GitLab CI，避免 token 留在个人电脑或操作记录里。
+</Warning>
+
+  </Tab>
+</Tabs>
 
 ## 常见文档路径
 
