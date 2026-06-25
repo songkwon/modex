@@ -9,7 +9,7 @@ import { DocSearch } from "@/components/doc-search";
 import { PlatformCards } from "@/components/platform-cards";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useSearch } from "@/components/search-provider";
-import { getCategories, getModules, getOptionalMe } from "@/lib/api";
+import { getCategories, getModules } from "@/lib/api";
 import { categoryHref } from "@/lib/category-url";
 import { useI18n } from "@/lib/i18n";
 import type { Category, ModuleInfo } from "@/types/modex";
@@ -23,7 +23,6 @@ export default function HomePage() {
   const [selected, setSelected] = useState<ModuleInfo | null>(null);
   const [aiActive, setAiActive] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -31,7 +30,6 @@ export default function HomePage() {
       getCategories().then((items) => setCategories(Array.isArray(items) ? items : [])).catch(() => setCategories([])),
       getModules().then((items) => setAllModules(Array.isArray(items) ? items : [])).catch(() => setAllModules([])),
     ]).finally(() => setLoading(false));
-    getOptionalMe().then((user) => setIsSuperAdmin(!!user?.is_super_admin)).catch(() => setIsSuperAdmin(false));
     clearScope();
     const params = new URLSearchParams(window.location.search);
     const loginError = params.get("login_error");
@@ -80,7 +78,7 @@ export default function HomePage() {
               action={
                 <div className="empty-state-actions">
                   <Link className="button button-primary" href="/admin/modules">{t("home.emptyAction")}</Link>
-                  {isSuperAdmin ? <Link className="button" href="/me/guide">{t("home.emptyGuide")}</Link> : null}
+                  <Link className="button" href="/me/guide">{t("home.emptyGuide")}</Link>
                 </div>
               }
             />

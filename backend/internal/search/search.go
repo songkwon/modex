@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"regexp"
@@ -218,10 +219,10 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 		})
 	}
 	sort.Slice(scored, func(i, j int) bool { return scored[i].Score > scored[j].Score })
-	var err error
-	scored, err = s.rerank(ctx, req.Query, scored)
-	if err != nil {
-		return Response{}, err
+	if reranked, err := s.rerank(ctx, req.Query, scored); err == nil {
+		scored = reranked
+	} else {
+		log.Printf("search rerank skipped: %v", err)
 	}
 	total := len(scored)
 	start := (req.Page - 1) * req.PageSize

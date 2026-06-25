@@ -46,6 +46,27 @@ func TestRerankUsesAdminSettings(t *testing.T) {
 	}
 }
 
+func TestSearchFallsBackWhenRerankProviderFails(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+
+	st := store.NewSeededTestStore()
+	st.SaveAISettings(store.AISettings{
+		RerankBaseURL: server.URL + "/v1",
+		RerankModel:   "rerank-v1",
+		RerankTopK:    2,
+	})
+	s := Service{Store: st, Embedder: embedding.FallbackProvider{Dim: 256}, KeywordWeight: 0.6, SemanticWeight: 0.4}
+
+	resp, err := s.Search(context.Background(), Request{Query: "构建缓存", Mode: ModeKeyword, PageSize: 5})
+	if err != nil {
+		t.Fatalf("Search should fall back when rerank fails: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("expected search results without rerank")
+	}
+}
+
 type fakeVectorStore struct {
 	vectors  map[string][]float32
 	simCalls int

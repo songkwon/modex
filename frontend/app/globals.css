@@ -3858,3 +3858,84 @@ tr:hover .row-actions { opacity: 1; }
   color: hsl(var(--accent-strong));
   background: hsl(var(--accent-soft));
 }
+
+.welcome-guide-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 80;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--panel));
+  box-shadow: 0 18px 55px hsl(210 35% 10% / .18);
+}
+.welcome-guide-toast__icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: hsl(var(--accent-strong));
+  background: hsl(var(--accent-soft));
+}
+.welcome-guide-toast__body {
+  min-width: 0;
+}
+.welcome-guide-toast__title {
+  font-size: 14px;
+  font-weight: 750;
+  color: hsl(var(--foreground));
+}
+.welcome-guide-toast__body p {
+  margin: 2px 0 0;
+  color: hsl(var(--muted));
+  font-size: 13px;
+  line-height: 1.45;
+}
+.welcome-guide-toast__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.welcome-guide-toast__close {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  color: hsl(var(--muted));
+  background: transparent;
+  cursor: pointer;
+}
+.welcome-guide-toast__close:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--panel-subtle));
+}
+
+@media (max-width: 760px) {
+  .welcome-guide-toast {
+    bottom: 12px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .welcome-guide-toast__actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+  .welcome-guide-toast__actions .button {
+    flex: 1;
+  }
+  .welcome-guide-toast__close {
+    align-self: start;
+  }
+}

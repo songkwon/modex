@@ -109,7 +109,7 @@ go run ./cmd/docsctl deploy
 
 Deploy Token 可在管理后台为文档源生成。生产 CI 中请把 token 放到 GitLab/GitHub 的 secret variables，不要提交到仓库。
 
-GitLab CI 接入说明见 [deploy/ci/modex-docs.md](deploy/ci/modex-docs.md)。模板会自动下载 GitHub Release 里的预编译 `docsctl` 二进制。
+GitLab CI 可 include [deploy/ci/modex-docs.gitlab-ci.yml](deploy/ci/modex-docs.gitlab-ci.yml)。页面内「使用指南」会按当前 Modex 实例展示部署地址、`docsctl` 下载地址和 Runner tag。
 
 ## AI 工具接入
 
@@ -205,7 +205,7 @@ npm run e2e
 - [测试指南](docs/testing.md)
 - [国际化与 Weblate](docs/i18n-weblate.md)
 - [VuePress 迁移指南](docs/vuepress-migration.md)
-- [GitLab CI 模板](deploy/ci/modex-docs.md)
+- [GitLab CI 模板](deploy/ci/modex-docs.gitlab-ci.yml)
 - [生产升级与回滚](docs/operations.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
