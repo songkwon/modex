@@ -450,6 +450,106 @@ func TestRewriteStaticSiteBaseOnlyRewritesExistingAssets(t *testing.T) {
 	}
 }
 
+func TestRewriteStaticSiteBaseToRelative(t *testing.T) {
+	site := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(site, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll assets: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(site, "posts", "guide"), 0o755); err != nil {
+		t.Fatalf("MkdirAll posts: %v", err)
+	}
+	for name, content := range map[string]string{
+		"assets/app.css": "body{background:url('/api/docs/demo/v1/guide/site/assets/bg.png')}",
+		"assets/app.js":  "console.log('ok')",
+		"assets/bg.png":  "png",
+	} {
+		if err := os.WriteFile(filepath.Join(site, filepath.FromSlash(name)), []byte(content), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", name, err)
+		}
+	}
+	rootHTML := `<link href="/api/docs/demo/v1/guide/site/assets/app.css"><script src="/api/docs/demo/v1/guide/site/assets/app.js"></script>`
+	if err := os.WriteFile(filepath.Join(site, "index.html"), []byte(rootHTML), 0o644); err != nil {
+		t.Fatalf("WriteFile index: %v", err)
+	}
+	nestedHTML := `<link href="/api/docs/demo/v1/guide/site/assets/app.css">`
+	if err := os.WriteFile(filepath.Join(site, "posts", "guide", "intro.html"), []byte(nestedHTML), 0o644); err != nil {
+		t.Fatalf("WriteFile nested: %v", err)
+	}
+
+	count, err := rewriteStaticSiteBaseToRelative(site, "/api/docs/demo/v1/guide/site/")
+	if err != nil {
+		t.Fatalf("rewriteStaticSiteBaseToRelative: %v", err)
+	}
+	if count != 4 {
+		t.Fatalf("rewritten count = %d, want 4", count)
+	}
+	rootBytes, _ := os.ReadFile(filepath.Join(site, "index.html"))
+	if root := string(rootBytes); !strings.Contains(root, `href="./assets/app.css"`) || !strings.Contains(root, `src="./assets/app.js"`) {
+		t.Fatalf("root html not relativized: %s", root)
+	}
+	nestedBytes, _ := os.ReadFile(filepath.Join(site, "posts", "guide", "intro.html"))
+	if nested := string(nestedBytes); !strings.Contains(nested, `href="../../assets/app.css"`) {
+		t.Fatalf("nested html not relativized: %s", nested)
+	}
+	cssBytes, _ := os.ReadFile(filepath.Join(site, "assets", "app.css"))
+	if css := string(cssBytes); !strings.Contains(css, `url('./bg.png')`) {
+		t.Fatalf("css not relativized: %s", css)
+	}
+}
+
+func TestRewriteStaticSiteBaseStripsLegacyBasePrefix(t *testing.T) {
+	site := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(site, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll assets: %v", err)
+	}
+	for name, content := range map[string]string{
+		"assets/style.css": "body{background:url('/internal-tools/assets/bg.png')}",
+		"assets/app.js":    "console.log('ok')",
+		"assets/bg.png":    "png",
+	} {
+		if err := os.WriteFile(filepath.Join(site, filepath.FromSlash(name)), []byte(content), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", name, err)
+		}
+	}
+	html := `<link href="/internal-tools/assets/style.css"><script src="/internal-tools/assets/app.js"></script>`
+	if err := os.WriteFile(filepath.Join(site, "index.html"), []byte(html), 0o644); err != nil {
+		t.Fatalf("WriteFile index: %v", err)
+	}
+
+	base := "/api/docs/internal-wiki/latest/guide/site/"
+	count, err := rewriteStaticSiteBase(site, base)
+	if err != nil {
+		t.Fatalf("rewriteStaticSiteBase: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("rewritten count = %d, want 3", count)
+	}
+	indexBytes, _ := os.ReadFile(filepath.Join(site, "index.html"))
+	if index := string(indexBytes); strings.Contains(index, "/internal-tools/") || !strings.Contains(index, base+"assets/style.css") {
+		t.Fatalf("legacy base was not normalized: %s", index)
+	}
+	cssBytes, _ := os.ReadFile(filepath.Join(site, "assets", "style.css"))
+	if css := string(cssBytes); strings.Contains(css, "/internal-tools/") || !strings.Contains(css, base+"assets/bg.png") {
+		t.Fatalf("legacy css base was not normalized: %s", css)
+	}
+
+	relative, err := rewriteStaticSiteBaseToRelative(site, base)
+	if err != nil {
+		t.Fatalf("rewriteStaticSiteBaseToRelative: %v", err)
+	}
+	if relative != 3 {
+		t.Fatalf("relative count = %d, want 3", relative)
+	}
+	indexBytes, _ = os.ReadFile(filepath.Join(site, "index.html"))
+	if index := string(indexBytes); !strings.Contains(index, `href="./assets/style.css"`) || !strings.Contains(index, `src="./assets/app.js"`) {
+		t.Fatalf("legacy base was not relativized: %s", index)
+	}
+	cssBytes, _ = os.ReadFile(filepath.Join(site, "assets", "style.css"))
+	if css := string(cssBytes); !strings.Contains(css, `url('./bg.png')`) {
+		t.Fatalf("legacy css base was not relativized: %s", css)
+	}
+}
+
 func TestBuildLogHelpersBoundAndRedactOutput(t *testing.T) {
 	buffer := newTailBuffer(8)
 	if _, err := buffer.Write([]byte("0123456789abcdef")); err != nil {

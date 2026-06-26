@@ -4,6 +4,7 @@ import { MdxContent } from "@/components/mdx/mdx-content";
 import { DocToc } from "@/components/doc-toc";
 import { DocSourceToggle } from "@/components/doc-source-toggle";
 import { getServerI18n } from "@/lib/i18n-server";
+import { publicAppTitle } from "@/lib/runtime-config";
 
 async function loadGuide() {
   return readFile(path.join(process.cwd(), "content/markdown-showcase.md"), "utf8");
@@ -12,12 +13,13 @@ async function loadGuide() {
 export default async function MarkdownGuidePage() {
   const source = await loadGuide();
   const { t } = await getServerI18n();
+  const appTitle = publicAppTitle();
   return (
     <main className="main docs-shell">
       <section className="doc-layout doc-layout--single">
         <aside className="doc-sidebar" />
         <article className="panel prose doc-page">
-          <p className="muted text-sm doc-breadcrumb">Modex / Guide</p>
+          <p className="muted text-sm doc-breadcrumb">{appTitle} / Guide</p>
           <div className="doc-title-row">
             <h1 className="doc-title" id="overview">{t("me.markdownGuide.title")}</h1>
           </div>

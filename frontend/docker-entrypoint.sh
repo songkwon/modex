@@ -4,6 +4,45 @@ set -eu
 runtime_config_file="${MODEX_RUNTIME_CONFIG_FILE:-/app/public/runtime-env.js}"
 export MODEX_RUNTIME_CONFIG_FILE="$runtime_config_file"
 
+detect_brand_file() {
+  name="$1"
+  for ext in svg png webp jpg jpeg ico; do
+    if [ -f "/app/public/brand/${name}.${ext}" ]; then
+      printf "/brand/%s.%s" "$name" "$ext"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [ -z "${MODEX_PUBLIC_LOGO_URL:-}" ] && [ -z "${NEXT_PUBLIC_LOGO_URL:-}" ]; then
+  if detected="$(detect_brand_file logo)"; then
+    export MODEX_PUBLIC_LOGO_URL="$detected"
+  fi
+fi
+
+if [ -z "${MODEX_PUBLIC_LOGO_LIGHT_URL:-}" ] && [ -z "${NEXT_PUBLIC_LOGO_LIGHT_URL:-}" ]; then
+  if detected="$(detect_brand_file logo-light)"; then
+    export MODEX_PUBLIC_LOGO_LIGHT_URL="$detected"
+  elif [ -n "${MODEX_PUBLIC_LOGO_URL:-}" ]; then
+    export MODEX_PUBLIC_LOGO_LIGHT_URL="$MODEX_PUBLIC_LOGO_URL"
+  fi
+fi
+
+if [ -z "${MODEX_PUBLIC_LOGO_DARK_URL:-}" ] && [ -z "${NEXT_PUBLIC_LOGO_DARK_URL:-}" ]; then
+  if detected="$(detect_brand_file logo-dark)"; then
+    export MODEX_PUBLIC_LOGO_DARK_URL="$detected"
+  elif [ -n "${MODEX_PUBLIC_LOGO_URL:-}" ]; then
+    export MODEX_PUBLIC_LOGO_DARK_URL="$MODEX_PUBLIC_LOGO_URL"
+  fi
+fi
+
+if [ -z "${MODEX_PUBLIC_FAVICON_URL:-}" ] && [ -z "${NEXT_PUBLIC_FAVICON_URL:-}" ]; then
+  if detected="$(detect_brand_file favicon)"; then
+    export MODEX_PUBLIC_FAVICON_URL="$detected"
+  fi
+fi
+
 node <<'NODE'
 const fs = require("fs");
 const path = require("path");
@@ -25,6 +64,10 @@ function normalizeGitlabCiTemplateInclude(value) {
 
 const config = {
   appTitle: pick("MODEX_PUBLIC_APP_TITLE", "NEXT_PUBLIC_APP_TITLE", "Modex"),
+  logoUrl: pick("MODEX_PUBLIC_LOGO_URL", "NEXT_PUBLIC_LOGO_URL", "/logo.svg"),
+  logoLightUrl: pick("MODEX_PUBLIC_LOGO_LIGHT_URL", "NEXT_PUBLIC_LOGO_LIGHT_URL", pick("MODEX_PUBLIC_LOGO_URL", "NEXT_PUBLIC_LOGO_URL", "/logo.svg")),
+  logoDarkUrl: pick("MODEX_PUBLIC_LOGO_DARK_URL", "NEXT_PUBLIC_LOGO_DARK_URL", pick("MODEX_PUBLIC_LOGO_URL", "NEXT_PUBLIC_LOGO_URL", "/logo.svg")),
+  faviconUrl: pick("MODEX_PUBLIC_FAVICON_URL", "NEXT_PUBLIC_FAVICON_URL", "/icon.svg"),
   apiBaseUrl: pick("MODEX_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "http://localhost:8671").replace(/\/+$/, ""),
   krokiUrl: pick("MODEX_PUBLIC_KROKI_URL", "NEXT_PUBLIC_KROKI_URL", "https://kroki.io").replace(/\/+$/, ""),
   gitlabCiTemplateInclude: normalizeGitlabCiTemplateInclude(pick(

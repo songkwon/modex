@@ -149,6 +149,10 @@ services:
       PORT: 3456
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:${BACKEND_PORT:-8671}}
       MODEX_PUBLIC_APP_TITLE: ${MODEX_PUBLIC_APP_TITLE:-Modex}
+      MODEX_PUBLIC_LOGO_URL: ${MODEX_PUBLIC_LOGO_URL:-}
+      MODEX_PUBLIC_LOGO_LIGHT_URL: ${MODEX_PUBLIC_LOGO_LIGHT_URL:-}
+      MODEX_PUBLIC_LOGO_DARK_URL: ${MODEX_PUBLIC_LOGO_DARK_URL:-}
+      MODEX_PUBLIC_FAVICON_URL: ${MODEX_PUBLIC_FAVICON_URL:-}
       MODEX_PUBLIC_API_BASE_URL: ${MODEX_PUBLIC_API_BASE_URL:-http://localhost:8671}
       MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE: '${MODEX_PUBLIC_GITLAB_CI_TEMPLATE_INCLUDE:-include:\n  - project: "songkwon/modex-fscut"\n    ref: "main"\n    file: "deploy/ci/modex-docs.gitlab-ci.yml"}'
       MODEX_PUBLIC_DOCSCTL_URL: ${MODEX_PUBLIC_DOCSCTL_URL:-https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64}
@@ -161,6 +165,8 @@ services:
       MODEX_PUBLIC_KROKI_URL: ${MODEX_PUBLIC_KROKI_URL:-https://kroki.io}
     ports:
       - "${FRONTEND_PORT:-3456}:3456"
+    volumes:
+      - ./branding:/app/public/brand:ro
     depends_on:
       backend:
         condition: service_healthy

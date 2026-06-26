@@ -31,6 +31,44 @@ func TestHealthIncludesOperationalSnapshot(t *testing.T) {
 	}
 }
 
+func TestRewriteServedSiteRootRefsHandlesLegacyVitePressBase(t *testing.T) {
+	input := []byte(`<link href="/internal-tools/assets/style.css"><script src="/internal-tools/assets/app.js"></script><img srcset="/internal-tools/assets/a.png 1x, /internal-tools/assets/b.png 2x"><style>.x{background:url('/internal-tools/assets/bg.png')}</style>`)
+
+	out := string(rewriteServedSiteRootRefs(input, "internal-wiki", "latest", "guide"))
+
+	base := "/api/docs/internal-wiki/latest/guide/site/"
+	for _, want := range []string{
+		`href="` + base + `assets/style.css"`,
+		`src="` + base + `assets/app.js"`,
+		base + `assets/a.png 1x`,
+		base + `assets/b.png 2x`,
+		`url('` + base + `assets/bg.png')`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("rewritten output missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "/internal-tools/") {
+		t.Fatalf("legacy base still present: %s", out)
+	}
+}
+
+func TestSiteFileCandidatesSupportVitePressRoutes(t *testing.T) {
+	cases := map[string][]string{
+		"":                                     {"index.html"},
+		"posts/cbb-shelf/system-overview":      {"posts/cbb-shelf/system-overview", "posts/cbb-shelf/system-overview.html", "posts/cbb-shelf/system-overview/index.html", "index.html"},
+		"posts/cbb-shelf/system-overview.md":   {"posts/cbb-shelf/system-overview.md", "posts/cbb-shelf/system-overview.html"},
+		"assets/style.css":                     {"assets/style.css"},
+		"/posts/process-tools/itr/user-guide/": {"posts/process-tools/itr/user-guide", "posts/process-tools/itr/user-guide.html", "posts/process-tools/itr/user-guide/index.html", "index.html"},
+	}
+	for input, want := range cases {
+		got := siteFileCandidates(input)
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("siteFileCandidates(%q) = %#v, want %#v", input, got, want)
+		}
+	}
+}
+
 func TestDeployErrorIncludesStageReport(t *testing.T) {
 	st := store.NewSeededTestStore()
 	if _, err := st.UpdateModule("DemoModule", store.Module{DeployToken: "secret"}); err != nil {

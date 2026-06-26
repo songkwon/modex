@@ -10,17 +10,18 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Pagination } from "@/components/ui/pagination";
 import { Mermaid } from "@/components/mdx/mermaid";
 import { createModule, getManagedCategories, getDeployToken, rotateDeployToken, updateModule } from "@/lib/api";
-import { gitlabCiTemplateInclude } from "@/lib/runtime-config";
+import { gitlabCiTemplateInclude, publicAppTitle } from "@/lib/runtime-config";
 import { usePaged } from "@/lib/use-paged";
 import type { Category, ModuleInfo } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
 
 const PAGE_SIZE = 8;
 const COMPILED = new Set(["vitepress", "vuepress", "fumadocs", "docusaurus", "mkdocs", "honkit", "gitbook", "static"]);
-const INTEGRATION_FLOW = `sequenceDiagram
+function integrationFlow(appTitle: string) {
+  return `sequenceDiagram
     autonumber
     participant User as 管理员
-    participant Modex as Modex
+    participant Modex as ${appTitle}
     participant CI as 文档仓库 CI
     participant Docsctl as docsctl
     User->>Modex: 创建文档源并复制 Deploy Token
@@ -29,6 +30,7 @@ const INTEGRATION_FLOW = `sequenceDiagram
     Docsctl->>Docsctl: 注入 DOCS_BASE 并构建、打包
     Docsctl->>Modex: 上传文档制品和仓库元数据
     Modex-->>User: 归档版本并开放检索`;
+}
 
 const BASE_CONFIGS = [
   {
@@ -105,6 +107,7 @@ variables:
 
 export default function AdminModulesPage() {
   const { t } = useI18n();
+  const appTitle = publicAppTitle();
   const DOC_TYPES = [
     { value: "vitepress", label: "VitePress", hint: t("admin.modules.compiled_static_site") },
     { value: "vuepress", label: "VuePress", hint: t("admin.modules.compiled") },
@@ -298,7 +301,7 @@ export default function AdminModulesPage() {
           <section className="docs-integration-section">
             <div className="docs-integration-heading">
               <span className="docs-integration-index">01</span>
-              <div><h3>{t("admin.modules.integrationOverviewTitle")}</h3><p>{t("admin.modules.integrationOverviewCopy")}</p></div>
+              <div><h3>{t("admin.modules.integrationOverviewTitle")}</h3><p>{t("admin.modules.integrationOverviewCopy", { appTitle })}</p></div>
             </div>
             <ol className="docs-integration-steps">
               <li><span>1</span><div><strong>{t("admin.modules.integrationStepCreateTitle")}</strong><p>{t("admin.modules.integrationStepCreateCopy")}</p></div></li>
@@ -310,10 +313,10 @@ export default function AdminModulesPage() {
           <section className="docs-integration-section">
             <div className="docs-integration-heading">
               <span className="docs-integration-index">02</span>
-              <div><h3>{t("admin.modules.integrationFlowTitle")}</h3><p>{t("admin.modules.integrationFlowCopy")}</p></div>
+              <div><h3>{t("admin.modules.integrationFlowTitle")}</h3><p>{t("admin.modules.integrationFlowCopy", { appTitle })}</p></div>
             </div>
             <div className="docs-integration-diagram" aria-label={t("admin.modules.integrationFlowDiagramLabel")}>
-              <Mermaid chart={INTEGRATION_FLOW} />
+              <Mermaid chart={integrationFlow(appTitle)} />
             </div>
           </section>
 

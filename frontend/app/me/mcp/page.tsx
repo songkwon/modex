@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { Copy, RefreshCw, Check } from "lucide-react";
 import { getAuthConfig, getMCPToken, rotateMCPToken } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { publicApiBaseURL } from "@/lib/runtime-config";
+import { publicApiBaseURL, publicAppTitle } from "@/lib/runtime-config";
 
 export default function McpUsagePage() {
   const { t } = useI18n();
+  const appTitle = publicAppTitle();
   const [token, setToken] = useState("");
   const [apiBase, setApiBase] = useState(publicApiBaseURL());
   const [loading, setLoading] = useState(true);
@@ -78,9 +79,9 @@ codex mcp login modex --scopes modex:mcp:read,modex:docs:read`;
       <section className="grid" style={{ maxWidth: 860, margin: "0 auto" }}>
         <header className="hero-panel">
           <div className="page-kicker">{t("me.mcp.ai_tool_integration")}</div>
-          <h1 className="page-title">{t("me.mcp.integrate_modex_into_your_ai_workspace")}</h1>
+          <h1 className="page-title">{t("me.mcp.integrate_modex_into_your_ai_workspace", { appTitle })}</h1>
           <p className="hero-copy">
-            {t("me.mcp.this_mcp_and_skill_are_designed_for_modex")}
+            {t("me.mcp.this_mcp_and_skill_are_designed_for_modex", { appTitle })}
             <code className="code-chip" style={{ margin: "0 4px" }}>npx</code> {t("me.mcp.launched_on_demand_locally_and_connects_to_the")}
           </p>
         </header>
@@ -166,9 +167,9 @@ codex mcp login modex --scopes modex:mcp:read,modex:docs:read`;
         </section>
 
         <section className="card">
-          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.install_modex_skill")}</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 720 }}>{t("me.mcp.install_modex_skill", { appTitle })}</h2>
           <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {t("me.mcp.skills_provide_modex_usage_guidelines_retrieval_preferences_and")}
+            {t("me.mcp.skills_provide_modex_usage_guidelines_retrieval_preferences_and", { appTitle })}
           </p>
           <div style={{ position: "relative" }}>
             <pre className="mcp-code">{skillCmd}</pre>
