@@ -1,7 +1,7 @@
-# Modex 使用指南
+# {{APP_TITLE}} 使用指南
 
 <Banner>
-Modex 用来把团队文档从 Git 仓库同步到统一门户，并让 AI 工具通过 MCP 读取这些文档。
+{{APP_TITLE}} 用来把团队文档从 Git 仓库同步到统一门户，并让 AI 工具通过 MCP 读取这些文档。
 </Banner>
 
 ## 先确认归属
@@ -33,18 +33,13 @@ Modex 用来把团队文档从 Git 仓库同步到统一门户，并让 AI 工�
 
 执行流水线的 Runner 需要支持 Docker；如果团队 Runner 用 tag 区分机器，示例里可以使用 `docker`。
 
-把下面内容复制到文档仓库的 `.gitlab-ci.yml`。`MODEX_DEPLOY_URL` 和 `MODEX_DOCSCTL_URL` 使用当前 Modex 服务提供的实际地址：
+把下面内容复制到文档仓库的 `.gitlab-ci.yml`。`MODEX_DEPLOY_URL` 和 `MODEX_DOCSCTL_URL` 使用当前 {{APP_TITLE}} 服务提供的实际地址：
 
 ```yaml
 include:
   - project: "songkwon/modex-fscut"
     ref: "main"
     file: "deploy/ci/modex-docs.gitlab-ci.yml"
-
-variables:
-  MODEX_DEPLOY_URL: "{{MODEX_DEPLOY_URL}}"
-  MODEX_DOCSCTL_URL: "{{MODEX_DOCSCTL_URL}}"
-  DOCS_SOURCE_DIR: "."
 
 modex-docs-deploy:
   tags:

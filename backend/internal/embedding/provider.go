@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -124,7 +125,12 @@ func (p SettingsProvider) EmbedBatch(ctx context.Context, texts []string) ([][]f
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("embedding http status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return nil, fmt.Errorf("embedding http status %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("embedding http status %d: %s", resp.StatusCode, msg)
 	}
 	var decoded struct {
 		Data []struct {

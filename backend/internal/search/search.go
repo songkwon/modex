@@ -17,6 +17,8 @@ import (
 	"modex/backend/internal/store"
 )
 
+const maxEmbeddingInputRunes = 12000
+
 type Mode string
 
 const (
@@ -144,7 +146,11 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	// avoid an unnecessary embedding-provider call.
 	var queryVec []float32
 	if req.Mode != ModeKeyword && strings.TrimSpace(req.Query) != "" {
-		queryVec, _ = s.Embedder.EmbedText(ctx, req.Query)
+		var err error
+		queryVec, err = s.Embedder.EmbedText(ctx, truncateEmbeddingInput(req.Query))
+		if err != nil {
+			return Response{}, fmt.Errorf("embed query: %w", err)
+		}
 	}
 	// The fallback provider returns hash-based vectors (no real semantics). In
 	// hybrid mode that noise floats weak docs up and buries strong keyword hits
@@ -395,7 +401,7 @@ func (s Service) Reindex(ctx context.Context) (int, error) {
 		}
 		vec, err := s.Embedder.EmbedText(ctx, text)
 		if err != nil {
-			return count, err
+			return count, fmt.Errorf("embed page %s: %w", p.DocID, err)
 		}
 		if err := s.upsertEmbedding(ctx, p.DocID, vec); err != nil {
 			return count, err
@@ -417,7 +423,7 @@ func (s Service) pageVector(ctx context.Context, p store.Page, vectors map[strin
 	}
 	vec, err := s.Embedder.EmbedText(ctx, text)
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("embed page %s: %w", p.DocID, err)
 	}
 	if err := s.upsertEmbedding(ctx, p.DocID, vec); err != nil {
 		return nil, err
@@ -451,7 +457,7 @@ func (s Service) ensureExternalEmbeddings(ctx context.Context, pages []store.Pag
 		}
 		vector, err := s.Embedder.EmbedText(ctx, text)
 		if err != nil {
-			return err
+			return fmt.Errorf("embed page %s: %w", page.DocID, err)
 		}
 		if err := s.Vectors.Upsert(ctx, page.DocID, vector); err != nil {
 			return err
@@ -492,7 +498,19 @@ func (s Service) DeleteModuleVersionEmbeddings(ctx context.Context, moduleKey, d
 }
 
 func embedText(p store.Page) string {
-	return strings.TrimSpace(p.Title + "\n" + p.Description + "\n" + p.ContentText)
+	return truncateEmbeddingInput(strings.TrimSpace(p.Title + "\n" + p.Description + "\n" + p.ContentText))
+}
+
+func truncateEmbeddingInput(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= maxEmbeddingInputRunes {
+		return text
+	}
+	return string(runes[:maxEmbeddingInputRunes])
 }
 
 // cosine returns a 0..1 similarity (cosine distance shifted into [0,1]).

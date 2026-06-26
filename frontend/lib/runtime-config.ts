@@ -1,5 +1,9 @@
 export type RuntimeConfig = {
   appTitle: string;
+  logoUrl: string;
+  logoLightUrl: string;
+  logoDarkUrl: string;
+  faviconUrl: string;
   apiBaseUrl: string;
   krokiUrl: string;
   gitlabCiTemplateInclude: string;
@@ -23,6 +27,8 @@ declare global {
 
 const SERVER_DEFAULT_API_BASE_URL = "http://localhost:8671";
 const DEFAULT_APP_TITLE = "Modex";
+const DEFAULT_LOGO_URL = "/logo.svg";
+const DEFAULT_FAVICON_URL = "/icon.svg";
 const DEFAULT_KROKI_URL = "https://kroki.io";
 const DEFAULT_POSTHOG_HOST = "https://app.posthog.com";
 const DEFAULT_DOCSCTL_URL = "https://github.com/modex/modex/releases/latest/download/docsctl-linux-amd64";
@@ -92,6 +98,14 @@ export function runtimeConfig(): RuntimeConfig {
   const cfg = browserConfig();
   return {
     appTitle: cfg.appTitle || envValue("MODEX_PUBLIC_APP_TITLE", "NEXT_PUBLIC_APP_TITLE", DEFAULT_APP_TITLE),
+    logoUrl: cfg.logoUrl || envValue("MODEX_PUBLIC_LOGO_URL", "NEXT_PUBLIC_LOGO_URL", DEFAULT_LOGO_URL),
+    logoLightUrl:
+      cfg.logoLightUrl ||
+      envValue("MODEX_PUBLIC_LOGO_LIGHT_URL", "NEXT_PUBLIC_LOGO_LIGHT_URL", cfg.logoUrl || DEFAULT_LOGO_URL),
+    logoDarkUrl:
+      cfg.logoDarkUrl ||
+      envValue("MODEX_PUBLIC_LOGO_DARK_URL", "NEXT_PUBLIC_LOGO_DARK_URL", cfg.logoUrl || DEFAULT_LOGO_URL),
+    faviconUrl: cfg.faviconUrl || envValue("MODEX_PUBLIC_FAVICON_URL", "NEXT_PUBLIC_FAVICON_URL", DEFAULT_FAVICON_URL),
     apiBaseUrl: normalizeApiBaseURL(
       cfg.apiBaseUrl || envValue("MODEX_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", defaultApiBaseURL())
     ),
@@ -121,6 +135,19 @@ export function publicApiBaseURL(): string {
 
 export function publicAppTitle(): string {
   return runtimeConfig().appTitle;
+}
+
+export function publicLogoURL(): string {
+  return runtimeConfig().logoUrl;
+}
+
+export function publicLogoURLs(): { light: string; dark: string } {
+  const cfg = runtimeConfig();
+  return { light: cfg.logoLightUrl || cfg.logoUrl, dark: cfg.logoDarkUrl || cfg.logoUrl };
+}
+
+export function publicFaviconURL(): string {
+  return runtimeConfig().faviconUrl;
 }
 
 export function publicKrokiURL(): string {

@@ -12,10 +12,12 @@ import { useSearch } from "@/components/search-provider";
 import { getCategories, getModules } from "@/lib/api";
 import { categoryHref } from "@/lib/category-url";
 import { useI18n } from "@/lib/i18n";
+import { publicAppTitle } from "@/lib/runtime-config";
 import type { Category, ModuleInfo } from "@/types/modex";
 
 export default function HomePage() {
   const { t } = useI18n();
+  const appTitle = publicAppTitle();
   const router = useRouter();
   const { clearScope } = useSearch();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -51,7 +53,7 @@ export default function HomePage() {
       <section className={`home-hero mb-5 ${aiActive ? "home-hero-focus" : ""}`}>
         <div className="registry-kicker">
           <Layers3 size={16} />
-          {t("home.kicker")}
+          {t("home.kicker", { appTitle })}
         </div>
         <h1 className="registry-title">{t("home.title")}</h1>
         <p className="home-hero-sub muted">{t("home.subtitle")}</p>

@@ -166,6 +166,11 @@ func buildCommandEntry(root, outDir string, md Metadata, entry Entry) (string, e
 		if err != nil {
 			return "", fmt.Errorf("entry %q normalize static-site base %s: %w", entry.Key, base, err)
 		}
+		relative, err := rewriteStaticSiteBaseToRelative(siteDir, base)
+		if err != nil {
+			return "", fmt.Errorf("entry %q relativize static-site base %s: %w", entry.Key, base, err)
+		}
+		rewritten += relative
 		if rewritten > 0 {
 			fmt.Printf("docsctl build entry=%s normalized %d root-relative asset references to %s\n", entry.Key, rewritten, base)
 		}
@@ -366,6 +371,140 @@ func rewriteStaticSiteBase(siteDir, base string) (int, error) {
 	return total, err
 }
 
+func rewriteStaticSiteBaseToRelative(siteDir, base string) (int, error) {
+	base = "/" + strings.Trim(strings.TrimSpace(base), "/") + "/"
+	total := 0
+	err := filepath.Walk(siteDir, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || strings.HasSuffix(strings.ToLower(info.Name()), ".map") {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(filePath))
+		if ext != ".html" && ext != ".htm" && ext != ".css" && ext != ".json" && ext != ".webmanifest" {
+			return nil
+		}
+		b, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+		original := string(b)
+		updated := original
+		if ext == ".html" || ext == ".htm" {
+			updated, total = rewriteBaseMatchesToRelative(updated, htmlRootRef, siteDir, filePath, base, total)
+			updated, total = rewriteBaseSrcsetToRelative(updated, siteDir, filePath, base, total)
+			updated, total = rewriteBaseMatchesToRelative(updated, cssRootRef, siteDir, filePath, base, total)
+		} else if ext == ".css" {
+			updated, total = rewriteBaseMatchesToRelative(updated, cssRootRef, siteDir, filePath, base, total)
+		} else {
+			updated, total = rewriteJSONBaseRefsToRelative(updated, siteDir, filePath, base, total)
+		}
+		if updated != original {
+			return os.WriteFile(filePath, []byte(updated), info.Mode().Perm())
+		}
+		return nil
+	})
+	return total, err
+}
+
+func rewriteBaseMatchesToRelative(input string, pattern *regexp.Regexp, siteDir, filePath, base string, total int) (string, int) {
+	updated := pattern.ReplaceAllStringFunc(input, func(match string) string {
+		parts := pattern.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		rewritten, ok := rewriteBaseRefToRelative(parts[2], siteDir, filePath, base)
+		if !ok {
+			return match
+		}
+		total++
+		return parts[1] + rewritten + parts[3]
+	})
+	return updated, total
+}
+
+func rewriteBaseSrcsetToRelative(input, siteDir, filePath, base string, total int) (string, int) {
+	updated := htmlSrcset.ReplaceAllStringFunc(input, func(match string) string {
+		parts := htmlSrcset.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		candidates := strings.Split(parts[2], ",")
+		for i, candidate := range candidates {
+			fields := strings.Fields(strings.TrimSpace(candidate))
+			if len(fields) == 0 {
+				continue
+			}
+			if rewritten, ok := rewriteBaseRefToRelative(fields[0], siteDir, filePath, base); ok {
+				fields[0] = rewritten
+				candidates[i] = strings.Join(fields, " ")
+				total++
+			}
+		}
+		return parts[1] + strings.Join(candidates, ", ") + parts[3]
+	})
+	return updated, total
+}
+
+func rewriteJSONBaseRefsToRelative(input, siteDir, filePath, base string, total int) (string, int) {
+	startTotal := total
+	var value any
+	if json.Unmarshal([]byte(input), &value) != nil {
+		return input, total
+	}
+	value, total = walkJSONStringsToRelative(value, siteDir, filePath, base, total)
+	if total == startTotal {
+		return input, total
+	}
+	b, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return input, total
+	}
+	return string(b) + "\n", total
+}
+
+func walkJSONStringsToRelative(value any, siteDir, filePath, base string, total int) (any, int) {
+	switch current := value.(type) {
+	case string:
+		if rewritten, ok := rewriteBaseRefToRelative(current, siteDir, filePath, base); ok {
+			return rewritten, total + 1
+		}
+	case []any:
+		for i, item := range current {
+			current[i], total = walkJSONStringsToRelative(item, siteDir, filePath, base, total)
+		}
+	case map[string]any:
+		for key, item := range current {
+			current[key], total = walkJSONStringsToRelative(item, siteDir, filePath, base, total)
+		}
+	}
+	return value, total
+}
+
+func rewriteBaseRefToRelative(raw, siteDir, filePath, base string) (string, bool) {
+	if !strings.HasPrefix(raw, base) {
+		return raw, false
+	}
+	suffix := strings.TrimPrefix(raw, base)
+	targetPath, trailer := splitURLPathAndTrailer(suffix)
+	clean, ok := resolveSiteTargetRel(targetPath, siteDir, false)
+	if !ok {
+		return raw, false
+	}
+	target := filepath.Join(siteDir, filepath.FromSlash(clean))
+	fromDir := filepath.Dir(filePath)
+	rel, err := filepath.Rel(fromDir, target)
+	if err != nil {
+		return raw, false
+	}
+	rel = filepath.ToSlash(rel)
+	if !strings.HasPrefix(rel, ".") {
+		rel = "./" + rel
+	}
+	return rel + trailer, true
+}
+
 func rewriteSrcsetMatches(input, siteDir, base string, total int) (string, int) {
 	updated := htmlSrcset.ReplaceAllStringFunc(input, func(match string) string {
 		parts := htmlSrcset.FindStringSubmatch(match)
@@ -444,37 +583,73 @@ func rewriteRootRef(raw, siteDir, base string) (string, bool) {
 	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, base) {
 		return raw, false
 	}
-	pathPart := raw
-	if i := strings.IndexAny(pathPart, "?#"); i >= 0 {
-		pathPart = pathPart[:i]
-	}
-	decoded, err := url.PathUnescape(pathPart)
-	if err != nil {
+	pathPart, trailer := splitURLPathAndTrailer(raw)
+	clean, ok := resolveSiteTargetRel(pathPart, siteDir, true)
+	if !ok {
 		return raw, false
+	}
+	if clean == "index.html" && (pathPart == "" || pathPart == "/") {
+		clean = ""
+	}
+	return base + clean + trailer, true
+}
+
+func splitURLPathAndTrailer(raw string) (string, string) {
+	if i := strings.IndexAny(raw, "?#"); i >= 0 {
+		return raw[:i], raw[i:]
+	}
+	return raw, ""
+}
+
+func resolveSiteTargetRel(rawPath, siteDir string, allowStripPrefix bool) (string, bool) {
+	if rawPath == "" {
+		rawPath = "index.html"
+	}
+	decoded, err := url.PathUnescape(rawPath)
+	if err != nil {
+		return "", false
 	}
 	for _, segment := range strings.Split(decoded, "/") {
 		if segment == ".." {
-			return raw, false
+			return "", false
 		}
 	}
 	clean := strings.TrimPrefix(pathpkg.Clean(decoded), "/")
-	if clean == "." {
-		clean = ""
+	if clean == "." || clean == "" {
+		clean = "index.html"
 	}
 	if clean == ".." || strings.HasPrefix(clean, "../") {
-		return raw, false
+		return "", false
 	}
-	target := filepath.Join(siteDir, filepath.FromSlash(clean))
+	if rel, ok := existingSiteTargetRel(siteDir, clean); ok {
+		return rel, true
+	}
+	if !allowStripPrefix {
+		return "", false
+	}
+	parts := strings.Split(clean, "/")
+	for i := 1; i < len(parts); i++ {
+		candidate := pathpkg.Join(parts[i:]...)
+		if rel, ok := existingSiteTargetRel(siteDir, candidate); ok {
+			return rel, true
+		}
+	}
+	return "", false
+}
+
+func existingSiteTargetRel(siteDir, rel string) (string, bool) {
+	target := filepath.Join(siteDir, filepath.FromSlash(rel))
 	info, err := os.Stat(target)
 	if err != nil {
-		return raw, false
+		return "", false
 	}
 	if info.IsDir() {
 		if _, err := os.Stat(filepath.Join(target, "index.html")); err != nil {
-			return raw, false
+			return "", false
 		}
+		return pathpkg.Join(rel, "index.html"), true
 	}
-	return base + strings.TrimPrefix(raw, "/"), true
+	return rel, true
 }
 
 // extractSiteText walks the generated static site and returns plain text from

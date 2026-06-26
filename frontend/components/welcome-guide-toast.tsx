@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BookOpen, X } from "lucide-react";
 import { getOptionalMe } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { publicAppTitle } from "@/lib/runtime-config";
 import type { User } from "@/types/modex";
 
 function storageKey(user: User) {
@@ -13,6 +14,7 @@ function storageKey(user: User) {
 
 export function WelcomeGuideToast() {
   const { t } = useI18n();
+  const appTitle = publicAppTitle();
   const [key, setKey] = useState("");
   const [visible, setVisible] = useState(false);
 
@@ -48,7 +50,7 @@ export function WelcomeGuideToast() {
       </div>
       <div className="welcome-guide-toast__body">
         <div className="welcome-guide-toast__title">{t("welcomeGuide.title")}</div>
-        <p>{t("welcomeGuide.subtitle")}</p>
+        <p>{t("welcomeGuide.subtitle", { appTitle })}</p>
       </div>
       <div className="welcome-guide-toast__actions">
         <Link className="button button-primary" href="/me/guide" onClick={dismiss}>

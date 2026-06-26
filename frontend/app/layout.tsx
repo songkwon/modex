@@ -1,6 +1,5 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
@@ -9,20 +8,23 @@ import { TopbarSearchButton } from "@/components/topbar-search";
 import { TopbarChatButton } from "@/components/topbar-chat";
 import { AnalyticsInit } from "@/components/analytics-init";
 import { WelcomeGuideToast } from "@/components/welcome-guide-toast";
+import { BrandLogo } from "@/components/brand-logo";
 import { I18nProvider } from "@/lib/i18n";
 import { getServerLocale } from "@/lib/i18n-server";
-import { publicAppTitle } from "@/lib/runtime-config";
+import { publicAppTitle, publicFaviconURL } from "@/lib/runtime-config";
 
 const themeInit = `(function(){try{var t=localStorage.getItem('modex_theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
 export function generateMetadata(): Metadata {
+  const appTitle = publicAppTitle();
+  const faviconUrl = publicFaviconURL();
   return {
-    title: publicAppTitle(),
+    title: appTitle,
     description: "Module Documentation Experience",
     manifest: "/manifest.webmanifest",
     icons: {
-      icon: "/icon.svg",
-      apple: "/apple-icon.png"
+      icon: faviconUrl,
+      apple: faviconUrl
     }
   };
 }
@@ -47,7 +49,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="shell">
               <header className="topbar">
                 <Link className="brand" href="/">
-                  <Image src="/logo.svg" alt={appTitle} width={28} height={28} style={{ borderRadius: 8 }} />
+                  <BrandLogo alt={appTitle} />
                   <span>{appTitle}</span>
                 </Link>
                 <nav className="nav">

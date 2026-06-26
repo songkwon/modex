@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -418,21 +420,40 @@ func (s *Server) handleDocRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, moduleKey, docsVersion, entryKey, name string) {
-	if name == "" {
-		name = "index.html"
-	}
 	if s.minioClient != nil {
-		zipName := fmt.Sprintf("site/%s/%s", entryKey, name)
-		key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, zipName)
-		obj, err := s.minioClient.GetObject(r.Context(), s.minioBucket, key, minio.GetObjectOptions{})
-		if err == nil {
+		for _, candidate := range siteFileCandidates(name) {
+			zipName := fmt.Sprintf("site/%s/%s", entryKey, candidate)
+			key := fmt.Sprintf("modules/%s/%s/%s", moduleKey, docsVersion, zipName)
+			obj, err := s.minioClient.GetObject(r.Context(), s.minioBucket, key, minio.GetObjectOptions{})
+			if err != nil {
+				continue
+			}
 			defer obj.Close()
 			head := make([]byte, 512)
 			n, readErr := obj.Read(head)
 			if readErr == nil || readErr == io.EOF {
 				head = head[:n]
-				w.Header().Set("Content-Type", contentTypeForName(name, head))
+				contentType := contentTypeForName(candidate, head)
 				w.Header().Set("Cache-Control", "private, max-age=60")
+				if shouldRewriteServedSiteFile(candidate, contentType) {
+					var body []byte
+					body = append(body, head...)
+					if readErr != io.EOF {
+						rest, err := io.ReadAll(obj)
+						if err != nil {
+							log.Printf("read site asset %s failed: %v", name, err)
+							writeError(w, http.StatusBadGateway, "site_read_failed", err.Error())
+							return
+						}
+						body = append(body, rest...)
+					}
+					body = rewriteServedSiteRootRefs(body, moduleKey, docsVersion, entryKey)
+					w.Header().Set("Content-Type", contentTypeForName(candidate, body))
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write(body)
+					return
+				}
+				w.Header().Set("Content-Type", contentType)
 				w.WriteHeader(http.StatusOK)
 				if len(head) > 0 {
 					_, _ = w.Write(head)
@@ -445,20 +466,157 @@ func (s *Server) handleDocSiteFile(w http.ResponseWriter, r *http.Request, modul
 				return
 			}
 			log.Printf("minio site asset read failed bucket=%s key=%s error=%v", s.minioBucket, key, readErr)
-		} else {
-			log.Printf("minio site asset get failed bucket=%s key=%s error=%v", s.minioBucket, key, err)
 		}
 	}
 	// Without MinIO, static assets are read from PostgreSQL.
-	f, err := s.app.Store().SiteFile(moduleKey, docsVersion, entryKey, name)
-	if err != nil {
-		writeResult(w, nil, err)
+	var f store.SiteFile
+	var found bool
+	for _, candidate := range siteFileCandidates(name) {
+		next, err := s.app.Store().SiteFile(moduleKey, docsVersion, entryKey, candidate)
+		if err == nil {
+			f = next
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeResult(w, nil, store.ErrNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", f.ContentType)
 	w.Header().Set("Cache-Control", "private, max-age=60")
+	if shouldRewriteServedSiteFile(name, f.ContentType) {
+		f.Content = rewriteServedSiteRootRefs(f.Content, moduleKey, docsVersion, entryKey)
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(f.Content)
+}
+
+func siteFileCandidates(name string) []string {
+	clean := path.Clean(strings.TrimPrefix(name, "/"))
+	if clean == "." || clean == "" {
+		clean = "index.html"
+	}
+	candidates := []string{clean}
+	add := func(value string) {
+		value = path.Clean(strings.TrimPrefix(value, "/"))
+		if value == "." || value == "" {
+			value = "index.html"
+		}
+		for _, existing := range candidates {
+			if existing == value {
+				return
+			}
+		}
+		candidates = append(candidates, value)
+	}
+	ext := path.Ext(clean)
+	if ext == "" {
+		add(clean + ".html")
+		add(path.Join(clean, "index.html"))
+		add("index.html")
+	}
+	if strings.EqualFold(ext, ".md") {
+		add(strings.TrimSuffix(clean, ext) + ".html")
+	}
+	return candidates
+}
+
+func shouldRewriteServedSiteFile(name, contentType string) bool {
+	name = strings.ToLower(name)
+	contentType = strings.ToLower(contentType)
+	if strings.HasSuffix(name, ".html") || strings.HasSuffix(name, ".htm") ||
+		strings.HasSuffix(name, ".css") || strings.HasSuffix(name, ".js") ||
+		strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".webmanifest") {
+		return true
+	}
+	return strings.HasPrefix(contentType, "text/") ||
+		strings.Contains(contentType, "javascript") ||
+		strings.Contains(contentType, "json")
+}
+
+var (
+	servedSiteAttrRootRef = regexp.MustCompile(`(?i)(\b(?:href|src|poster|action)\s*=\s*["'])(/[^"'<>]*)(["'])`)
+	servedSiteCSSRootRef  = regexp.MustCompile(`(?i)(url\(\s*["']?)(/[^)'"\s]+)(["']?\s*\))`)
+	servedSiteSrcset      = regexp.MustCompile(`(?i)(\bsrcset\s*=\s*["'])([^"'<>]*)(["'])`)
+)
+
+func rewriteServedSiteRootRefs(content []byte, moduleKey, docsVersion, entryKey string) []byte {
+	if len(content) == 0 {
+		return content
+	}
+	siteBase := "/api/docs/" + moduleKey + "/" + docsVersion + "/" + entryKey + "/site/"
+	text := string(content)
+	text = rewriteServedSiteMatches(text, servedSiteAttrRootRef, siteBase)
+	text = rewriteServedSiteMatches(text, servedSiteCSSRootRef, siteBase)
+	text = servedSiteSrcset.ReplaceAllStringFunc(text, func(match string) string {
+		parts := servedSiteSrcset.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		candidates := strings.Split(parts[2], ",")
+		for i, candidate := range candidates {
+			fields := strings.Fields(strings.TrimSpace(candidate))
+			if len(fields) == 0 {
+				continue
+			}
+			if rewritten, ok := rewriteServedSiteRootURL(fields[0], siteBase); ok {
+				fields[0] = rewritten
+				candidates[i] = strings.Join(fields, " ")
+			}
+		}
+		return parts[1] + strings.Join(candidates, ", ") + parts[3]
+	})
+	return []byte(text)
+}
+
+func rewriteServedSiteMatches(input string, pattern *regexp.Regexp, siteBase string) string {
+	return pattern.ReplaceAllStringFunc(input, func(match string) string {
+		parts := pattern.FindStringSubmatch(match)
+		if len(parts) != 4 {
+			return match
+		}
+		rewritten, ok := rewriteServedSiteRootURL(parts[2], siteBase)
+		if !ok {
+			return match
+		}
+		return parts[1] + rewritten + parts[3]
+	})
+}
+
+func rewriteServedSiteRootURL(raw, siteBase string) (string, bool) {
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") ||
+		strings.HasPrefix(raw, siteBase) || strings.HasPrefix(raw, "/api/docs/") ||
+		strings.HasPrefix(raw, "/_next/") || strings.HasPrefix(raw, "/brand/") {
+		return raw, false
+	}
+	pathPart, trailer := splitServedSiteURLPath(raw)
+	rel := strings.TrimPrefix(pathPart, "/")
+	if rel == "" {
+		return siteBase, true
+	}
+	parts := strings.Split(rel, "/")
+	if len(parts) >= 2 && shouldStripServedSiteLegacyPrefix(parts[1]) {
+		rel = strings.Join(parts[1:], "/")
+	}
+	if rel == "" {
+		return siteBase, true
+	}
+	return siteBase + rel + trailer, true
+}
+
+func splitServedSiteURLPath(raw string) (string, string) {
+	if i := strings.IndexAny(raw, "?#"); i >= 0 {
+		return raw[:i], raw[i:]
+	}
+	return raw, ""
+}
+
+func shouldStripServedSiteLegacyPrefix(next string) bool {
+	if next == "assets" || next == "images" || next == "posts" {
+		return true
+	}
+	return strings.Contains(next, ".")
 }
 
 func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
