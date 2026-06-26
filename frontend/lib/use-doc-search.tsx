@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { askAI, searchDocs } from "@/lib/api";
+import { askAIStream, searchDocs } from "@/lib/api";
 import type { AskResponse, SearchResult } from "@/types/modex";
 
 export type SearchScope = { moduleKey?: string; categoryId?: string };
@@ -58,13 +58,14 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
   // logSearch records one search-log row for an explicit, user-committed search
   // (Enter / result click / Ask AI). Live as-you-type queries never log, so the
   // search log isn't flooded with one row per keystroke. Fire-and-forget.
-  function logSearch() {
+  function logSearch(clickedDocId?: string) {
     const q = query.trim();
     if (!q) return;
     const filters: Record<string, unknown> = {};
     if (moduleKey) filters.modules = [moduleKey];
     if (categoryId) filters.category_ids = [categoryId];
     const body: Record<string, unknown> = { query: q, mode: "hybrid", page_size: 1, log: true };
+    if (clickedDocId) body.clicked_doc_id = clickedDocId;
     if (Object.keys(filters).length) body.filters = filters;
     searchDocs(body).catch(() => {});
   }
@@ -80,7 +81,7 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
     clearTimeout(debounce.current);
     try {
       const scopeArg = moduleKey || categoryId ? { module_key: moduleKey, category_ids: categoryId ? [categoryId] : undefined } : undefined;
-      setAnswer(await askAI(query, scopeArg));
+      await askAIStream(query, scopeArg, setAnswer);
     } catch (e) {
       setAnswer({ query, answer: String(e), provider: "error", sources: [] });
     } finally {
@@ -88,8 +89,8 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
     }
   }
 
-  function go(path: string) {
-    logSearch();
+  function go(path: string, docId?: string) {
+    logSearch(docId);
     onNavigate?.();
     router.push(path);
   }
@@ -101,7 +102,7 @@ export function useDocSearch(scope: SearchScope = {}, onNavigate?: () => void) {
       return;
     }
     const r = results[active - 1];
-    if (r) go(r.path);
+    if (r) go(r.path, r.doc_id);
   }
 
   function onKeyDown(e: KeyboardEvent) {

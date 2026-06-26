@@ -75,6 +75,12 @@ func (s *MemoryStore) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 		if a.RepoType != "" {
 			m.RepoType = a.RepoType
 		}
+		if m.SourceType == "" || a.TriggerType == "pipeline" || a.RepoType == "gitlab" {
+			m.SourceType = deploySourceType(a.RepoType, a.RepoURL)
+			if m.SourceType == "manual" && a.TriggerType == "pipeline" {
+				m.SourceType = "gitlab"
+			}
+		}
 		if a.Branch != "" {
 			m.GitLabBranch = a.Branch
 		}
@@ -236,4 +242,12 @@ func (s *MemoryStore) IngestArtifact(a DeployArtifact) (DeployResult, error) {
 	}
 	s.releases = append(s.releases, rel)
 	return DeployResult{Release: rel, PagesIndexed: len(a.Documents), EntriesIndexed: len(a.Entries), HTMLFiles: len(a.SiteHTML), SiteFiles: len(a.SiteFiles), BytesReceived: a.Bytes}, nil
+}
+
+func deploySourceType(repoType, repoURL string) string {
+	repoType = strings.ToLower(strings.TrimSpace(repoType))
+	if repoType == "gitlab" || strings.Contains(strings.ToLower(repoURL), "gitlab") {
+		return "gitlab"
+	}
+	return firstNonEmpty(repoType, "manual")
 }

@@ -33,6 +33,7 @@ import { MdxConfigProvider, UploadedFencesProvider } from "./mdx-config";
 import { SandboxedPlugin } from "./sandboxed-plugin";
 import { serializableProps } from "./plugin-utils";
 import { expandSnippets } from "./snippets";
+import { MdxImagePreview } from "./image-preview";
 import { getDocsPluginConfig, getDocsSnippets, getDocsUploadedPlugins, type PluginConfig, type UploadedPlugin } from "@/lib/api";
 import { publicApiBaseURL } from "@/lib/runtime-config";
 
@@ -86,6 +87,7 @@ export async function MdxContent({ source, assetBase, docLinks }: { source: stri
     .replace(/^\s+/, "")
     .replace(/^(?:<br\s*\/?>\s*)+/i, "")
     .replace(/^\[\[?toc\]?\]\s*/i, "");
+  source = escapeMdxURLBraces(source);
   source = rewriteMarkdownAssetURLs(source, assetBase);
 
   const plugins = await loadPluginConfig();
@@ -160,6 +162,8 @@ export async function MdxContent({ source, assetBase, docLinks }: { source: stri
     ]
   ];
 
+  const componentTags = new Set([...Object.keys(mdxComponents), ...uploaded.map((up) => up.tag || "").filter(Boolean)]);
+  const formatOrder: Array<"mdx" | "md"> = hasMDXComponentTags(source, componentTags) ? ["mdx", "md"] : ["md", "mdx"];
   const compile = (format: "mdx" | "md") =>
     compileMDX({
       source,
@@ -186,19 +190,21 @@ export async function MdxContent({ source, assetBase, docLinks }: { source: stri
     });
 
   let content: Awaited<ReturnType<typeof compileMDX>>["content"] | null = null;
-  try {
-    content = (await compile("mdx")).content;
-  } catch {
+  for (const format of formatOrder) {
     try {
-      content = (await compile("md")).content;
+      content = (await compile(format)).content;
+      break;
     } catch {
-      return (
-        <div className="mdx mdx--error">
-          <p className="muted text-sm">{t("component.mdx.mdxContent.documentation_rendering_failed_falling_back_to_plain_text")}</p>
-          <pre className="mdx-code__pre">{source}</pre>
-        </div>
-      );
+      content = null;
     }
+  }
+  if (!content) {
+    return (
+      <div className="mdx mdx--error">
+        <p className="muted text-sm">{t("component.mdx.mdxContent.documentation_rendering_failed_falling_back_to_plain_text")}</p>
+        <pre className="mdx-code__pre">{source}</pre>
+      </div>
+    );
   }
   return (
     <MdxConfigProvider value={plugins}>
@@ -212,14 +218,15 @@ export async function MdxContent({ source, assetBase, docLinks }: { source: stri
 function linkComponent(docLinks?: DocLinkContext) {
   return function Link(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
     const href = typeof props.href === "string" ? resolveDocLink(props.href, docLinks) : props.href;
-    return <a {...props} href={href} />;
+    const opensNewTab = typeof href === "string" && href && !href.startsWith("#");
+    return <a {...props} href={href} target={props.target ?? (opensNewTab ? "_blank" : undefined)} rel={props.rel ?? (opensNewTab ? "noopener noreferrer" : undefined)} />;
   };
 }
 
 function imageComponent(assetBase?: string) {
   return function Image(props: ImgHTMLAttributes<HTMLImageElement>) {
     const src = typeof props.src === "string" ? resolveAssetURL(props.src, assetBase) : props.src;
-    return <img {...props} src={src} />;
+    return <MdxImagePreview {...props} src={src} />;
   };
 }
 
@@ -231,6 +238,37 @@ function rewriteMarkdownAssetURLs(source: string, assetBase?: string) {
     .replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi, (_m, open: string, raw: string, close: string) => {
       return `${open}${resolveAssetURL(raw.trim(), assetBase)}${close}`;
     });
+}
+
+function escapeMdxURLBraces(source: string) {
+  let inFence = false;
+  return source
+    .split("\n")
+    .map((line) => {
+      if (/^\s*```/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) {
+        return line;
+      }
+      return line.replace(/https?:\/\/[^\s<>)"'`]+/g, (url) => url.replace(/[{}]/g, "\\$&"));
+    })
+    .join("\n");
+}
+
+function hasMDXComponentTags(source: string, componentTags: Set<string>) {
+  if (componentTags.size === 0) {
+    return false;
+  }
+  const tagPattern = Array.from(componentTags)
+    .filter((tag) => /^[A-Z][A-Za-z0-9_]*$/.test(tag))
+    .sort((a, b) => b.length - a.length)
+    .join("|");
+  if (!tagPattern) {
+    return false;
+  }
+  return new RegExp(`<\\/?(?:${tagPattern})(?:\\s|/?>)`).test(source);
 }
 
 function resolveAssetURL(src: string, assetBase?: string) {
@@ -248,7 +286,11 @@ function resolveAssetURL(src: string, assetBase?: string) {
     return src;
   }
   const base = assetBase.endsWith("/") ? assetBase : `${assetBase}/`;
-  return new URL(src.replace(/^\.\/+/, ""), base).toString();
+  try {
+    return new URL(src.replace(/^\.\/+/, ""), base).toString();
+  } catch {
+    return src;
+  }
 }
 
 function resolveDocLink(href: string, ctx?: DocLinkContext) {

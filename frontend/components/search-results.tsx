@@ -42,7 +42,7 @@ export function SearchResults({ s }: { s: Search }) {
                   className={`ds-item ${active === i + 1 ? "active" : ""}`}
                   key={r.doc_id}
                   onMouseEnter={() => setActive(i + 1)}
-                  onClick={() => go(r.path)}
+                  onClick={() => go(r.path, r.doc_id)}
                 >
                   <span className="ds-item-icon"><Icon size={18} /></span>
                   <span className="ds-item-body">
@@ -69,18 +69,18 @@ export function SearchResults({ s }: { s: Search }) {
           <div className="ds-answer-head">
             <Sparkles size={16} className="ds-ask-icon" />
             <strong>{t("component.searchResults.ai_response")}</strong>
-            <span className="tag">{answer.provider}</span>
+            <span className="tag">{providerLabel(answer.provider)}</span>
             <button className="button ds-answer-close" onClick={() => setAnswer(null)}>{t("component.searchResults.close")}</button>
           </div>
           <div className="ds-answer-body">
             {answer.warning ? <div className="panel badge-warn" style={{ marginBottom: 10, borderRadius: 10 }}>{answer.warning}</div> : null}
             {answerParts ? <AiMarkdown answer={answerParts.answer} reasoning={answerParts.reasoning} /> : null}
           </div>
-          {(answer.sources?.length ?? 0) > 0 ? (
+          {answer.done && (answer.sources?.length ?? 0) > 0 ? (
             <div className="ds-sources">
               <div className="muted ds-sources-label">{t("component.searchResults.reference_documentation")}</div>
               {(answer.sources || []).map((src) => (
-                <button className="ds-source" key={src.doc_id} onClick={() => go(src.path)}>
+                <button className="ds-source" key={src.doc_id} onClick={() => go(src.path, src.doc_id)}>
                   <span className="ds-crumb">{src.breadcrumb}</span>
                   <span className="ds-title">{src.title}</span>
                 </button>
@@ -91,4 +91,11 @@ export function SearchResults({ s }: { s: Search }) {
       ) : null}
     </>
   );
+}
+
+function providerLabel(provider: string) {
+  if (provider === "llm") return "AI 问答";
+  if (provider === "extractive") return "本地摘要";
+  if (provider === "error") return "错误";
+  return provider || "AI 问答";
 }

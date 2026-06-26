@@ -87,6 +87,69 @@ export const searchDocs = (body: unknown) => api<SearchResponse>("/api/search", 
 export const askAI = (query: string, scope?: { module_key?: string; category_ids?: string[] }) =>
   api<AskResponse>("/api/ask", { method: "POST", body: JSON.stringify({ query, ...(scope || {}) }) });
 
+export async function askAIStream(
+  query: string,
+  scope: { module_key?: string; category_ids?: string[] } | undefined,
+  onUpdate: (partial: AskResponse) => void
+): Promise<AskResponse> {
+  const res = await fetch(`${apiBaseURL()}/api/ask`, {
+    method: "POST",
+    credentials: "include",
+    headers: await requestHeaders(),
+    cache: "no-store",
+    body: JSON.stringify({ query, ...(scope || {}), stream: true })
+  });
+  if (!res.ok) {
+    throw new Error(`API ${res.status}: ${await formatAPIError(res)}`);
+  }
+  if (!res.body) {
+    throw new Error("Streaming response is not available");
+  }
+  const decoder = new TextDecoder();
+  const reader = res.body.getReader();
+  let buffer = "";
+  const current: AskResponse = { query, answer: "", provider: "llm", sources: [] };
+  let pendingSources: AskResponse["sources"] = [];
+  const emit = () => onUpdate({ ...current, sources: [...current.sources] });
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line);
+      let shouldEmit = true;
+      if (event.type === "sources") {
+        pendingSources = event.sources || [];
+        shouldEmit = false;
+      } else if (event.type === "meta") {
+        current.provider = event.provider || current.provider;
+        current.warning = event.warning || undefined;
+      } else if (event.type === "delta") {
+        current.answer += event.delta || "";
+      } else if (event.type === "error") {
+        throw new Error(event.error || "Ask AI stream failed");
+      } else if (event.type === "done") {
+        current.sources = pendingSources;
+        current.done = true;
+      }
+      if (shouldEmit) emit();
+    }
+  }
+  if (buffer.trim()) {
+    const event = JSON.parse(buffer);
+    if (event.type === "delta") current.answer += event.delta || "";
+    if (event.type === "done") {
+      current.sources = pendingSources;
+      current.done = true;
+    }
+    emit();
+  }
+  return current;
+}
+
 export const recordDocFeedback = (body: { doc_id: string; rating: "good" | "bad"; session_id: string; comment?: string }) =>
   api<{ status: string }>("/api/analytics/feedback", { method: "POST", body: JSON.stringify(body) });
 export const recordPageView = (body: { doc_id: string; session_id: string; read_id: string }) =>

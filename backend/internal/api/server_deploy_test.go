@@ -32,7 +32,7 @@ func TestHealthIncludesOperationalSnapshot(t *testing.T) {
 }
 
 func TestRewriteServedSiteRootRefsHandlesLegacyVitePressBase(t *testing.T) {
-	input := []byte(`<link href="/internal-tools/assets/style.css"><script src="/internal-tools/assets/app.js"></script><img srcset="/internal-tools/assets/a.png 1x, /internal-tools/assets/b.png 2x"><style>.x{background:url('/internal-tools/assets/bg.png')}</style>`)
+	input := []byte(`<link href="/internal-tools/assets/style.css"><script src="/internal-tools/assets/app.js"></script><a href="/internal-tools/posts/cbb-shelf/faq.html">FAQ</a><script>const route="/internal-tools/posts/cbb-shelf/faq.html";const keep="/standards/sidebar-state";history.pushState(null,"",'/internal-tools/posts/cbb-shelf/system.html')</script><img srcset="/internal-tools/assets/a.png 1x, /internal-tools/assets/b.png 2x"><style>.x{background:url('/internal-tools/assets/bg.png')}</style>`)
 
 	out := string(rewriteServedSiteRootRefs(input, "internal-wiki", "latest", "guide"))
 
@@ -43,6 +43,9 @@ func TestRewriteServedSiteRootRefsHandlesLegacyVitePressBase(t *testing.T) {
 		base + `assets/a.png 1x`,
 		base + `assets/b.png 2x`,
 		`url('` + base + `assets/bg.png')`,
+		`href="` + base + `posts/cbb-shelf/faq.html"`,
+		`"` + base + `posts/cbb-shelf/faq.html"`,
+		`'` + base + `posts/cbb-shelf/system.html'`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("rewritten output missing %q: %s", want, out)
@@ -50,6 +53,9 @@ func TestRewriteServedSiteRootRefsHandlesLegacyVitePressBase(t *testing.T) {
 	}
 	if strings.Contains(out, "/internal-tools/") {
 		t.Fatalf("legacy base still present: %s", out)
+	}
+	if !strings.Contains(out, `"/standards/sidebar-state"`) {
+		t.Fatalf("unrelated JS string path was rewritten: %s", out)
 	}
 }
 

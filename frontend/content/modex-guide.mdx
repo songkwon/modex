@@ -33,7 +33,7 @@
 
 执行流水线的 Runner 需要支持 Docker；如果团队 Runner 用 tag 区分机器，示例里可以使用 `docker`。
 
-把下面内容复制到文档仓库的 `.gitlab-ci.yml`。`MODEX_DEPLOY_URL` 和 `MODEX_DOCSCTL_URL` 使用当前 {{APP_TITLE}} 服务提供的实际地址：
+把下面内容复制到文档仓库的 `.gitlab-ci.yml`：
 
 ```yaml
 include:
@@ -61,15 +61,12 @@ MODEX_DEPLOY_TOKEN=<从 Modex 文档源复制的 Deploy Token>
   </Tab>
   <Tab title="docsctl 手动同步">
 
-在文档仓库根目录执行下面命令。`MODEX_DEPLOY_TOKEN` 使用对应文档源的 Deploy Token：
+在文档仓库根目录执行下面命令。`MODEX_DEPLOY_TOKEN` 使用对应文档源的 Deploy Token；`docsctl` 二进制和部署端点由平台维护方提供：
 
 ```bash
-curl -fsSL "{{MODEX_DOCSCTL_URL}}" -o docsctl
 chmod +x docsctl
 
-export MODEX_DEPLOY_URL="{{MODEX_DEPLOY_URL}}"
 export MODEX_DEPLOY_TOKEN="<从 Modex 文档源复制的 Deploy Token>"
-export MODEX_DOCSCTL_URL="{{MODEX_DOCSCTL_URL}}"
 export DOCS_SOURCE_DIR="."
 export DOCS_VERSION="latest"
 
@@ -91,8 +88,6 @@ export DOCS_VERSION="latest"
 
 ```yaml
 variables:
-  MODEX_DEPLOY_URL: "{{MODEX_DEPLOY_URL}}"
-  MODEX_DOCSCTL_URL: "{{MODEX_DOCSCTL_URL}}"
   DOCS_SOURCE_DIR: "docs"
 ```
 
@@ -108,22 +103,86 @@ variables:
 如果一个仓库要同步多个文档源，就建多个 CI job，每个 job 使用自己的 token 和路径：
 
 ```yaml
-rd-guides:
-  extends: .modex-docs-base
-  variables:
-    DOCS_SOURCE_DIR: "docs/guides"
-    MODEX_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN_RD_GUIDES"
+include:
+  - project: 'songkwon/modex-fscut'
+    ref: main
+    file: 'deploy/ci/modex-docs.gitlab-ci.yml'
 
-rd-standards:
+modex-docs-deploy:
+  rules:
+    - when: never
+
+tools:
   extends: .modex-docs-base
+  rules:
+    - changes:
+        - "docs/readme/tools/**/*"
+  tags:
+    - docker
   variables:
-    DOCS_SOURCE_DIR: "docs/standards"
-    MODEX_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN_RD_STANDARDS"
+    DOCS_SOURCE_DIR: docs/readme/tools
+    MODEX_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN_TOOLS"
+
+cloud_services:
+  extends: .modex-docs-base
+  rules:
+    - changes:
+        - "docs/readme/service/**/*"
+  tags:
+    - docker
+  variables:
+    DOCS_SOURCE_DIR: docs/readme/service
+    MODEX_DEPLOY_TOKEN: "$MODEX_DEPLOY_TOKEN_CLOUD_SERVICES"
 ```
 
 <Warning>
 `.modexignore` 也按 `DOCS_SOURCE_DIR` 计算路径。例如 `DOCS_SOURCE_DIR=docs` 时，排除 `docs/drafts` 只需要写 `drafts/`。
 </Warning>
+
+## GitLab CI 变量
+
+模板支持这些变量。除了文档源自己的 Deploy Token，其他地址类变量一般由平台模板或 CI 环境统一维护，不建议写在业务仓库的 `.gitlab-ci.yml` 里。
+
+| 变量 | 说明 |
+| --- | --- |
+| `MODEX_DEPLOY_TOKEN` | 文档源的 Deploy Token。每个文档源使用自己的 token，建议放在 GitLab CI/CD Variables。 |
+| `DOCS_SOURCE_DIR` | 文档源目录。默认是仓库根目录 `.`。 |
+| `DOCS_VERSION` | 同步到 Modex 的文档版本。默认 `latest`。 |
+| `DOCS_PACKAGE_VERSION` | 文档对应的软件包版本。 |
+| `DOCS_DESCRIPTION` | 文档源描述。 |
+| `DOCS_EDITION` | 文档版本补充标识，例如产品线或发行版。 |
+| `DOCS_BUILDER` | 文档框架类型；不填时由 `docsctl` 自动识别。 |
+| `DOCS_ENTRY_KEY` | 没有 `docs.yaml` 时生成的入口 key。 |
+| `DOCS_ENTRY_TITLE` | 没有 `docs.yaml` 时生成的入口标题。 |
+| `DOCS_ENTRY_SOURCE` | 没有 `docs.yaml` 时生成的入口源码目录。 |
+| `DOCS_BUILD` | 自定义构建命令，例如静态站需要先执行 npm 构建。 |
+| `DOCS_OUTPUT` | 自定义构建产物目录。 |
+| `DOCS_BUILD_DIR` | `docsctl build` 的临时构建目录。 |
+| `DOCS_ARTIFACT` | `docsctl package` 生成的 zip 包路径。 |
+| `DOCS_REWRITE_BASE` | 是否改写构建产物里的根路径资源引用，默认开启。 |
+| `DOCS_REPO_URL` | 文档源码仓库地址，GitLab CI 模板默认读取当前项目地址。 |
+| `DOCS_REPO_TYPE` | 源码仓库类型，例如 `git` 或 `svn`。 |
+| `DOCS_BRANCH` | 文档源码分支，GitLab CI 模板默认读取当前分支。 |
+| `DOCS_COMMIT_SHA` | 文档源码提交 SHA，GitLab CI 模板默认读取当前提交。 |
+| `MODEX_DOCS_IMAGE` | CI job 使用的 Docker 镜像。 |
+| `MODEX_DEPLOY_URL` | Modex 部署端点，由平台维护方提供或统一注入。 |
+| `MODEX_DOCSCTL_URL` | `docsctl` 下载地址，由平台维护方提供或统一注入。 |
+
+### 按目录变化触发
+
+如果只希望某个目录有文件变化时才同步，可以用 `rules: changes`：
+
+```yaml
+docs:
+  extends: .modex-docs-base
+  rules:
+    - changes:
+        - "docs/**/*"
+  tags:
+    - docker
+  variables:
+    DOCS_SOURCE_DIR: docs
+```
 
 ## 文档类型
 
@@ -131,8 +190,6 @@ rd-standards:
 
 ```yaml
 variables:
-  MODEX_DEPLOY_URL: "{{MODEX_DEPLOY_URL}}"
-  MODEX_DOCSCTL_URL: "{{MODEX_DOCSCTL_URL}}"
   DOCS_SOURCE_DIR: "docs"
   DOCS_BUILDER: "vitepress"
   DOCS_BUILD: "npm ci && npm run docs:build"

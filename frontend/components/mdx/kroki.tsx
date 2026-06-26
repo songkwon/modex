@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { usePluginConfig, pluginValue } from "./mdx-config";
 import { useI18n } from "@/lib/i18n";
 import { publicKrokiURL } from "@/lib/runtime-config";
@@ -53,6 +54,8 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
   const base = (pluginValue(cfg, "kroki", "base_url") || publicKrokiURL()).replace(/\/+$/, "");
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [svg, setSvg] = useState("");
+  const [open, setOpen] = useState(false);
   const source = code.trim();
 
   useEffect(() => {
@@ -67,7 +70,10 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
         });
         if (!res.ok) throw new Error(`Kroki ${res.status}: ${(await res.text()).slice(0, 200)}`);
         const svg = await res.text();
-        if (!cancelled && ref.current) ref.current.innerHTML = svg;
+        if (!cancelled) {
+          setSvg(svg);
+          if (ref.current) ref.current.innerHTML = svg;
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "diagram error");
       }
@@ -85,5 +91,19 @@ export function Kroki({ lang, code }: { lang: string; code: string }) {
       </div>
     );
   }
-  return <div className="mdx-diagram" data-kroki={type} ref={ref} />;
+  return (
+    <>
+      <button className="mdx-diagram-trigger" type="button" onClick={() => svg && setOpen(true)}>
+        <div className="mdx-diagram" data-kroki={type} ref={ref} />
+      </button>
+      {open ? (
+        <div className="mdx-image-preview" role="dialog" aria-modal="true" aria-label="Diagram preview" onClick={() => setOpen(false)}>
+          <button className="mdx-image-preview__close" type="button" aria-label="Close diagram preview" onClick={() => setOpen(false)}>
+            <X size={20} />
+          </button>
+          <div className="mdx-diagram-preview__svg" dangerouslySetInnerHTML={{ __html: svg }} onClick={(event) => event.stopPropagation()} />
+        </div>
+      ) : null}
+    </>
+  );
 }

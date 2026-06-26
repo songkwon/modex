@@ -65,7 +65,7 @@ export default function SearchLogsPage() {
               {pageRows.map((log) => (
                 <tr key={log.id}>
                   <td className="font-medium">{log.query || "-"}</td>
-                  <td><span className="tag">{log.mode}</span></td>
+                  <td><span className="tag" title={modeHelp(log.mode)}>{modeLabel(log.mode)}</span></td>
                   <td>{log.result_count}</td>
                   <td>
                     {log.display_name ? (
@@ -89,4 +89,18 @@ export default function SearchLogsPage() {
       </div>
     </AdminShell>
   );
+}
+
+function modeLabel(mode: string) {
+  if (mode === "ask") return "AI 问答";
+  if (mode === "hybrid") return "检索 · 混合";
+  if (mode === "keyword") return "检索 · 关键词";
+  if (mode === "semantic") return "检索 · 语义";
+  return mode || "-";
+}
+
+function modeHelp(mode: string) {
+  if (mode === "ask") return "用户点击「询问 AI」产生的问答日志";
+  if (mode === "hybrid") return "用户提交或点击搜索结果时产生的混合检索日志";
+  return mode || "";
 }

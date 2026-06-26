@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS docs_module (
   deploy_token TEXT,
   last_synced_commit TEXT,
   last_synced_at TIMESTAMPTZ,
+  created_by TEXT REFERENCES users(id),
   reads_7d INT NOT NULL DEFAULT 0,
   reads_30d INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -301,7 +302,8 @@ CREATE TABLE IF NOT EXISTS docs_embedding (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_docs_embedding_doc_id ON docs_embedding(doc_id);
+DROP INDEX IF EXISTS idx_docs_embedding_doc_id;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_docs_embedding_chunk_id ON docs_embedding(chunk_id);
 
 CREATE TABLE IF NOT EXISTS docs_mcp_log (
   id TEXT PRIMARY KEY,
@@ -387,6 +389,7 @@ ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS gitlab_path TEXT;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS deploy_token TEXT;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS last_synced_commit TEXT;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ;
+ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS created_by TEXT REFERENCES users(id);
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS reads_7d INT NOT NULL DEFAULT 0;
 ALTER TABLE docs_module ADD COLUMN IF NOT EXISTS reads_30d INT NOT NULL DEFAULT 0;
 

@@ -751,31 +751,6 @@ func (s *MemoryStore) PageByRoute(moduleKey, docsVersion, entryKey string) (Page
 			return p, nil
 		}
 	}
-	for _, e := range s.entries {
-		if strings.EqualFold(e.ModuleKey, moduleKey) && e.DocsVersion == docsVersion && e.IsPrimary {
-			for _, p := range s.pages {
-				if strings.EqualFold(p.ModuleKey, moduleKey) && p.DocsVersion == docsVersion && p.EntryKey == e.EntryKey {
-					return p, nil
-				}
-			}
-		}
-	}
-	var fallback *Page
-	sortOrder := int(^uint(0) >> 1)
-	for _, p := range s.pages {
-		if !strings.EqualFold(p.ModuleKey, moduleKey) || p.DocsVersion != docsVersion {
-			continue
-		}
-		order := sortOrderForEntryLocked(s.entries, moduleKey, docsVersion, p.EntryKey)
-		if fallback == nil || order < sortOrder {
-			cp := p
-			fallback = &cp
-			sortOrder = order
-		}
-	}
-	if fallback != nil {
-		return *fallback, nil
-	}
 	return Page{}, ErrNotFound
 }
 
