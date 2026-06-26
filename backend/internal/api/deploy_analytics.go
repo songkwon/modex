@@ -109,6 +109,18 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	report.ok("ingest_metadata")
+	if count, err := s.app.Search().ReindexModuleVersion(r.Context(), moduleKey, artifact.Metadata.DocsVersion); err != nil {
+		report.fail("rebuild_embeddings", err)
+		if s.minioClient != nil {
+			s.cleanupUploadedSiteFiles(moduleKey, artifact.Metadata.DocsVersion, uploadedSiteFiles)
+		}
+		writeDeployError(w, http.StatusBadGateway, "embedding_rebuild_failed", err.Error(), report)
+		return
+	} else if count > 0 {
+		report.ok("rebuild_embeddings")
+	} else {
+		report.skip("rebuild_embeddings", "no indexable document chunks")
+	}
 	s.writeMutation(w, map[string]any{"status": "published", "result": result, "deploy": report}, http.StatusAccepted, nil)
 }
 
@@ -677,9 +689,8 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 	res := make([]out, 0, len(logs))
 	set, all := s.accessibleCategoryIDs(user)
 	for _, log := range logs {
-		// Team admins only see searches whose clicked doc maps to an owned
-		// category; searches with no resolvable category are hidden.
-		if !all && !categoriesIntersect(s.docCategoryIDs(log.ClickedDocID), set) {
+		// Team admins see searches scoped to, or clicked within, owned categories.
+		if !all && !categoriesIntersect(s.searchLogCategoryIDs(log), set) {
 			continue
 		}
 		dn := ""
@@ -708,6 +719,27 @@ func (s *Server) handleSearchLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) searchLogCategoryIDs(log store.SearchLog) []string {
+	if cats := s.docCategoryIDs(log.ClickedDocID); len(cats) > 0 {
+		return cats
+	}
+	if strings.TrimSpace(log.FiltersJSON) == "" {
+		return nil
+	}
+	var filters struct {
+		CategoryIDs []string `json:"category_ids"`
+		Modules     []string `json:"modules"`
+	}
+	if err := json.Unmarshal([]byte(log.FiltersJSON), &filters); err != nil {
+		return nil
+	}
+	out := append([]string{}, filters.CategoryIDs...)
+	for _, moduleKey := range filters.Modules {
+		out = append(out, s.moduleCategories(moduleKey)...)
+	}
+	return out
 }
 
 func (s *Server) handleMCPLogs(w http.ResponseWriter, r *http.Request) {

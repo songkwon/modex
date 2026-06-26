@@ -90,16 +90,17 @@ function localDeployCommand(deployUrl?: string) {
     "docsctl deploy \\",
     "  --source /path/to/docs \\",
     "  --version latest \\",
-    `  --deploy-url ${deployUrl || "https://modex.example.com/api/deploy"} \\`,
+    `  --deploy-url ${deployUrl || "<平台提供的部署端点>"} \\`,
     "  --token $MODEX_DEPLOY_TOKEN",
   ].join("\n");
 }
 
-function gitlabSnippet(deployUrl: string | undefined, templateInclude: string) {
+function gitlabSnippet(templateInclude: string) {
   return `${templateInclude}
 
 variables:
-  MODEX_DEPLOY_URL: "${deployUrl || "https://modex.example.com/api/deploy"}"
+  # 只有多目录仓库才需要：
+  # DOCS_SOURCE_DIR: "docs"
 
 # 在 GitLab Settings > CI/CD > Variables 中添加：
 # MODEX_DEPLOY_TOKEN = 从 Modex 文档源复制的 Deploy Token（Masked + Protected）`;
@@ -243,16 +244,16 @@ export default function AdminModulesPage() {
                   <td>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <span className="badge">{docTypeLabel(m.doc_type)}</span>
-                      {m.mount ? <span className="badge">{mountLabel(m.mount, t)}</span> : null}
+                      <span className="badge">{mountLabel(COMPILED.has(m.doc_type || "") ? "single" : (m.mount || "single"), t)}</span>
                     </div>
                   </td>
                   <td style={{ fontSize: 12 }}>
                     <div>
-                      <span className="badge">{sourceTypeLabel(m.source_type, t)}</span>
+                      <span className="badge">{sourceTypeLabel(sourceKind(m), t)}</span>
                       {m.gitlab_branch ? <span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 6 }}><GitBranch size={11} />{m.gitlab_branch}</span> : null}
                     </div>
                     {m.repo_url ? (
-                      <div className="code-chip mt-1" style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.repo_url}</div>
+                      <div className="code-chip mt-1 repo-url-chip" title={m.repo_url}>{m.repo_url}</div>
                     ) : m.gitlab_path ? (
                       <div className="muted mt-1">{m.gitlab_path}</div>
                     ) : null}
@@ -383,12 +384,18 @@ export default function AdminModulesPage() {
                 <HelpCircle size={14} />
               </button>
             </label>
-            <Combobox
-              options={[{ value: "single", label: "single", hint: t("admin.modules.entire_site_as_one_document") }, { value: "split", label: "split", hint: t("admin.modules.split_top_level_directory_into_subdirectories") }]}
-              value={[compiled ? "single" : draft.mount]}
-              onChange={(v) => setDraft({ ...draft, mount: v[0] || "single" })}
-              multiple={false}
-            />
+            {compiled ? (
+              <div className="combo-control combo-control-readonly">
+                <span>single</span>
+              </div>
+            ) : (
+              <Combobox
+                options={[{ value: "single", label: "single", hint: t("admin.modules.entire_site_as_one_document") }, { value: "split", label: "split", hint: t("admin.modules.split_top_level_directory_into_subdirectories") }]}
+                value={[draft.mount]}
+                onChange={(v) => setDraft({ ...draft, mount: v[0] || "single" })}
+                multiple={false}
+              />
+            )}
             <span className="field-hint">{compiled ? t("admin.modules.static_site_fixed_single") : t("admin.modules.split_is_available_only_for_markdown_based_sources")}</span>
           </div>
         </div>
@@ -448,9 +455,9 @@ export default function AdminModulesPage() {
             <div className="docs-source-code">
               <div className="docs-source-code__head">
                 <span>GitLab CI</span>
-                <CopyButton value={gitlabSnippet(token.deploy_url, templateInclude)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
+                <CopyButton value={gitlabSnippet(templateInclude)} title={t("admin.modules.copy_gitlab_ci_configuration")} label={t("component.ui.copyButton.copy")} className="button" />
               </div>
-              <pre>{gitlabSnippet(token.deploy_url, templateInclude)}</pre>
+              <pre>{gitlabSnippet(templateInclude)}</pre>
             </div>
           </div>
         ) : null}
@@ -539,6 +546,14 @@ function mountLabel(value: string, t: (key: string) => string) {
 function sourceTypeLabel(value: string | undefined, t: (key: string) => string) {
   if (value === "gitlab") return "GitLab";
   if (value === "github") return "GitHub";
+  if (value === "svn") return "SVN";
+  if (value === "git") return "Git";
   if (value === "manual") return t("admin.modules.manual_source");
   return t("admin.modules.manual_source");
+}
+
+function sourceKind(m: ModuleInfo) {
+  const value = (m.source_type || m.repo_type || "").toLowerCase();
+  if (value === "gitlab" || m.repo_url?.toLowerCase().includes("gitlab")) return "gitlab";
+  return value;
 }

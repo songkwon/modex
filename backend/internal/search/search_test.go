@@ -12,6 +12,31 @@ import (
 	"modex/backend/internal/store"
 )
 
+type tokenEmbedder struct {
+	token string
+}
+
+func (e tokenEmbedder) Name() string { return "token-test" }
+
+func (e tokenEmbedder) EmbedText(_ context.Context, text string) ([]float32, error) {
+	if strings.Contains(text, e.token) {
+		return []float32{1, 0}, nil
+	}
+	return []float32{0, 1}, nil
+}
+
+func (e tokenEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i, text := range texts {
+		vec, err := e.EmbedText(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = vec
+	}
+	return out, nil
+}
+
 func TestRerankUsesAdminSettings(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/rerank" {
@@ -67,16 +92,96 @@ func TestSearchFallsBackWhenRerankProviderFails(t *testing.T) {
 	}
 }
 
+func TestEmbeddingInputUsesChunkSizeBudget(t *testing.T) {
+	long := strings.Repeat("测", 1000)
+	defaultSvc := Service{Store: store.NewTestStore()}
+	if got := []rune(defaultSvc.truncateEmbeddingInput(long)); len(got) != 800 {
+		t.Fatalf("default truncated length = %d, want 800", len(got))
+	}
+
+	st := store.NewTestStore()
+	st.SaveAISettings(store.AISettings{ChunkSize: 320})
+	customSvc := Service{Store: st}
+	chunks := customSvc.embeddingChunks(store.Page{DocID: "doc", Title: "标题", ContentText: long})
+	if len(chunks) < 2 {
+		t.Fatalf("chunk count = %d, want multiple chunks", len(chunks))
+	}
+	if got := []rune(chunks[0].Content); len(got) != 320 {
+		t.Fatalf("custom truncated length = %d, want 320", len(got))
+	}
+}
+
+func TestEmbeddingChunksCoverWholeDocumentWithOverlap(t *testing.T) {
+	st := store.NewTestStore()
+	st.SaveAISettings(store.AISettings{ChunkSize: 10, ChunkOverlap: 2})
+	svc := Service{Store: st}
+	chunks := svc.embeddingChunks(store.Page{DocID: "doc", ContentText: "0123456789abcdefghij"})
+	if len(chunks) != 3 {
+		t.Fatalf("chunk count = %d, want 3", len(chunks))
+	}
+	if chunks[0].Content != "0123456789" || chunks[1].Content != "89abcdefgh" || chunks[2].Content != "ghij" {
+		t.Fatalf("chunks = %#v", chunks)
+	}
+}
+
+func TestSemanticSearchUsesPrebuiltLaterChunks(t *testing.T) {
+	st := store.NewTestStore()
+	st.SaveAISettings(store.AISettings{ChunkSize: 20})
+	_, err := st.IngestArtifact(store.DeployArtifact{
+		ModuleKey:   "LongDocs",
+		ModuleName:  "LongDocs",
+		DocsVersion: "latest",
+		Entries:     []store.DeployEntry{{Key: "guide", Title: "Guide", Type: "markdown"}},
+		Documents: []store.DeployDocument{{
+			DocID:     "LongDocs:latest:guide",
+			EntryKey:  "guide",
+			EntryType: "markdown",
+			Title:     "Long Guide",
+			Content:   strings.Repeat("a", 60) + " needle",
+			Status:    "active",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Service{Store: st, Embedder: tokenEmbedder{token: "needle"}}
+	if count, err := s.ReindexModuleVersion(context.Background(), "LongDocs", "latest"); err != nil {
+		t.Fatalf("ReindexModuleVersion: %v", err)
+	} else if count < 2 {
+		t.Fatalf("reindexed chunks = %d, want multiple chunks", count)
+	}
+	before := st.EmbeddingCount()
+	resp, err := s.Search(context.Background(), Request{Query: "needle", Mode: ModeSemantic, PageSize: 5})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].DocID != "LongDocs:latest:guide" {
+		t.Fatalf("results = %#v", resp.Results)
+	}
+	if st.EmbeddingCount() != before {
+		t.Fatalf("search changed embedding count from %d to %d", before, st.EmbeddingCount())
+	}
+}
+
 type fakeVectorStore struct {
-	vectors  map[string][]float32
+	chunks   map[string]fakeChunkVector
 	simCalls int
+}
+
+type fakeChunkVector struct {
+	docID  string
+	vector []float32
 }
 
 func (f *fakeVectorStore) Existing(_ context.Context, docIDs []string) (map[string]bool, error) {
 	out := map[string]bool{}
+	wanted := map[string]bool{}
 	for _, id := range docIDs {
-		if _, ok := f.vectors[id]; ok {
-			out[id] = true
+		wanted[id] = true
+	}
+	for _, chunk := range f.chunks {
+		if wanted[chunk.docID] {
+			out[chunk.docID] = true
 		}
 	}
 	return out, nil
@@ -85,32 +190,41 @@ func (f *fakeVectorStore) Existing(_ context.Context, docIDs []string) (map[stri
 func (f *fakeVectorStore) Similarities(_ context.Context, query []float32, docIDs []string, _ int) (map[string]float64, error) {
 	f.simCalls++
 	out := map[string]float64{}
+	wanted := map[string]bool{}
 	for _, id := range docIDs {
-		out[id] = cosine(query, f.vectors[id])
+		wanted[id] = true
+	}
+	for _, chunk := range f.chunks {
+		if !wanted[chunk.docID] {
+			continue
+		}
+		if score := cosine(query, chunk.vector); score > out[chunk.docID] {
+			out[chunk.docID] = score
+		}
 	}
 	return out, nil
 }
 
-func (f *fakeVectorStore) Upsert(_ context.Context, docID string, vector []float32) error {
-	f.vectors[docID] = append([]float32(nil), vector...)
+func (f *fakeVectorStore) UpsertChunk(_ context.Context, docID, chunkID, _ string, vector []float32) error {
+	f.chunks[chunkID] = fakeChunkVector{docID: docID, vector: append([]float32(nil), vector...)}
 	return nil
 }
 
 func (f *fakeVectorStore) Clear(context.Context) error {
-	f.vectors = map[string][]float32{}
+	f.chunks = map[string]fakeChunkVector{}
 	return nil
 }
 
 func (f *fakeVectorStore) DeletePrefix(_ context.Context, prefix string) error {
-	for id := range f.vectors {
-		if strings.HasPrefix(id, prefix) {
-			delete(f.vectors, id)
+	for id, chunk := range f.chunks {
+		if strings.HasPrefix(chunk.docID, prefix) {
+			delete(f.chunks, id)
 		}
 	}
 	return nil
 }
 
-func (f *fakeVectorStore) Count(context.Context) (int, error) { return len(f.vectors), nil }
+func (f *fakeVectorStore) Count(context.Context) (int, error) { return len(f.chunks), nil }
 
 func newService() Service {
 	return Service{
@@ -160,7 +274,7 @@ func TestSemanticSearchReturnsRankedResults(t *testing.T) {
 
 func TestSemanticSearchUsesExternalVectorStoreWithoutMemoryCache(t *testing.T) {
 	s := newService()
-	vectors := &fakeVectorStore{vectors: map[string][]float32{}}
+	vectors := &fakeVectorStore{chunks: map[string]fakeChunkVector{}}
 	s.Vectors = vectors
 	if _, err := s.Reindex(context.Background()); err != nil {
 		t.Fatalf("Reindex: %v", err)

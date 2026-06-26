@@ -34,7 +34,11 @@ func Open(ctx context.Context, databaseURL string) (*Postgres, error) {
 			}
 		}
 	}
-	if _, err := pool.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_docs_embedding_doc_id ON docs_embedding(doc_id)`); err != nil {
+	if _, err := pool.Exec(ctx, `DROP INDEX IF EXISTS idx_docs_embedding_doc_id`); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("drop legacy docs_embedding index: %w", err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_docs_embedding_chunk_id ON docs_embedding(chunk_id)`); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ensure docs_embedding index: %w", err)
 	}
@@ -50,7 +54,7 @@ func (p *Postgres) Existing(ctx context.Context, docIDs []string) (map[string]bo
 	if len(docIDs) == 0 {
 		return out, nil
 	}
-	rows, err := p.pool.Query(ctx, `SELECT doc_id FROM docs_embedding WHERE doc_id = ANY($1)`, docIDs)
+	rows, err := p.pool.Query(ctx, `SELECT DISTINCT doc_id FROM docs_embedding WHERE doc_id = ANY($1)`, docIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -74,10 +78,11 @@ func (p *Postgres) Similarities(ctx context.Context, query []float32, docIDs []s
 		return nil, fmt.Errorf("query embedding dimension mismatch: got %d, want %d", len(query), embedding.Dim)
 	}
 	rows, err := p.pool.Query(ctx, `
-		SELECT doc_id, 1 - ((embedding <=> $1::vector) / 2.0) AS score
+		SELECT doc_id, max(1 - ((embedding <=> $1::vector) / 2.0)) AS score
 		FROM docs_embedding
 		WHERE doc_id = ANY($2) AND embedding IS NOT NULL
-		ORDER BY embedding <=> $1::vector
+		GROUP BY doc_id
+		ORDER BY score DESC
 		LIMIT $3`, vectorLiteral(query), docIDs, limit)
 	if err != nil {
 		return nil, err
@@ -94,9 +99,12 @@ func (p *Postgres) Similarities(ctx context.Context, query []float32, docIDs []s
 	return out, rows.Err()
 }
 
-func (p *Postgres) Upsert(ctx context.Context, docID string, vector []float32) error {
+func (p *Postgres) UpsertChunk(ctx context.Context, docID, chunkID, content string, vector []float32) error {
 	if len(vector) != embedding.Dim {
 		return fmt.Errorf("embedding dimension mismatch: model produced %d dims but the vector store requires %d; configure an embedding model with %d-dimensional output", len(vector), embedding.Dim, embedding.Dim)
+	}
+	if strings.TrimSpace(chunkID) == "" {
+		return fmt.Errorf("chunk_id is required")
 	}
 	raw, err := json.Marshal(vector)
 	if err != nil {
@@ -105,14 +113,14 @@ func (p *Postgres) Upsert(ctx context.Context, docID string, vector []float32) e
 	vectorValue := vectorLiteral(vector)
 	tag, err := p.pool.Exec(ctx, `
 		INSERT INTO docs_embedding (
-			page_id, doc_id, module_id, version_id, entry_id, content,
+			page_id, doc_id, chunk_id, module_id, version_id, entry_id, content,
 			embedding, embedding_json, metadata_json, updated_at
 		)
 		SELECT
-			p.id, p.doc_id, p.module_id, p.version_id, p.entry_id,
-			trim(concat_ws(E'\n', p.title, p.description, p.content_text)),
-			$2::vector,
-			$3::jsonb,
+			p.id, p.doc_id, $2, p.module_id, p.version_id, p.entry_id,
+			$3,
+			$4::vector,
+			$5::jsonb,
 			jsonb_build_object(
 				'title', p.title,
 				'path', p.path,
@@ -120,10 +128,11 @@ func (p *Postgres) Upsert(ctx context.Context, docID string, vector []float32) e
 				'doc_type', p.doc_type
 			),
 			now()
-		FROM docs_page p
-		WHERE p.doc_id=$1
-		ON CONFLICT (doc_id) DO UPDATE
-		SET page_id = EXCLUDED.page_id,
+	FROM docs_page p
+	WHERE p.doc_id=$1
+	ON CONFLICT (chunk_id) DO UPDATE
+		SET doc_id = EXCLUDED.doc_id,
+		    page_id = EXCLUDED.page_id,
 		    module_id = EXCLUDED.module_id,
 		    version_id = EXCLUDED.version_id,
 		    entry_id = EXCLUDED.entry_id,
@@ -131,17 +140,19 @@ func (p *Postgres) Upsert(ctx context.Context, docID string, vector []float32) e
 		    embedding = EXCLUDED.embedding,
 		    embedding_json = EXCLUDED.embedding_json,
 		    metadata_json = EXCLUDED.metadata_json,
-		    updated_at = now()`, docID, vectorValue, string(raw))
+		    updated_at = now()`, docID, chunkID, content, vectorValue, string(raw))
 	if err != nil || tag.RowsAffected() > 0 {
 		return err
 	}
 	_, err = p.pool.Exec(ctx, `
-		INSERT INTO docs_embedding (doc_id, embedding, embedding_json, updated_at)
-		VALUES ($1, $2::vector, $3::jsonb, now())
-		ON CONFLICT (doc_id) DO UPDATE
-		SET embedding = EXCLUDED.embedding,
+		INSERT INTO docs_embedding (doc_id, chunk_id, content, embedding, embedding_json, updated_at)
+		VALUES ($1, $2, $3, $4::vector, $5::jsonb, now())
+		ON CONFLICT (chunk_id) DO UPDATE
+		SET doc_id = EXCLUDED.doc_id,
+		    embedding = EXCLUDED.embedding,
 		    embedding_json = EXCLUDED.embedding_json,
-		    updated_at = now()`, docID, vectorValue, string(raw))
+		    content = EXCLUDED.content,
+		    updated_at = now()`, docID, chunkID, content, vectorValue, string(raw))
 	return err
 }
 

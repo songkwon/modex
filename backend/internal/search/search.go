@@ -17,7 +17,8 @@ import (
 	"modex/backend/internal/store"
 )
 
-const maxEmbeddingInputRunes = 12000
+const defaultEmbeddingInputRunes = 800
+const maxEmbeddingChunksPerDoc = 512
 
 type Mode string
 
@@ -49,7 +50,8 @@ type Request struct {
 	// Log marks an explicit, user-committed search (Enter / search button /
 	// result click) that should be persisted to the search log. Live
 	// as-you-type queries leave this false so the log isn't flooded.
-	Log bool `json:"log"`
+	Log          bool   `json:"log"`
+	ClickedDocID string `json:"clicked_doc_id"`
 }
 
 type Result struct {
@@ -147,7 +149,7 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 	var queryVec []float32
 	if req.Mode != ModeKeyword && strings.TrimSpace(req.Query) != "" {
 		var err error
-		queryVec, err = s.Embedder.EmbedText(ctx, truncateEmbeddingInput(req.Query))
+		queryVec, err = s.Embedder.EmbedText(ctx, s.truncateEmbeddingInput(req.Query))
 		if err != nil {
 			return Response{}, fmt.Errorf("embed query: %w", err)
 		}
@@ -166,9 +168,6 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 			docIDs = append(docIDs, p.DocID)
 		}
 		if s.Vectors != nil {
-			if err := s.ensureExternalEmbeddings(ctx, candidates, docIDs); err != nil {
-				return Response{}, err
-			}
 			var err error
 			semanticScores, err = s.Vectors.Similarities(ctx, queryVec, docIDs, len(docIDs))
 			if err != nil {
@@ -186,11 +185,11 @@ func (s Service) Search(ctx context.Context, req Request) (Response, error) {
 			if s.Vectors != nil {
 				sScore = semanticScores[p.DocID]
 			} else {
-				pageVec, err := s.pageVector(ctx, p, vectors)
+				var err error
+				sScore, err = s.pageSemanticScore(ctx, queryVec, p, vectors)
 				if err != nil {
 					return Response{}, err
 				}
-				sScore = cosine(queryVec, pageVec)
 			}
 		}
 		var final float64
@@ -385,92 +384,81 @@ func keywordScore(query string, p store.Page) float64 {
 	return score / float64(len(q)*4)
 }
 
-// Reindex (re)computes and caches an embedding for every page using the
+// Reindex (re)computes and caches embeddings for every page chunk using the
 // configured provider. It powers POST /api/embeddings/reindex and pre-warms the
 // cache so semantic search does not pay an embedding call on the hot path.
 func (s Service) Reindex(ctx context.Context) (int, error) {
 	if err := s.clearEmbeddings(ctx); err != nil {
 		return 0, err
 	}
-	pages := s.Store.Pages()
+	return s.reindexPages(ctx, s.Store.Pages())
+}
+
+func (s Service) ReindexModuleVersion(ctx context.Context, moduleKey, docsVersion string) (int, error) {
+	prefix := moduleKey + ":" + docsVersion + ":"
+	if err := s.DeleteModuleVersionEmbeddings(ctx, moduleKey, docsVersion); err != nil {
+		return 0, err
+	}
+	pages := make([]store.Page, 0)
+	for _, p := range s.Store.Pages() {
+		if strings.HasPrefix(p.DocID, prefix) {
+			pages = append(pages, p)
+		}
+	}
+	return s.reindexPages(ctx, pages)
+}
+
+func (s Service) reindexPages(ctx context.Context, pages []store.Page) (int, error) {
 	count := 0
 	for _, p := range pages {
-		text := embedText(p)
-		if text == "" {
-			continue
+		for _, chunk := range s.embeddingChunks(p) {
+			vec, err := s.Embedder.EmbedText(ctx, chunk.Content)
+			if err != nil {
+				return count, fmt.Errorf("embed page %s chunk %s: %w", p.DocID, chunk.ID, err)
+			}
+			if err := s.upsertEmbedding(ctx, p.DocID, chunk.ID, chunk.Content, vec); err != nil {
+				return count, err
+			}
+			count++
 		}
-		vec, err := s.Embedder.EmbedText(ctx, text)
-		if err != nil {
-			return count, fmt.Errorf("embed page %s: %w", p.DocID, err)
-		}
-		if err := s.upsertEmbedding(ctx, p.DocID, vec); err != nil {
-			return count, err
-		}
-		count++
 	}
 	return count, nil
 }
 
-// pageVector returns the page's embedding from cache, computing and caching it
-// on demand the first time it is needed.
-func (s Service) pageVector(ctx context.Context, p store.Page, vectors map[string][]float32) ([]float32, error) {
-	if vec, ok := vectors[p.DocID]; ok {
-		return vec, nil
+// pageSemanticScore returns the best precomputed chunk score for the page.
+// Missing embeddings are skipped; indexing is done by Reindex/ReindexModuleVersion
+// during document publish or explicit admin maintenance, not on the search path.
+func (s Service) pageSemanticScore(ctx context.Context, queryVec []float32, p store.Page, vectors map[string][]float32) (float64, error) {
+	best := 0.0
+	for _, chunk := range s.embeddingChunks(p) {
+		vec, ok := vectors[chunk.ID]
+		if !ok {
+			continue
+		}
+		if score := cosine(queryVec, vec); score > best {
+			best = score
+		}
 	}
-	text := embedText(p)
-	if text == "" {
-		return nil, nil
-	}
-	vec, err := s.Embedder.EmbedText(ctx, text)
-	if err != nil {
-		return nil, fmt.Errorf("embed page %s: %w", p.DocID, err)
-	}
-	if err := s.upsertEmbedding(ctx, p.DocID, vec); err != nil {
-		return nil, err
-	}
-	vectors[p.DocID] = vec
-	return vec, nil
+	return best, nil
 }
 
 func (s Service) embeddingBatch(docIDs []string) (map[string][]float32, error) {
 	out := make(map[string][]float32, len(docIDs))
-	for _, docID := range docIDs {
-		if vector, ok := s.Store.Embedding(docID); ok {
-			out[docID] = vector
+	for _, p := range s.Store.Pages() {
+		for _, chunk := range s.embeddingChunks(p) {
+			if vector, ok := s.Store.Embedding(chunk.ID); ok {
+				out[chunk.ID] = vector
+			}
 		}
 	}
 	return out, nil
 }
 
-func (s Service) ensureExternalEmbeddings(ctx context.Context, pages []store.Page, docIDs []string) error {
-	existing, err := s.Vectors.Existing(ctx, docIDs)
-	if err != nil {
-		return err
-	}
-	for _, page := range pages {
-		if existing[page.DocID] {
-			continue
-		}
-		text := embedText(page)
-		if text == "" {
-			continue
-		}
-		vector, err := s.Embedder.EmbedText(ctx, text)
-		if err != nil {
-			return fmt.Errorf("embed page %s: %w", page.DocID, err)
-		}
-		if err := s.Vectors.Upsert(ctx, page.DocID, vector); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s Service) upsertEmbedding(ctx context.Context, docID string, vector []float32) error {
+func (s Service) upsertEmbedding(ctx context.Context, docID, chunkID, content string, vector []float32) error {
 	if s.Vectors != nil {
-		return s.Vectors.Upsert(ctx, docID, vector)
+		return s.Vectors.UpsertChunk(ctx, docID, chunkID, content, vector)
 	}
-	s.Store.SetEmbedding(docID, vector)
+	s.Store.SetEmbedding(chunkID, vector)
 	return nil
 }
 
@@ -497,20 +485,93 @@ func (s Service) DeleteModuleVersionEmbeddings(ctx context.Context, moduleKey, d
 	return nil
 }
 
-func embedText(p store.Page) string {
-	return truncateEmbeddingInput(strings.TrimSpace(p.Title + "\n" + p.Description + "\n" + p.ContentText))
+type embeddingChunk struct {
+	ID      string
+	Content string
 }
 
-func truncateEmbeddingInput(text string) string {
+func (s Service) embeddingChunks(p store.Page) []embeddingChunk {
+	text := plainText(strings.TrimSpace(p.ContentText))
+	prefix := strings.TrimSpace(p.Title + "\n" + p.Description)
+	if text == "" {
+		text = prefix
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	limit := s.embeddingInputLimit()
+	overlap := s.Store.Settings().AI.ChunkOverlap
+	if overlap < 0 {
+		overlap = 0
+	}
+	if overlap >= limit {
+		overlap = limit / 5
+	}
+	prefixRunes := []rune(prefix)
+	if len(prefixRunes) > limit/4 {
+		prefix = string(prefixRunes[:limit/4])
+		prefixRunes = []rune(prefix)
+	}
+	bodyLimit := limit
+	if prefix != "" {
+		bodyLimit = limit - len(prefixRunes) - 1
+		if bodyLimit <= 0 {
+			bodyLimit = limit
+			prefix = ""
+		}
+	}
+	bodyRunes := []rune(text)
+	step := bodyLimit - overlap
+	if step <= 0 {
+		step = bodyLimit
+	}
+	chunks := make([]embeddingChunk, 0, (len(bodyRunes)/step)+1)
+	for start, index := 0, 0; start < len(bodyRunes) && index < maxEmbeddingChunksPerDoc; index++ {
+		end := start + bodyLimit
+		if end > len(bodyRunes) {
+			end = len(bodyRunes)
+		}
+		content := strings.TrimSpace(string(bodyRunes[start:end]))
+		if prefix != "" && content != prefix {
+			content = strings.TrimSpace(prefix + "\n" + content)
+		}
+		content = s.truncateEmbeddingInput(content)
+		if content != "" {
+			chunks = append(chunks, embeddingChunk{
+				ID:      fmt.Sprintf("%s#chunk-%04d", p.DocID, index),
+				Content: content,
+			})
+		}
+		if end == len(bodyRunes) {
+			break
+		}
+		start += step
+	}
+	return chunks
+}
+
+func (s Service) embeddingInputLimit() int {
+	limit := s.Store.Settings().AI.ChunkSize
+	if limit <= 0 {
+		return defaultEmbeddingInputRunes
+	}
+	return limit
+}
+
+func (s Service) truncateEmbeddingInput(text string) string {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ""
 	}
+	limit := s.embeddingInputLimit()
+	if limit <= 0 {
+		limit = defaultEmbeddingInputRunes
+	}
 	runes := []rune(text)
-	if len(runes) <= maxEmbeddingInputRunes {
+	if len(runes) <= limit {
 		return text
 	}
-	return string(runes[:maxEmbeddingInputRunes])
+	return string(runes[:limit])
 }
 
 // cosine returns a 0..1 similarity (cosine distance shifted into [0,1]).

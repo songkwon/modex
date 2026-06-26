@@ -200,7 +200,6 @@ export default function AdminModuleDetail({ params }: { params: Promise<{ module
 variables:
   # 只有多目录仓库才需要：
   # DOCS_SOURCE_DIR: "docs/standard"
-  MODEX_DEPLOY_URL: "https://modex.example.com/api/deploy"
 
 # DOCS_DEPLOY_TOKEN: 从上方生成并复制到 GitLab CI Variables（Masked + Protected）`}</pre>
           </div>

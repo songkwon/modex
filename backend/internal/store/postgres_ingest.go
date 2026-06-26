@@ -52,6 +52,12 @@ func (p *PostgresRepository) IngestArtifact(artifact DeployArtifact) (DeployResu
 		if artifact.RepoType != "" {
 			module.RepoType = artifact.RepoType
 		}
+		if module.SourceType == "" || artifact.TriggerType == "pipeline" || artifact.RepoType == "gitlab" {
+			module.SourceType = deploySourceType(artifact.RepoType, artifact.RepoURL)
+			if module.SourceType == "manual" && artifact.TriggerType == "pipeline" {
+				module.SourceType = "gitlab"
+			}
+		}
 		if artifact.Branch != "" {
 			module.GitLabBranch = artifact.Branch
 		}
@@ -59,7 +65,7 @@ func (p *PostgresRepository) IngestArtifact(artifact DeployArtifact) (DeployResu
 			module.LastSyncedCommit = artifact.CommitSHA
 		}
 		module.LastSyncedAt = now
-		module, err = queryJSONOne[Module](ctx, tx, `UPDATE docs_module SET name=$2,description=$3,owner_group=$4,repo_type=$5,repo_url=$6,default_version=$7,visibility=$8,status=$9,package_version=$10,edition=$11,keywords=$12::jsonb,maintainers=$13::jsonb,gitlab_branch=$14,last_synced_commit=$15,last_synced_at=$16,updated_at=$16 WHERE id=$1 RETURNING to_jsonb(docs_module)-'default_version_id'-'created_at'`, module.ID, module.Name, module.Description, module.OwnerGroup, module.RepoType, module.RepoURL, module.DefaultVersion, module.Visibility, module.Status, module.PackageVersion, module.Edition, mustJSON(module.Keywords), mustJSON(module.Maintainers), module.GitLabBranch, module.LastSyncedCommit, now)
+		module, err = queryJSONOne[Module](ctx, tx, `UPDATE docs_module SET name=$2,description=$3,owner_group=$4,repo_type=$5,repo_url=$6,default_version=$7,visibility=$8,status=$9,package_version=$10,edition=$11,keywords=$12::jsonb,maintainers=$13::jsonb,gitlab_branch=$14,last_synced_commit=$15,last_synced_at=$16,source_type=$17,updated_at=$16 WHERE id=$1 RETURNING to_jsonb(docs_module)-'default_version_id'-'created_at'`, module.ID, module.Name, module.Description, module.OwnerGroup, module.RepoType, module.RepoURL, module.DefaultVersion, module.Visibility, module.Status, module.PackageVersion, module.Edition, mustJSON(module.Keywords), mustJSON(module.Maintainers), module.GitLabBranch, module.LastSyncedCommit, now, module.SourceType)
 	}
 	if err != nil {
 		return DeployResult{}, err

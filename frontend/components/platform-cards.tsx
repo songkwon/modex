@@ -21,11 +21,13 @@ function iconFor(cat: Category) {
   return ICONS[cat.icon || ""] || Boxes;
 }
 
-// countModules returns how many modules belong to a category id. Modules carry
-// the full category path (parent + child ids), so a simple membership test
-// counts both a platform and its sub-platforms correctly.
-function countModules(modules: ModuleInfo[], categoryId: string) {
-  return modules.filter((m) => (m.category_ids || []).includes(categoryId)).length;
+function categoryIDs(category: Category): string[] {
+  return [category.id, ...(category.children || []).flatMap(categoryIDs)];
+}
+
+function countModules(modules: ModuleInfo[], category: Category) {
+  const ids = new Set(categoryIDs(category));
+  return modules.filter((m) => (m.category_ids || []).some((id) => ids.has(id))).length;
 }
 
 export function PlatformCards({
@@ -48,7 +50,7 @@ export function PlatformCards({
     <div className="platform-grid">
       {categories.map((cat) => {
         const Icon = iconFor(cat);
-        const total = countModules(modules, cat.id);
+        const total = countModules(modules, cat);
         const children = cat.children || [];
         return (
           <article
@@ -73,7 +75,7 @@ export function PlatformCards({
             {children.length > 0 ? (
               <div className="platform-subs">
                 {children.map((sub) => {
-                  const subTotal = countModules(modules, sub.id);
+                  const subTotal = countModules(modules, sub);
                   return (
                     <span
                       className="platform-sub"

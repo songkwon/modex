@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Sparkles, X, Loader2, ArrowUp } from "lucide-react";
-import { askAI } from "@/lib/api";
+import { askAIStream } from "@/lib/api";
 import type { SearchResult } from "@/types/modex";
 import { useI18n } from "@/lib/i18n";
 import { AiMarkdown, splitAnswerParts } from "@/components/ai-markdown";
@@ -40,9 +40,16 @@ export function DocChatPanel({
     setInput("");
     setBusy(true);
     try {
-      const res = await askAI(q, { module_key: moduleKey });
-      const parts = splitAnswerParts(res);
-      setMessages((m) => [...m, { role: "assistant", text: parts.answer, reasoning: parts.reasoning, warning: res.warning, sources: res.sources }]);
+      const assistantIndex = messages.length + 1;
+      setMessages((m) => [...m, { role: "assistant", text: "" }]);
+      await askAIStream(q, { module_key: moduleKey }, (res) => {
+        const parts = splitAnswerParts(res);
+        setMessages((m) => m.map((msg, i) => (
+          i === assistantIndex
+            ? { role: "assistant", text: parts.answer, reasoning: parts.reasoning, warning: res.warning, sources: res.sources }
+            : msg
+        )));
+      });
     } catch (e) {
       setMessages((m) => [...m, { role: "assistant", text: t("component.docChatPanel.error") + String(e) }]);
     } finally {

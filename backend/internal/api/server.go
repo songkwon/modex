@@ -539,6 +539,7 @@ var (
 	servedSiteAttrRootRef = regexp.MustCompile(`(?i)(\b(?:href|src|poster|action)\s*=\s*["'])(/[^"'<>]*)(["'])`)
 	servedSiteCSSRootRef  = regexp.MustCompile(`(?i)(url\(\s*["']?)(/[^)'"\s]+)(["']?\s*\))`)
 	servedSiteSrcset      = regexp.MustCompile(`(?i)(\bsrcset\s*=\s*["'])([^"'<>]*)(["'])`)
+	servedSiteStringRef   = regexp.MustCompile("([\"'`])(/internal-tools/[^\"'`<>\\\\\\s]*)([\"'`])")
 )
 
 func rewriteServedSiteRootRefs(content []byte, moduleKey, docsVersion, entryKey string) []byte {
@@ -549,6 +550,7 @@ func rewriteServedSiteRootRefs(content []byte, moduleKey, docsVersion, entryKey 
 	text := string(content)
 	text = rewriteServedSiteMatches(text, servedSiteAttrRootRef, siteBase)
 	text = rewriteServedSiteMatches(text, servedSiteCSSRootRef, siteBase)
+	text = rewriteServedSiteStringRefs(text, siteBase)
 	text = servedSiteSrcset.ReplaceAllStringFunc(text, func(match string) string {
 		parts := servedSiteSrcset.FindStringSubmatch(match)
 		if len(parts) != 4 {
@@ -568,6 +570,20 @@ func rewriteServedSiteRootRefs(content []byte, moduleKey, docsVersion, entryKey 
 		return parts[1] + strings.Join(candidates, ", ") + parts[3]
 	})
 	return []byte(text)
+}
+
+func rewriteServedSiteStringRefs(input, siteBase string) string {
+	return servedSiteStringRef.ReplaceAllStringFunc(input, func(match string) string {
+		parts := servedSiteStringRef.FindStringSubmatch(match)
+		if len(parts) != 4 || parts[1] != parts[3] {
+			return match
+		}
+		rewritten, ok := rewriteServedSiteRootURL(parts[2], siteBase)
+		if !ok {
+			return match
+		}
+		return parts[1] + rewritten + parts[3]
+	})
 }
 
 func rewriteServedSiteMatches(input string, pattern *regexp.Regexp, siteBase string) string {
@@ -596,7 +612,7 @@ func rewriteServedSiteRootURL(raw, siteBase string) (string, bool) {
 		return siteBase, true
 	}
 	parts := strings.Split(rel, "/")
-	if len(parts) >= 2 && shouldStripServedSiteLegacyPrefix(parts[1]) {
+	if len(parts) >= 2 && (shouldStripServedSiteLegacyBase(parts[0]) || shouldStripServedSiteLegacyPrefix(parts[1])) {
 		rel = strings.Join(parts[1:], "/")
 	}
 	if rel == "" {
@@ -617,6 +633,15 @@ func shouldStripServedSiteLegacyPrefix(next string) bool {
 		return true
 	}
 	return strings.Contains(next, ".")
+}
+
+func shouldStripServedSiteLegacyBase(first string) bool {
+	switch strings.Trim(first, "/") {
+	case "internal-tools":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) handleDocPage(w http.ResponseWriter, r *http.Request) {
@@ -686,7 +711,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if req.Log && strings.TrimSpace(req.Query) != "" {
 		filters, _ := json.Marshal(req.Filters)
 		user, _ := s.currentUser(r)
-		s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, SearchedAt: time.Now().UTC()})
+		s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("sl-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: string(resp.Mode), FiltersJSON: string(filters), ResultCount: resp.Total, ClickedDocID: req.ClickedDocID, SearchedAt: time.Now().UTC()})
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -703,6 +728,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		Query       string   `json:"query"`
 		ModuleKey   string   `json:"module_key"`
 		CategoryIDs []string `json:"category_ids"`
+		Stream      bool     `json:"stream"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -721,6 +747,10 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	if len(req.CategoryIDs) > 0 {
 		filters.CategoryIDs = req.CategoryIDs
 	}
+	if req.Stream {
+		s.handleAskStream(w, r, req.Query, filters)
+		return
+	}
 	resp, err := s.app.Search().Search(r.Context(), search.Request{Query: req.Query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 8, DefaultVersionsOnly: len(filters.DocsVersions) == 0})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "ask_failed", err.Error())
@@ -728,7 +758,8 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	answer, provider, warning := s.synthesizeAnswer(r.Context(), req.Query, resp.Results)
 	user, _ := s.currentUser(r)
-	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
+	filtersJSON, _ := json.Marshal(filters)
+	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: req.Query, Mode: "ask", FiltersJSON: string(filtersJSON), ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
 	payload := map[string]any{
 		"query":    req.Query,
 		"answer":   answer,
@@ -739,6 +770,89 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 		payload["warning"] = warning
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) handleAskStream(w http.ResponseWriter, r *http.Request, query string, filters search.Filters) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "stream_unavailable", "streaming is not supported")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	writeEvent := func(event map[string]any) bool {
+		if err := json.NewEncoder(w).Encode(event); err != nil {
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
+	resp, err := s.app.Search().Search(r.Context(), search.Request{Query: query, Mode: search.ModeHybrid, Filters: filters, Page: 1, PageSize: 8, DefaultVersionsOnly: len(filters.DocsVersions) == 0})
+	if err != nil {
+		writeEvent(map[string]any{"type": "error", "error": err.Error()})
+		return
+	}
+	if !writeEvent(map[string]any{"type": "sources", "query": query, "sources": resp.Results}) {
+		return
+	}
+	provider, warning := s.synthesizeAnswerStream(r.Context(), query, resp.Results, func(delta string) bool {
+		return writeEvent(map[string]any{"type": "delta", "delta": delta})
+	})
+	if provider == "" {
+		return
+	}
+	user, _ := s.currentUser(r)
+	filtersJSON, _ := json.Marshal(filters)
+	s.app.Store().AddSearchLog(store.SearchLog{ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), UserID: user.ID, IPAddress: clientIP(r), Query: query, Mode: "ask", FiltersJSON: string(filtersJSON), ResultCount: len(resp.Results), SearchedAt: time.Now().UTC()})
+	if !writeEvent(map[string]any{"type": "meta", "provider": provider, "warning": warning}) {
+		return
+	}
+	writeEvent(map[string]any{"type": "done"})
+}
+
+func streamTextChunks(text string, size int) []string {
+	if size <= 0 {
+		size = 48
+	}
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return nil
+	}
+	chunks := make([]string, 0, (len(runes)/size)+1)
+	for start := 0; start < len(runes); start += size {
+		end := start + size
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[start:end]))
+	}
+	return chunks
+}
+
+func (s *Server) synthesizeAnswerStream(ctx context.Context, query string, results []search.Result, onDelta func(string) bool) (string, string) {
+	ai := s.app.Store().Settings().AI
+	if strings.TrimSpace(ai.AskBaseURL) != "" && strings.TrimSpace(ai.AskModel) != "" {
+		if err := s.askOpenAICompatibleStream(ctx, ai, query, results, onDelta); err == nil {
+			return "llm", ""
+		} else {
+			log.Printf("ask llm stream failed: %v", err)
+			answer := s.extractiveAnswer(results)
+			for _, chunk := range streamTextChunks(answer, 48) {
+				if !onDelta(chunk) {
+					return "", ""
+				}
+			}
+			return "extractive", "大模型流式调用失败，已退回本地文档摘要：" + err.Error()
+		}
+	}
+	answer := s.extractiveAnswer(results)
+	for _, chunk := range streamTextChunks(answer, 48) {
+		if !onDelta(chunk) {
+			return "", ""
+		}
+	}
+	return "extractive", "问答大模型未配置完整，请在模型设置中配置 API Base URL 和模型名称。"
 }
 
 func (s *Server) synthesizeAnswer(ctx context.Context, query string, results []search.Result) (string, string, string) {
@@ -792,6 +906,22 @@ func (s *Server) askOpenAICompatible(ctx context.Context, ai store.AISettings, q
 	userMsg := fmt.Sprintf("文档片段：\n%s\n问题：%s", ctxBuilder.String(), query)
 	// Dispatch to the configured API format (OpenAI / Anthropic / Gemini / …).
 	return chatComplete(ctx, ai, system, userMsg)
+}
+
+func (s *Server) askOpenAICompatibleStream(ctx context.Context, ai store.AISettings, query string, results []search.Result, onDelta func(string) bool) error {
+	var ctxBuilder strings.Builder
+	for i, r := range results {
+		if i >= 6 {
+			break
+		}
+		ctxBuilder.WriteString(s.askContextForResult(i+1, r))
+	}
+	system := strings.TrimSpace(ai.AskSystemPrompt)
+	if system == "" {
+		system = store.DefaultAskSystemPrompt
+	}
+	userMsg := fmt.Sprintf("文档片段：\n%s\n问题：%s", ctxBuilder.String(), query)
+	return chatCompleteStream(ctx, ai, system, userMsg, onDelta)
 }
 
 func (s *Server) askContextForResult(i int, r search.Result) string {

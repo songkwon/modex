@@ -16,10 +16,10 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
   if (!category) notFound();
   const id = category.id;
 
-  // A category with no direct modules (e.g. a parent that only holds
-  // sub-categories) returns null from the API — coalesce so .length is safe.
-  const modules = (await getModules(`?category_id=${encodeURIComponent(id)}`).catch(() => [])) ?? [];
+  const allModules = (await getModules().catch(() => [])) ?? [];
   const childCategories = category.children || [];
+  const categoryIDSet = new Set(categoryIDs(category));
+  const modules = allModules.filter((m) => (m.category_ids || []).some((categoryID) => categoryIDSet.has(categoryID)));
 
   return (
     <main className="main">
@@ -49,17 +49,25 @@ export default async function CategoryPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
           {childCategories.length > 0 ? (
-            <SubcategoryCards categories={childCategories} modules={modules} />
+            <SubcategoryCards categories={childCategories} modules={allModules} />
           ) : null}
           {modules.length === 1 && childCategories.length === 0 ? (
             <SingleModuleView module={modules[0]} />
           ) : (
-            <div className="package-list">
-              {modules.map((module) => (
-                <ModuleRow module={module} key={module.module_key} />
-              ))}
-              {modules.length === 0 ? <div className="empty-state">{t("categories.id.no_document_collections_in_this_category_yet")}</div> : null}
-            </div>
+            <>
+              <div className="shelf-toolbar document-list-heading mb-3">
+                <div>
+                  <h2>{t("categories.id.document_list")}</h2>
+                  <p>{t("categories.id.document_list_hint")}</p>
+                </div>
+              </div>
+              <div className="package-list">
+                {modules.map((module) => (
+                  <ModuleRow module={module} key={module.module_key} />
+                ))}
+                {modules.length === 0 ? <div className="empty-state">{t("categories.id.no_document_collections_in_this_category_yet")}</div> : null}
+              </div>
+            </>
           )}
         </div>
       </section>
@@ -79,7 +87,7 @@ async function SubcategoryCards({ categories, modules }: { categories: Category[
       </div>
       <div className="subcategory-grid">
         {categories.map((cat) => {
-          const total = countModules(modules, cat.id);
+          const total = countModules(modules, cat);
           const childCount = cat.children?.length || 0;
           return (
             <Link className="subcategory-card" href={categoryHref(cat)} key={cat.id}>
@@ -137,11 +145,11 @@ async function ModuleRow({ module }: { module: ModuleInfo }) {
             <span>{module.name}</span>
           </div>
         )}
-        <p className="muted mt-3 text-sm leading-6">{module.description}</p>
+        {module.description ? <p className="muted mt-2 text-sm leading-6">{module.description}</p> : null}
         <div className="package-meta">
-          <span>{module.category_path}</span>
-          <span>{t("categories.id.owner")}: {module.owner_group}</span>
-          <span>{t("categories.id.channel")}: {module.channel}</span>
+          {module.category_path ? <span>{module.category_path}</span> : null}
+          {module.owner_group ? <span>{t("categories.id.owner")}: {module.owner_group}</span> : null}
+          {module.channel ? <span>{t("categories.id.channel")}: {module.channel}</span> : null}
         </div>
       </div>
       <aside className="package-stats text-sm">
@@ -179,6 +187,11 @@ function docTypeLabel(t?: string) {
   }
 }
 
-function countModules(modules: ModuleInfo[], categoryId: string) {
-  return modules.filter((m) => (m.category_ids || []).includes(categoryId)).length;
+function categoryIDs(category: Category): string[] {
+  return [category.id, ...(category.children || []).flatMap(categoryIDs)];
+}
+
+function countModules(modules: ModuleInfo[], category: Category) {
+  const ids = new Set(categoryIDs(category));
+  return modules.filter((m) => (m.category_ids || []).some((categoryID) => ids.has(categoryID))).length;
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -74,6 +75,14 @@ func chatComplete(ctx context.Context, ai store.AISettings, system, user string)
 	}
 }
 
+func chatCompleteStream(ctx context.Context, ai store.AISettings, system, user string, onDelta func(string) bool) error {
+	if normalizeProtocol(ai.AskProtocol) != protoOpenAIChat {
+		return fmt.Errorf("streaming is only supported for OpenAI Chat compatible protocol")
+	}
+	base := strings.TrimRight(strings.TrimSpace(ai.AskBaseURL), "/")
+	return chatOpenAIChatStream(ctx, base, ai.AskAPIKey, ai.AskModel, temperatureOf(ai), system, user, onDelta)
+}
+
 // listModels fetches available model ids from the provider for the given
 // protocol so the admin never has to type a model name by hand.
 func listModels(ctx context.Context, protocol, base, key string) ([]string, error) {
@@ -110,6 +119,64 @@ func httpJSON(ctx context.Context, method, url string, headers map[string]string
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	return raw, resp.StatusCode, nil
+}
+
+func chatOpenAIChatStream(ctx context.Context, base, key, model string, temperature float64, system, user string, onDelta func(string) bool) error {
+	raw, _ := json.Marshal(map[string]any{
+		"model": model,
+		"messages": []map[string]string{
+			{"role": "system", "content": system},
+			{"role": "user", "content": user},
+		},
+		"temperature": temperature,
+		"stream":      true,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/chat/completions", strings.NewReader(string(raw)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set("Authorization", bearer(key))
+	}
+	resp, err := (&http.Client{Timeout: 0}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("chat endpoint %d: %s", resp.StatusCode, string(body))
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "data:")
+		line = strings.TrimSpace(line)
+		if line == "[DONE]" {
+			return nil
+		}
+		var event struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			continue
+		}
+		for _, choice := range event.Choices {
+			if choice.Delta.Content != "" && !onDelta(choice.Delta.Content) {
+				return nil
+			}
+		}
+	}
+	return scanner.Err()
 }
 
 // ---- OpenAI Chat Completions ------------------------------------------------

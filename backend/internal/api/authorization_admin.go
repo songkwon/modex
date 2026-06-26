@@ -296,6 +296,34 @@ func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categor
 	return store.User{}, false
 }
 
+func (s *Server) canAccessModule(user store.User, module store.Module) bool {
+	if s.app.Auth().IsSuperAdmin(user) {
+		return true
+	}
+	if module.CreatedBy != "" && (module.CreatedBy == user.ID || strings.EqualFold(module.CreatedBy, user.Username)) {
+		return true
+	}
+	set, all := s.accessibleCategoryIDs(user)
+	return all || categoriesIntersect(module.CategoryIDs, set)
+}
+
+func (s *Server) requireModuleAccess(w http.ResponseWriter, r *http.Request, moduleKey string) (store.User, store.Module, bool) {
+	user, ok := s.requireUser(w, r)
+	if !ok {
+		return store.User{}, store.Module{}, false
+	}
+	module, err := s.app.Store().Module(moduleKey)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "module not found")
+		return store.User{}, store.Module{}, false
+	}
+	if !s.canAccessModule(user, module) {
+		writeError(w, http.StatusForbidden, "forbidden", "no management permission for this document source")
+		return store.User{}, store.Module{}, false
+	}
+	return user, module, true
+}
+
 // moduleCategories resolves the category IDs attached to a module key.
 func (s *Server) moduleCategories(moduleKey string) []string {
 	if m, err := s.app.Store().Module(moduleKey); err == nil {
@@ -385,7 +413,7 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 		if set, all := s.accessibleCategoryIDs(user); !all {
 			scoped := modules[:0:0]
 			for _, m := range modules {
-				if categoriesIntersect(m.CategoryIDs, set) {
+				if categoriesIntersect(m.CategoryIDs, set) || (m.CreatedBy != "" && (m.CreatedBy == user.ID || strings.EqualFold(m.CreatedBy, user.Username))) {
 					scoped = append(scoped, m)
 				}
 			}
@@ -421,6 +449,8 @@ func (s *Server) handleAdminModules(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requirePlatform(w, r, m.CategoryIDs); !ok {
 		return
 	}
+	user, _ := s.currentUser(r)
+	m.CreatedBy = user.ID
 	created, err := s.app.Store().CreateModule(m)
 	s.writeMutation(w, created, http.StatusCreated, err)
 }
@@ -438,30 +468,25 @@ func (s *Server) handleAdminModuleRoutes(w http.ResponseWriter, r *http.Request)
 		s.handleMigrateModule(w, r, moduleKey)
 		return
 	}
-	user, ok := s.requirePlatform(w, r, s.moduleCategories(moduleKey))
+	user, module, ok := s.requireModuleAccess(w, r, moduleKey)
 	if !ok {
 		return
 	}
 	// Reveal / rotate the CI deploy token (kept out of normal serialization).
 	if len(parts) == 2 && parts[1] == "deploy-token" {
-		m, err := s.app.Store().Module(moduleKey)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "not_found", "module not found")
-			return
-		}
 		if r.Method == http.MethodPost { // rotate
 			token := "mdx_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 			if _, err := s.app.Store().UpdateModule(moduleKey, store.Module{DeployToken: token}); err != nil {
 				writeResult(w, nil, err)
 				return
 			}
-			m.DeployToken = token
+			module.DeployToken = token
 		} else if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET or POST")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"deploy_token": m.DeployToken,
+			"deploy_token": module.DeployToken,
 			"deploy_url":   firstNonEmptyStr(os.Getenv("APP_BASE_URL"), "") + "/api/deploy",
 			"module_key":   moduleKey,
 		})

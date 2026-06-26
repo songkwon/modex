@@ -1,4 +1,5 @@
 import { GitBranch } from "lucide-react";
+import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { getEntriesSafe, getModule, getModuleVersions, getNav, getPage } from "@/lib/api";
 import { PageViewTracker } from "@/components/page-view-tracker";
@@ -28,8 +29,11 @@ export default async function DocPage({
     getEntriesSafe(moduleKey, docsVersion),
     getModuleVersions(moduleKey).catch(() => []),
     getNav(moduleKey, docsVersion, entryKey).catch(() => []),
-    getPage(moduleKey, docsVersion, entryKey)
+    getPage(moduleKey, docsVersion, entryKey).catch(() => null)
   ]);
+  if (!pagePayload) {
+    notFound();
+  }
   const page = pagePayload.page ?? pagePayload;
   const contentHTML = extractDocumentBody(pagePayload.content_html || "");
   const contentMD = (page.content_md || pagePayload.content_md || "").trim();

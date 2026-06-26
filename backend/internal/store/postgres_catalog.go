@@ -302,7 +302,7 @@ func (p *PostgresRepository) CreateModule(module Module) (Module, error) {
 		return Module{}, err
 	}
 	defer tx.Rollback(ctx)
-	created, err := queryJSONOne[Module](ctx, tx, `INSERT INTO docs_module(id,module_key,name,description,owner_group,repo_type,repo_url,default_version,visibility,status,package_name,package_version,channel,edition,keywords,maintainers,category_path,source_type,doc_type,mount,gitlab_branch,gitlab_path,deploy_token,last_synced_commit,last_synced_at,reads_7d,reads_30d,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,$18,$19,$20,$21,$22,$23,$24,NULLIF($25,'')::timestamptz,$26,$27,now()) RETURNING to_jsonb(docs_module)-'default_version_id'-'created_at'`, module.ID, module.ModuleKey, module.Name, module.Description, module.OwnerGroup, module.RepoType, module.RepoURL, module.DefaultVersion, module.Visibility, module.Status, module.PackageName, module.PackageVersion, module.Channel, module.Edition, mustJSON(module.Keywords), mustJSON(module.Maintainers), module.CategoryPath, module.SourceType, module.DocType, module.Mount, module.GitLabBranch, module.GitLabPath, module.DeployToken, module.LastSyncedCommit, timeText(module.LastSyncedAt), module.Reads7d, module.Reads30d)
+	created, err := queryJSONOne[Module](ctx, tx, `INSERT INTO docs_module(id,module_key,name,description,owner_group,repo_type,repo_url,default_version,visibility,status,package_name,package_version,channel,edition,keywords,maintainers,category_path,source_type,doc_type,mount,gitlab_branch,gitlab_path,deploy_token,last_synced_commit,last_synced_at,created_by,reads_7d,reads_30d,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17,$18,$19,$20,$21,$22,$23,$24,NULLIF($25,'')::timestamptz,NULLIF($26,''),$27,$28,now()) RETURNING to_jsonb(docs_module)-'default_version_id'-'created_at'`, module.ID, module.ModuleKey, module.Name, module.Description, module.OwnerGroup, module.RepoType, module.RepoURL, module.DefaultVersion, module.Visibility, module.Status, module.PackageName, module.PackageVersion, module.Channel, module.Edition, mustJSON(module.Keywords), mustJSON(module.Maintainers), module.CategoryPath, module.SourceType, module.DocType, module.Mount, module.GitLabBranch, module.GitLabPath, module.DeployToken, module.LastSyncedCommit, timeText(module.LastSyncedAt), module.CreatedBy, module.Reads7d, module.Reads30d)
 	if err != nil {
 		return Module{}, postgresError(err)
 	}
@@ -400,13 +400,16 @@ func (p *PostgresRepository) UpdateModule(moduleKey string, patch Module) (Modul
 	if patch.DeployToken != "" {
 		current.DeployToken = patch.DeployToken
 	}
+	if patch.CreatedBy != "" {
+		current.CreatedBy = patch.CreatedBy
+	}
 	ctx := context.Background()
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return Module{}, err
 	}
 	defer tx.Rollback(ctx)
-	updated, err := queryJSONOne[Module](ctx, tx, `UPDATE docs_module SET name=$2,description=$3,owner_group=$4,repo_type=$5,repo_url=$6,default_version=$7,visibility=$8,status=$9,package_version=$10,channel=$11,edition=$12,keywords=$13::jsonb,maintainers=$14::jsonb,category_path=$15,source_type=$16,doc_type=$17,mount=$18,gitlab_branch=$19,gitlab_path=$20,deploy_token=$21,updated_at=now() WHERE id=$1 RETURNING to_jsonb(docs_module)-'default_version_id'-'created_at'`, current.ID, current.Name, current.Description, current.OwnerGroup, current.RepoType, current.RepoURL, current.DefaultVersion, current.Visibility, current.Status, current.PackageVersion, current.Channel, current.Edition, mustJSON(current.Keywords), mustJSON(current.Maintainers), current.CategoryPath, current.SourceType, current.DocType, current.Mount, current.GitLabBranch, current.GitLabPath, current.DeployToken)
+	updated, err := queryJSONOne[Module](ctx, tx, `UPDATE docs_module SET name=$2,description=$3,owner_group=$4,repo_type=$5,repo_url=$6,default_version=$7,visibility=$8,status=$9,package_version=$10,channel=$11,edition=$12,keywords=$13::jsonb,maintainers=$14::jsonb,category_path=$15,source_type=$16,doc_type=$17,mount=$18,gitlab_branch=$19,gitlab_path=$20,deploy_token=$21,created_by=NULLIF($22,''),updated_at=now() WHERE id=$1 RETURNING to_jsonb(docs_module)-'default_version_id'-'created_at'`, current.ID, current.Name, current.Description, current.OwnerGroup, current.RepoType, current.RepoURL, current.DefaultVersion, current.Visibility, current.Status, current.PackageVersion, current.Channel, current.Edition, mustJSON(current.Keywords), mustJSON(current.Maintainers), current.CategoryPath, current.SourceType, current.DocType, current.Mount, current.GitLabBranch, current.GitLabPath, current.DeployToken, current.CreatedBy)
 	if err != nil {
 		return Module{}, err
 	}
@@ -652,7 +655,7 @@ func (p *PostgresRepository) Page(docID string) (Page, error) {
 	return queryJSONOne[Page](context.Background(), p.pool, `SELECT (to_jsonb(p)-'module_id'-'version_id'-'entry_id'-'release_id'-'last_verified_at'-'created_at')||jsonb_build_object('module_key',m.module_key,'module_name',m.name,'docs_version',v.docs_version,'package_version',v.package_version,'entry_key',COALESCE(e.entry_key,''),'entry_type',COALESCE(e.entry_type,'')) FROM docs_page p JOIN docs_module m ON m.id=p.module_id JOIN docs_version v ON v.id=p.version_id LEFT JOIN docs_entry e ON e.id=p.entry_id WHERE p.doc_id=$1`, docID)
 }
 func (p *PostgresRepository) PageByRoute(moduleKey, docsVersion, entryKey string) (Page, error) {
-	return queryJSONOne[Page](context.Background(), p.pool, `SELECT (to_jsonb(p)-'module_id'-'version_id'-'entry_id'-'release_id'-'last_verified_at'-'created_at')||jsonb_build_object('module_key',m.module_key,'module_name',m.name,'docs_version',v.docs_version,'package_version',v.package_version,'entry_key',COALESCE(e.entry_key,''),'entry_type',COALESCE(e.entry_type,'')) FROM docs_page p JOIN docs_module m ON m.id=p.module_id JOIN docs_version v ON v.id=p.version_id LEFT JOIN docs_entry e ON e.id=p.entry_id WHERE lower(m.module_key)=lower($1) AND v.docs_version=$2 ORDER BY CASE WHEN e.entry_key=$3 THEN 0 WHEN e.is_primary THEN 1 ELSE 2 END,e.sort_order,p.id LIMIT 1`, moduleKey, docsVersion, entryKey)
+	return queryJSONOne[Page](context.Background(), p.pool, `SELECT (to_jsonb(p)-'module_id'-'version_id'-'entry_id'-'release_id'-'last_verified_at'-'created_at')||jsonb_build_object('module_key',m.module_key,'module_name',m.name,'docs_version',v.docs_version,'package_version',v.package_version,'entry_key',COALESCE(e.entry_key,''),'entry_type',COALESCE(e.entry_type,'')) FROM docs_page p JOIN docs_module m ON m.id=p.module_id JOIN docs_version v ON v.id=p.version_id LEFT JOIN docs_entry e ON e.id=p.entry_id WHERE lower(m.module_key)=lower($1) AND v.docs_version=$2 AND e.entry_key=$3 LIMIT 1`, moduleKey, docsVersion, entryKey)
 }
 func (p *PostgresRepository) Nav(moduleKey, docsVersion string) []NavItem {
 	var raw []byte
