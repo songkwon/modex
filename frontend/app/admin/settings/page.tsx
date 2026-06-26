@@ -299,7 +299,7 @@ export default function AdminSettingsPage() {
                 placeholder="https://api.example.com/v1"
                 onChange={(e) => setAI({ ...ai, embedding_base_url: e.target.value })}
               />
-              <span className="field-hint">填写服务根地址，例如 <code className="code-chip">https://api.example.com/v1</code>；系统会实际请求 <code className="code-chip">/embeddings</code>。</span>
+              <span className="field-hint">填写服务根地址，例如 <code className="code-chip">https://api.example.com/v1</code>；实际请求 <code className="code-chip">/embeddings</code></span>
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>{t("admin.settings.embedding_model")}</label>
@@ -351,7 +351,7 @@ export default function AdminSettingsPage() {
                 placeholder="https://api.example.com/v1"
                 onChange={(e) => setAI({ ...ai, rerank_base_url: e.target.value })}
               />
-              <span className="field-hint">填写重排序服务根地址；系统会实际请求 <code className="code-chip">/rerank</code>，不要填成嵌入模型的 <code className="code-chip">/embeddings</code>。</span>
+              <span className="field-hint">填写重排序服务根地址；实际请求 <code className="code-chip">/rerank</code>，不要填嵌入模型的 <code className="code-chip">/embeddings</code></span>
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>{t("admin.settings.rerank_model")}</label>
@@ -361,17 +361,6 @@ export default function AdminSettingsPage() {
                 onChange={(e) => setAI({ ...ai, rerank_model: e.target.value })}
               />
             </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <button className="button" onClick={() => handleConnectionTest("rerank")} disabled={testingConnection === "rerank"}>
-              {testingConnection === "rerank" ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 测试重排序模型
-            </button>
-            {connectionResult.rerank ? (
-              <span className="badge badge-success">
-                连接成功：top index {connectionResult.rerank.top_index}，endpoint {connectionResult.rerank.endpoint}
-              </span>
-            ) : null}
-            {connectionError.rerank ? <span className="badge badge-danger">测试失败：{connectionError.rerank}</span> : null}
           </div>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>
@@ -393,6 +382,17 @@ export default function AdminSettingsPage() {
                 onChange={(e) => setAI({ ...ai, rerank_top_k: e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10) || 0) })}
               />
             </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <button className="button" onClick={() => handleConnectionTest("rerank")} disabled={testingConnection === "rerank"}>
+              {testingConnection === "rerank" ? <Loader2 size={15} className="ds-spin" /> : <ListChecks size={15} />} 测试重排序模型
+            </button>
+            {connectionResult.rerank ? (
+              <span className="badge badge-success">
+                连接成功：top index {connectionResult.rerank.top_index}，endpoint {connectionResult.rerank.endpoint}
+              </span>
+            ) : null}
+            {connectionError.rerank ? <span className="badge badge-danger">测试失败：{connectionError.rerank}</span> : null}
           </div>
           <div style={{ display: "flex", gap: 16 }}>
             <div className="field" style={{ flex: 1 }}>
