@@ -71,6 +71,12 @@ credential store. If Codex uses a fixed callback port, set
 `mcp_oauth_callback_port` in `~/.codex/config.toml`; Modex allows loopback
 callbacks for `localhost`, `127.0.0.1`, and `::1`.
 
+For hosted deployments behind Nginx or another reverse proxy, expose `/mcp`,
+`/.well-known/oauth-protected-resource`, and
+`/.well-known/oauth-protected-resource/mcp` to the `modex-mcp-server`. Expose
+`/oauth/*` to the Modex backend. OAuth metadata derives the public site URL
+from the request host and standard proxy forwarding headers.
+
 ### Claude Code
 
 ```bash

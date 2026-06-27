@@ -1,8 +1,7 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,20 +11,31 @@ import (
 	"strings"
 
 	"modex/mcp/internal/client"
+
+	"github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/modelcontextprotocol/go-sdk/oauthex"
 )
 
-type rpcRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      any             `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+type listModulesInput struct {
+	CategoryID string `json:"category_id,omitempty" jsonschema:"Optional category/platform id."`
+	Keyword    string `json:"keyword,omitempty" jsonschema:"Optional module keyword."`
 }
 
-type rpcResponse struct {
-	JSONRPC string `json:"jsonrpc"`
-	ID      any    `json:"id,omitempty"`
-	Result  any    `json:"result,omitempty"`
-	Error   any    `json:"error,omitempty"`
+type listVersionsInput struct {
+	ModuleKey string `json:"module_key" jsonschema:"Module key."`
+}
+
+type searchDocsInput struct {
+	Query       string `json:"query" jsonschema:"Search query."`
+	Mode        string `json:"mode,omitempty" jsonschema:"Search mode: keyword, semantic, or hybrid. Defaults to hybrid."`
+	Limit       int    `json:"limit,omitempty" jsonschema:"Maximum results. Defaults to 5."`
+	ModuleKey   string `json:"module_key,omitempty" jsonschema:"Optional module key filter."`
+	DocsVersion string `json:"docs_version,omitempty" jsonschema:"Optional docs version filter."`
+}
+
+type getDocPageInput struct {
+	DocID string `json:"doc_id" jsonschema:"Document id returned by search_docs."`
 }
 
 func main() {
@@ -39,27 +49,89 @@ func main() {
 	case "http", "streamable-http", "streamable_http":
 		runHTTP(c, *addr, *path)
 	case "stdio":
-		runStdio(c)
+		if err := newMCPServer(c).Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+			log.Fatal(err)
+		}
 	default:
 		log.Fatalf("unsupported transport %q", *transport)
 	}
 }
 
-func runStdio(c client.Client) {
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		var req rpcRequest
-		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
-			respond(nil, nil, err)
-			continue
+func newMCPServer(c client.Client) *mcp.Server {
+	server := mcp.NewServer(&mcp.Implementation{Name: "modex-mcp-server", Version: "0.1.0"}, nil)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_modules",
+		Description: "List documentation modules by category or keyword",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input listModulesInput) (*mcp.CallToolResult, any, error) {
+		result, err := c.ListModules(input.CategoryID, input.Keyword)
+		return toolCallResult(c, "list_modules", input.Keyword, input, result, err)
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_versions",
+		Description: "List versions for one module",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input listVersionsInput) (*mcp.CallToolResult, any, error) {
+		if input.ModuleKey == "" {
+			return nil, nil, fmt.Errorf("module_key is required")
 		}
-		result, err := handle(c, req)
-		respond(req.ID, result, err)
+		result, err := c.ListVersions(input.ModuleKey)
+		return toolCallResult(c, "list_versions", "", input, result, err)
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "search_docs",
+		Description: "Search docs with keyword, semantic, or hybrid mode",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchDocsInput) (*mcp.CallToolResult, any, error) {
+		if input.Query == "" {
+			return nil, nil, fmt.Errorf("query is required")
+		}
+		limit := input.Limit
+		if limit == 0 {
+			limit = 5
+		}
+		limit = clampInt(limit, 1, 20)
+		mode := defaultStr(input.Mode, "hybrid")
+		if mode != "keyword" && mode != "semantic" && mode != "hybrid" {
+			return nil, nil, fmt.Errorf("mode must be keyword, semantic, or hybrid")
+		}
+		body := map[string]any{
+			"query": input.Query,
+			"mode":  mode,
+			"page":  1, "page_size": limit,
+			"filters": map[string]any{
+				"modules":       optionalList(input.ModuleKey),
+				"docs_versions": optionalList(input.DocsVersion),
+			},
+		}
+		result, err := c.SearchDocs(body)
+		return toolCallResult(c, "search_docs", input.Query, input, result, err)
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_doc_page",
+		Description: "Get one document page by doc_id",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input getDocPageInput) (*mcp.CallToolResult, any, error) {
+		if input.DocID == "" {
+			return nil, nil, fmt.Errorf("doc_id is required")
+		}
+		result, err := c.GetDocPage(input.DocID)
+		return toolCallResult(c, "get_doc_page", "", input, result, err)
+	})
+
+	return server
+}
+
+func toolCallResult(c client.Client, name, query string, input any, result any, err error) (*mcp.CallToolResult, any, error) {
+	if err != nil {
+		return nil, nil, err
 	}
-	if err := scanner.Err(); err != nil {
-		respond(nil, nil, fmt.Errorf("stdin read failed: %w", err))
-	}
+	c.LogMCP(name, query, input, resultCount(result))
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: prettyJSON(result)},
+		},
+	}, nil, nil
 }
 
 func runHTTP(c client.Client, addr, path string) {
@@ -75,98 +147,32 @@ func runHTTP(c client.Client, addr, path string) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-		writeOAuthAuthorizationMetadata(c, w, r)
+		writeOAuthAuthorizationMetadata(w, r)
 	})
 	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
-		writeOAuthProtectedResourceMetadata(c, w, r)
+		writeOAuthProtectedResourceMetadata(w, r)
 	})
 	mux.HandleFunc("/.well-known/oauth-protected-resource"+path, func(w http.ResponseWriter, r *http.Request) {
-		writeOAuthProtectedResourceMetadata(c, w, r)
+		writeOAuthProtectedResourceMetadata(w, r)
 	})
-	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-		handleHTTPRPC(c, w, r)
-	})
+	mux.Handle(path, mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		if token := bearerToken(r); token != "" {
+			return newMCPServer(c.WithToken(token))
+		}
+		return newMCPServer(c)
+	}, nil))
 	log.Printf("modex MCP streamable HTTP listening on %s%s", addr, path)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func handleHTTPRPC(c client.Client, w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Mcp-Session-Id")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("MCP-Protocol-Version", "2024-11-05")
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method == http.MethodGet {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"name":      "modex-mcp-server",
-			"transport": "streamable-http",
-			"endpoint":  r.URL.Path,
-		})
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "use POST", http.StatusMethodNotAllowed)
-		return
-	}
-	if token := bearerToken(r); token != "" {
-		c = c.WithToken(token)
-	}
-	defer r.Body.Close()
-	var raw json.RawMessage
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-		writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32700, "parse error")})
-		return
-	}
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32700, "parse error")})
-		return
-	}
-	if raw[0] == '[' {
-		var reqs []rpcRequest
-		if err := json.Unmarshal(raw, &reqs); err != nil {
-			writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32600, "invalid request")})
-			return
-		}
-		responses := make([]rpcResponse, 0, len(reqs))
-		for _, req := range reqs {
-			if isNotification(req) {
-				_, _ = handle(c, req)
-				continue
-			}
-			responses = append(responses, handleRPC(c, req))
-		}
-		if len(responses) == 0 {
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		writeJSON(w, http.StatusOK, responses)
-		return
-	}
-	var req rpcRequest
-	if err := json.Unmarshal(raw, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, rpcResponse{JSONRPC: "2.0", ID: nil, Error: rpcError(-32600, "invalid request")})
-		return
-	}
-	if isNotification(req) {
-		_, _ = handle(c, req)
-		w.WriteHeader(http.StatusAccepted)
-		return
-	}
-	writeJSON(w, http.StatusOK, handleRPC(c, req))
-}
-
-func writeOAuthAuthorizationMetadata(c client.Client, w http.ResponseWriter, r *http.Request) {
+func writeOAuthAuthorizationMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "use GET", http.StatusMethodNotAllowed)
 		return
 	}
-	base := strings.TrimRight(c.BaseURL, "/")
+	base := requestOrigin(r)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                base,
 		"authorization_endpoint":                base + "/oauth/authorize",
@@ -179,19 +185,21 @@ func writeOAuthAuthorizationMetadata(c client.Client, w http.ResponseWriter, r *
 	})
 }
 
-func writeOAuthProtectedResourceMetadata(c client.Client, w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "use GET", http.StatusMethodNotAllowed)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"resource":              resourceURL(r),
-		"authorization_servers": []string{strings.TrimRight(c.BaseURL, "/")},
-		"scopes_supported":      []string{"modex:mcp:read", "modex:docs:read"},
-	})
+func writeOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
+	auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
+		Resource:               resourceURL(r),
+		AuthorizationServers:   []string{requestOrigin(r)},
+		ScopesSupported:        []string{"modex:mcp:read", "modex:docs:read"},
+		BearerMethodsSupported: []string{"header"},
+		ResourceName:           "Modex MCP",
+	}).ServeHTTP(w, r)
 }
 
 func resourceURL(r *http.Request) string {
+	return strings.TrimRight(requestOrigin(r)+r.URL.Path, "/")
+}
+
+func requestOrigin(r *http.Request) string {
 	scheme := "https"
 	if r.TLS == nil {
 		scheme = "http"
@@ -203,7 +211,7 @@ func resourceURL(r *http.Request) string {
 	if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
 		host = strings.Split(forwarded, ",")[0]
 	}
-	return strings.TrimRight(scheme+"://"+strings.TrimSpace(host)+r.URL.Path, "/")
+	return strings.TrimRight(scheme+"://"+strings.TrimSpace(host), "/")
 }
 
 func bearerToken(r *http.Request) string {
@@ -214,144 +222,12 @@ func bearerToken(r *http.Request) string {
 	return ""
 }
 
-func handleRPC(c client.Client, req rpcRequest) rpcResponse {
-	result, err := handle(c, req)
-	if err != nil {
-		return rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: rpcError(-32000, err.Error())}
-	}
-	return rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result}
-}
-
-func isNotification(req rpcRequest) bool {
-	return req.ID == nil
-}
-
-func handle(c client.Client, req rpcRequest) (any, error) {
-	switch req.Method {
-	case "initialize":
-		return map[string]any{"protocolVersion": "2024-11-05", "serverInfo": map[string]any{"name": "modex-mcp-server", "version": "0.1.0"}, "capabilities": map[string]any{"tools": map[string]any{}}}, nil
-	case "tools/list":
-		return map[string]any{"tools": []map[string]any{
-			tool("list_modules", "List documentation modules by category or keyword", map[string]any{
-				"category_id": propString("Optional category/platform id."),
-				"keyword":     propString("Optional module keyword."),
-			}, nil),
-			tool("list_versions", "List versions for one module", map[string]any{
-				"module_key": propString("Module key."),
-			}, []string{"module_key"}),
-			tool("search_docs", "Search docs with keyword, semantic, or hybrid mode", map[string]any{
-				"query":        propString("Search query."),
-				"mode":         map[string]any{"type": "string", "enum": []string{"keyword", "semantic", "hybrid"}, "description": "Search mode. Defaults to hybrid."},
-				"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 20, "description": "Maximum results. Defaults to 5."},
-				"module_key":   propString("Optional module key filter."),
-				"docs_version": propString("Optional docs version filter."),
-			}, []string{"query"}),
-			tool("get_doc_page", "Get one document page by doc_id", map[string]any{
-				"doc_id": propString("Document id returned by search_docs."),
-			}, []string{"doc_id"}),
-		}}, nil
-	case "tools/call":
-		var params struct {
-			Name      string         `json:"name"`
-			Arguments map[string]any `json:"arguments"`
-		}
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return nil, err
-		}
-		result, err := callTool(c, params.Name, params.Arguments)
-		if err != nil {
-			return nil, err
-		}
-		return toolResult(result), nil
-	default:
-		return nil, fmt.Errorf("unsupported method %s", req.Method)
-	}
-}
-
-func callTool(c client.Client, name string, args map[string]any) (any, error) {
-	if args == nil {
-		args = map[string]any{}
-	}
-	var result any
-	var err error
-	switch name {
-	case "list_modules":
-		result, err = c.ListModules(str(args["category_id"]), str(args["keyword"]))
-	case "list_versions":
-		moduleKey := str(args["module_key"])
-		if moduleKey == "" {
-			return nil, fmt.Errorf("module_key is required")
-		}
-		result, err = c.ListVersions(moduleKey)
-	case "search_docs":
-		query := str(args["query"])
-		if query == "" {
-			return nil, fmt.Errorf("query is required")
-		}
-		limit := clampInt(intVal(args["limit"], 5), 1, 20)
-		mode := defaultStr(str(args["mode"]), "hybrid")
-		if mode != "keyword" && mode != "semantic" && mode != "hybrid" {
-			return nil, fmt.Errorf("mode must be keyword, semantic, or hybrid")
-		}
-		body := map[string]any{
-			"query": query,
-			"mode":  mode,
-			"page":  1, "page_size": limit,
-			"filters": map[string]any{
-				"modules":       optionalList(str(args["module_key"])),
-				"docs_versions": optionalList(str(args["docs_version"])),
-			},
-		}
-		result, err = c.SearchDocs(body)
-	case "get_doc_page":
-		docID := str(args["doc_id"])
-		if docID == "" {
-			return nil, fmt.Errorf("doc_id is required")
-		}
-		result, err = c.GetDocPage(docID)
-	default:
-		return nil, fmt.Errorf("unknown tool %s", name)
-	}
-	if err == nil {
-		c.LogMCP(name, str(args["query"]), args, resultCount(result))
-	}
-	return result, err
-}
-
-func tool(name, description string, properties map[string]any, required []string) map[string]any {
-	return map[string]any{
-		"name": name, "description": description,
-		"inputSchema": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false},
-	}
-}
-
-func propString(description string) map[string]any {
-	return map[string]any{"type": "string", "description": description}
-}
-
-func toolResult(v any) map[string]any {
+func prettyJSON(v any) string {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		b = []byte(fmt.Sprint(v))
+		return fmt.Sprint(v)
 	}
-	return map[string]any{
-		"content": []map[string]any{
-			{"type": "text", "text": string(b)},
-		},
-	}
-}
-
-func respond(id, result any, err error) {
-	resp := rpcResponse{JSONRPC: "2.0", ID: id, Result: result}
-	if err != nil {
-		resp.Result = nil
-		resp.Error = rpcError(-32000, err.Error())
-	}
-	_ = json.NewEncoder(os.Stdout).Encode(resp)
-}
-
-func rpcError(code int, message string) map[string]any {
-	return map[string]any{"code": code, "message": message}
+	return string(b)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -360,32 +236,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func str(v any) string {
-	if s, ok := v.(string); ok {
-		return strings.TrimSpace(s)
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
-	return ""
-}
-
-func intVal(v any, fallback int) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	default:
-		return fallback
-	}
-}
-
-func clampInt(v, min, max int) int {
-	if v < min {
-		return min
-	}
-	if v > max {
-		return max
-	}
-	return v
+	return fallback
 }
 
 func defaultStr(v, fallback string) string {
@@ -402,26 +257,35 @@ func optionalList(v string) []string {
 	return []string{v}
 }
 
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
 func resultCount(v any) int {
 	switch x := v.(type) {
 	case []any:
 		return len(x)
 	case map[string]any:
-		if n, ok := x["total"].(float64); ok {
-			return int(n)
+		if total, ok := x["total"].(float64); ok {
+			return int(total)
 		}
-		if rs, ok := x["results"].([]any); ok {
-			return len(rs)
+		if items, ok := x["items"].([]any); ok {
+			return len(items)
+		}
+		if results, ok := x["results"].([]any); ok {
+			return len(results)
 		}
 		return 1
 	default:
+		if v == nil {
+			return 0
+		}
 		return 1
 	}
-}
-
-func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

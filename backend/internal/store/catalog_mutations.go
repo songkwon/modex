@@ -666,15 +666,6 @@ func cloneNav(xs []NavItem) []NavItem {
 	return out
 }
 
-func sortOrderForEntryLocked(entries []Entry, moduleKey, docsVersion, entryKey string) int {
-	for _, e := range entries {
-		if strings.EqualFold(e.ModuleKey, moduleKey) && e.DocsVersion == docsVersion && e.EntryKey == entryKey {
-			return e.SortOrder
-		}
-	}
-	return int(^uint(0) >> 1)
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
