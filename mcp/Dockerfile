@@ -4,7 +4,7 @@ WORKDIR /src
 # Container builds don't inherit the host proxy; override with a reachable mirror.
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 COPY cmd ./cmd
