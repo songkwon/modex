@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 # Container builds don't inherit the host proxy; override with a reachable mirror.
 ARG GOPROXY=https://goproxy.cn,direct

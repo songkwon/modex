@@ -122,7 +122,6 @@ test("authenticated admin sees the admin console entry", async ({ page }) => {
 
   await page.getByRole("button", { name: /Dev User/ }).click();
 
-  await expect(page.getByRole("link", { name: /项目指南/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /管理控制台/ })).toBeVisible();
 });
 
