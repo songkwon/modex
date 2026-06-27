@@ -104,6 +104,14 @@ func TestConnectedAppOAuthAuthorizationCodeFlow(t *testing.T) {
 		t.Fatalf("bearer me status = %d, body=%s", me.Code, me.Body.String())
 	}
 
+	info := httptest.NewRecorder()
+	infoReq := httptest.NewRequest(http.MethodGet, "/api/mcp/token-info", nil)
+	infoReq.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	handler.ServeHTTP(info, infoReq)
+	if info.Code != http.StatusOK || !strings.Contains(info.Body.String(), `"modex:mcp:read"`) {
+		t.Fatalf("token info status = %d, body=%s", info.Code, info.Body.String())
+	}
+
 	admin := httptest.NewRecorder()
 	adminReq := httptest.NewRequest(http.MethodGet, "/api/admin/users", nil)
 	adminReq.Header.Set("Authorization", "Bearer "+tok.AccessToken)

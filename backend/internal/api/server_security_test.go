@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,6 +110,33 @@ func TestMCPLogAcceptsPersonalMCPToken(t *testing.T) {
 	logs := st.MCPLogs()
 	if len(logs) != 1 || logs[0].UserID != current.ID {
 		t.Fatalf("logs = %+v, want one log attributed to %s", logs, current.ID)
+	}
+}
+
+func TestMCPTokenInfoAcceptsPersonalMCPToken(t *testing.T) {
+	st := store.NewSeededTestStore()
+	current := st.CurrentUser()
+	if _, err := st.SetUserMCPToken(current.ID, "mcp-test-token"); err != nil {
+		t.Fatalf("SetUserMCPToken: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/mcp/token-info", nil)
+	req.Header.Set("Authorization", "Bearer mcp-test-token")
+	rr := httptest.NewRecorder()
+
+	New(st).Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rr.Code, rr.Body.String())
+	}
+	var info struct {
+		UserID string   `json:"user_id"`
+		Scopes []string `json:"scopes"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.UserID != current.ID || len(info.Scopes) != 2 {
+		t.Fatalf("token info = %+v", info)
 	}
 }
 

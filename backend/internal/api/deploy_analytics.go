@@ -819,6 +819,35 @@ func (s *Server) mcpLogUser(r *http.Request) (store.User, bool) {
 	return store.User{}, false
 }
 
+func (s *Server) handleMCPTokenInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use GET")
+		return
+	}
+	token := bearerToken(r)
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "invalid_token", "bearer token is required")
+		return
+	}
+	if user, _, grant, err := s.app.Store().UserByOAuthAccessToken(token); err == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user_id":    user.ID,
+			"scopes":     grant.Scopes,
+			"expires_at": grant.AccessExpiresAt,
+		})
+		return
+	}
+	if user, err := s.app.Store().UserByMCPToken(token); err == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user_id":    user.ID,
+			"scopes":     []string{"modex:mcp:read", "modex:docs:read"},
+			"expires_at": time.Now().UTC().Add(24 * time.Hour),
+		})
+		return
+	}
+	writeError(w, http.StatusUnauthorized, "invalid_token", "bearer token is invalid or expired")
+}
+
 func (s *Server) handleMeMCPToken(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.currentUser(r)
 	if !ok {
