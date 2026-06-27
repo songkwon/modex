@@ -18,6 +18,12 @@ type Client struct {
 	HTTP    *http.Client
 }
 
+type TokenInfo struct {
+	UserID    string    `json:"user_id"`
+	Scopes    []string  `json:"scopes"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 func (c Client) WithToken(token string) Client {
 	c.Token = token
 	return c
@@ -54,6 +60,25 @@ func (c Client) SearchDocs(req map[string]any) (any, error) {
 
 func (c Client) GetDocPage(docID string) (any, error) {
 	return c.get(c.BaseURL + "/api/docs/page/" + url.PathEscape(docID))
+}
+
+func (c Client) VerifyToken(token string) (TokenInfo, error) {
+	result, err := c.WithToken(token).get(c.BaseURL + "/api/mcp/token-info")
+	if err != nil {
+		return TokenInfo{}, err
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return TokenInfo{}, err
+	}
+	var info TokenInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return TokenInfo{}, err
+	}
+	if info.UserID == "" || info.ExpiresAt.IsZero() {
+		return TokenInfo{}, fmt.Errorf("token info response is incomplete")
+	}
+	return info, nil
 }
 
 func (c Client) LogMCP(toolName, query string, input any, resultCount int) {

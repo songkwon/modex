@@ -1,7 +1,8 @@
 # modex-mcp
 
 Connect any [MCP](https://modelcontextprotocol.io) client (Claude Code, Cursor, Windsurf, …)
-to your Modex documentation platform. Zero dependencies, runs over stdio via `npx`.
+to your Modex documentation platform. It uses the official MCP TypeScript SDK
+and runs over stdio via `npx`.
 
 For hosted deployments, Modex also ships a `modex-mcp-server` container that exposes
 streamable HTTP at `/mcp`. Use the `npx` package for clients that only support local
@@ -15,6 +16,9 @@ stdio MCP servers.
 | `list_versions` | List versions of a module |
 | `search_docs` | Keyword / semantic / hybrid search across docs |
 | `get_doc_page` | Fetch a full page by `doc_id` |
+
+All tools return MCP structured content with an output schema. Documents are
+also available through the `modex://docs/{doc_id}` resource template.
 
 ## Configuration
 
@@ -38,6 +42,10 @@ For local compose deployments with the `mcp` profile enabled:
 ```text
 http://localhost:8787/mcp
 ```
+
+The HTTP endpoint requires a valid OAuth access token or personal MCP token.
+Authentication, scope checks, and `WWW-Authenticate` challenges are handled by
+the official MCP Go SDK.
 
 ### Codex OAuth
 

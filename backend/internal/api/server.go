@@ -140,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/api/auth/me", s.handleMe)
 	mux.HandleFunc("/api/me/mcp-token", s.handleMeMCPToken)
+	mux.HandleFunc("/api/mcp/token-info", s.handleMCPTokenInfo)
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/callback", s.handleCallback)
 	mux.HandleFunc("/api/auth/logout", s.handleLogout)

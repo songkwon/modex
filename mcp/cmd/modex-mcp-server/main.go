@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -38,6 +39,22 @@ type getDocPageInput struct {
 	DocID string `json:"doc_id" jsonschema:"Document id returned by search_docs."`
 }
 
+type listModulesOutput struct {
+	Modules any `json:"modules" jsonschema:"Documentation modules matching the requested filters."`
+}
+
+type listVersionsOutput struct {
+	Versions any `json:"versions" jsonschema:"Available documentation versions for the module."`
+}
+
+type searchDocsOutput struct {
+	Search any `json:"search" jsonschema:"Search response containing results, total count, and facets."`
+}
+
+type getDocPageOutput struct {
+	Page any `json:"page" jsonschema:"The requested documentation page."`
+}
+
 func main() {
 	c := client.FromEnv()
 	transport := flag.String("transport", env("MODEX_MCP_TRANSPORT", "stdio"), "MCP transport: stdio or http")
@@ -63,28 +80,28 @@ func newMCPServer(c client.Client) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_modules",
 		Description: "List documentation modules by category or keyword",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input listModulesInput) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input listModulesInput) (*mcp.CallToolResult, listModulesOutput, error) {
 		result, err := c.ListModules(input.CategoryID, input.Keyword)
-		return toolCallResult(c, "list_modules", input.Keyword, input, result, err)
+		return nil, listModulesOutput{Modules: result}, err
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_versions",
 		Description: "List versions for one module",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input listVersionsInput) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input listVersionsInput) (*mcp.CallToolResult, listVersionsOutput, error) {
 		if input.ModuleKey == "" {
-			return nil, nil, fmt.Errorf("module_key is required")
+			return nil, listVersionsOutput{}, fmt.Errorf("module_key is required")
 		}
 		result, err := c.ListVersions(input.ModuleKey)
-		return toolCallResult(c, "list_versions", "", input, result, err)
+		return nil, listVersionsOutput{Versions: result}, err
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_docs",
 		Description: "Search docs with keyword, semantic, or hybrid mode",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchDocsInput) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input searchDocsInput) (*mcp.CallToolResult, searchDocsOutput, error) {
 		if input.Query == "" {
-			return nil, nil, fmt.Errorf("query is required")
+			return nil, searchDocsOutput{}, fmt.Errorf("query is required")
 		}
 		limit := input.Limit
 		if limit == 0 {
@@ -93,7 +110,7 @@ func newMCPServer(c client.Client) *mcp.Server {
 		limit = clampInt(limit, 1, 20)
 		mode := defaultStr(input.Mode, "hybrid")
 		if mode != "keyword" && mode != "semantic" && mode != "hybrid" {
-			return nil, nil, fmt.Errorf("mode must be keyword, semantic, or hybrid")
+			return nil, searchDocsOutput{}, fmt.Errorf("mode must be keyword, semantic, or hybrid")
 		}
 		body := map[string]any{
 			"query": input.Query,
@@ -105,33 +122,30 @@ func newMCPServer(c client.Client) *mcp.Server {
 			},
 		}
 		result, err := c.SearchDocs(body)
-		return toolCallResult(c, "search_docs", input.Query, input, result, err)
+		return nil, searchDocsOutput{Search: result}, err
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_doc_page",
 		Description: "Get one document page by doc_id",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input getDocPageInput) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input getDocPageInput) (*mcp.CallToolResult, getDocPageOutput, error) {
 		if input.DocID == "" {
-			return nil, nil, fmt.Errorf("doc_id is required")
+			return nil, getDocPageOutput{}, fmt.Errorf("doc_id is required")
 		}
 		result, err := c.GetDocPage(input.DocID)
-		return toolCallResult(c, "get_doc_page", "", input, result, err)
+		return nil, getDocPageOutput{Page: result}, err
 	})
 
-	return server
-}
+	server.AddReceivingMiddleware(toolLoggingMiddleware(c))
+	server.AddResourceTemplate(&mcp.ResourceTemplate{
+		URITemplate: "modex://docs/{doc_id}",
+		Name:        "modex_document",
+		Title:       "Modex document",
+		Description: "Read a Modex documentation page by the doc_id returned from search_docs.",
+		MIMEType:    "text/markdown",
+	}, docResourceHandler(c))
 
-func toolCallResult(c client.Client, name, query string, input any, result any, err error) (*mcp.CallToolResult, any, error) {
-	if err != nil {
-		return nil, nil, err
-	}
-	c.LogMCP(name, query, input, resultCount(result))
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: prettyJSON(result)},
-		},
-	}, nil, nil
+	return server
 }
 
 func runHTTP(c client.Client, addr, path string) {
@@ -155,15 +169,40 @@ func runHTTP(c client.Client, addr, path string) {
 	mux.HandleFunc("/.well-known/oauth-protected-resource"+path, func(w http.ResponseWriter, r *http.Request) {
 		writeOAuthProtectedResourceMetadata(w, r)
 	})
-	mux.Handle(path, mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		if token := bearerToken(r); token != "" {
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		if info := auth.TokenInfoFromContext(r.Context()); info != nil {
+			token, _ := info.Extra["access_token"].(string)
 			return newMCPServer(c.WithToken(token))
 		}
 		return newMCPServer(c)
-	}, nil))
+	}, nil)
+	mux.Handle(path, requireBearerToken(c, path)(mcpHandler))
 	log.Printf("modex MCP streamable HTTP listening on %s%s", addr, path)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func requireBearerToken(c client.Client, path string) func(http.Handler) http.Handler {
+	verifier := func(ctx context.Context, token string, req *http.Request) (*auth.TokenInfo, error) {
+		info, err := c.VerifyToken(token)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", auth.ErrInvalidToken, err)
+		}
+		return &auth.TokenInfo{
+			UserID:     info.UserID,
+			Scopes:     info.Scopes,
+			Expiration: info.ExpiresAt,
+			Extra:      map[string]any{"access_token": token},
+		}, nil
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			auth.RequireBearerToken(verifier, &auth.RequireBearerTokenOptions{
+				ResourceMetadataURL: requestOrigin(r) + "/.well-known/oauth-protected-resource" + path,
+				Scopes:              []string{"modex:mcp:read"},
+			})(next).ServeHTTP(w, r)
+		})
 	}
 }
 
@@ -214,12 +253,61 @@ func requestOrigin(r *http.Request) string {
 	return strings.TrimRight(scheme+"://"+strings.TrimSpace(host), "/")
 }
 
-func bearerToken(r *http.Request) string {
-	auth := strings.TrimSpace(r.Header.Get("Authorization"))
-	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-		return strings.TrimSpace(auth[len("Bearer "):])
+func toolLoggingMiddleware(c client.Client) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			result, err := next(ctx, method, req)
+			if method != "tools/call" || err != nil {
+				return result, err
+			}
+			call, ok := req.(*mcp.CallToolRequest)
+			if !ok || call.Params == nil {
+				return result, nil
+			}
+			var input map[string]any
+			_ = json.Unmarshal(call.Params.Arguments, &input)
+			query, _ := input["query"].(string)
+			count := 0
+			if toolResult, ok := result.(*mcp.CallToolResult); ok && !toolResult.IsError {
+				count = resultCount(toolResult.StructuredContent)
+			}
+			c.LogMCP(call.Params.Name, query, input, count)
+			return result, nil
+		}
 	}
-	return ""
+}
+
+func docResourceHandler(c client.Client) mcp.ResourceHandler {
+	return func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		parsed, err := url.Parse(req.Params.URI)
+		if err != nil || parsed.Scheme != "modex" || parsed.Host != "docs" {
+			return nil, mcp.ResourceNotFoundError(req.Params.URI)
+		}
+		docID, err := url.PathUnescape(strings.TrimPrefix(parsed.Path, "/"))
+		if err != nil || docID == "" {
+			return nil, mcp.ResourceNotFoundError(req.Params.URI)
+		}
+		result, err := c.GetDocPage(docID)
+		if err != nil {
+			return nil, err
+		}
+		page, ok := result.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("unexpected document response")
+		}
+		text, _ := page["content_md"].(string)
+		if text == "" {
+			text, _ = page["content_text"].(string)
+		}
+		mimeType := "text/markdown"
+		if text == "" {
+			text = prettyJSON(page)
+			mimeType = "application/json"
+		}
+		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
+			URI: req.Params.URI, MIMEType: mimeType, Text: text,
+		}}}, nil
+	}
 }
 
 func prettyJSON(v any) string {
@@ -280,6 +368,11 @@ func resultCount(v any) int {
 		}
 		if results, ok := x["results"].([]any); ok {
 			return len(results)
+		}
+		for _, key := range []string{"modules", "versions", "search", "page"} {
+			if nested, ok := x[key]; ok {
+				return resultCount(nested)
+			}
 		}
 		return 1
 	default:
