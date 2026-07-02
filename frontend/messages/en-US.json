@@ -140,6 +140,7 @@
   "admin.modules.integrationStepTokenCopyPrefix": "Copy the token and save it in GitLab CI variables as",
   "admin.modules.integrationStepTokenCopySuffix": ".",
   "admin.modules.integrationStepTokenTitle": "Generate a deploy token",
+  "admin.modules.creator": "Creator",
   "admin.modules.last_synced": "Last Synced",
   "admin.modules.local_one_time_deployment": "Local One-Time Deployment",
   "admin.modules.manual_source": "Manual push",

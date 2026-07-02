@@ -129,23 +129,16 @@ async function SingleModuleView({ module }: { module: ModuleInfo }) {
 async function ModuleRow({ module }: { module: ModuleInfo }) {
   const { t } = await getServerI18n();
   const hasPublishedDocs = !!module.default_version;
-  return (
-    <article className="package-row">
+  const entries = hasPublishedDocs ? await getEntriesSafe(module.module_key, module.default_version) : [];
+  const primary = entries.find((e) => e.is_primary) || entries[0];
+  const href = primary ? `/docs/${module.module_key}/${module.default_version}/${primary.entry_key}` : "";
+  const body = (
+    <>
       <div>
-        {hasPublishedDocs ? (
-          <Link href={`/docs/${module.module_key}/${module.default_version}`} className="min-w-0">
-            <div className="package-name">
-              <span className="status-dot" />
-              <span>{module.name}</span>
-            </div>
-          </Link>
-        ) : (
-          <div className="package-name">
-            <span className="status-dot" />
-            <span>{module.name}</span>
-          </div>
-        )}
-        {module.description ? <p className="muted mt-2 text-sm leading-6">{module.description}</p> : null}
+        <div className="package-name">
+          <span className="status-dot" />
+          <span>{module.name}</span>
+        </div>
         <div className="package-meta">
           {module.category_path ? <span>{module.category_path}</span> : null}
           {module.owner_group ? <span>{t("categories.id.owner")}: {module.owner_group}</span> : null}
@@ -153,7 +146,6 @@ async function ModuleRow({ module }: { module: ModuleInfo }) {
         </div>
       </div>
       <aside className="package-stats text-sm">
-        <span className="score-pill">{t("categories.id.activePackage")}</span>
         <div>
           <dt className="muted">{t("categories.id.default_version")}</dt>
           <dd>{module.default_version || "-"}</dd>
@@ -166,14 +158,16 @@ async function ModuleRow({ module }: { module: ModuleInfo }) {
           <dt className="muted">{t("categories.id.reads_30d")}</dt>
           <dd>{module.reads_30d}</dd>
         </div>
-        <div className="flex gap-2 pt-1">
-          {hasPublishedDocs ? (
-            <Link className="button" href={`/docs/${module.module_key}/${module.default_version}`}>{t("categories.id.open")} <ArrowUpRight size={14} /></Link>
-          ) : (
-            <span className="button button-disabled">{t("categories.id.no_document_entry_points")}</span>
-          )}
-        </div>
+        {href ? <ArrowUpRight size={16} className="muted" /> : null}
       </aside>
+    </>
+  );
+  if (href) {
+    return <Link className="package-row" href={href}>{body}</Link>;
+  }
+  return (
+    <article className="package-row">
+      {body}
     </article>
   );
 }

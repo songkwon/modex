@@ -121,6 +121,7 @@ type Module struct {
 	CategoryIDs    []string `json:"category_ids"`
 	CategoryPath   string   `json:"category_path"`
 	CreatedBy      string   `json:"created_by,omitempty"`
+	CreatedByName  string   `json:"created_by_name,omitempty"`
 
 	// GitLab / source integration (similar to Mintlify deploy integration)
 	SourceType       string    `json:"source_type,omitempty"` // "gitlab", "manual"

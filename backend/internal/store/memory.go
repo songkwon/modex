@@ -669,9 +669,49 @@ func (s *MemoryStore) Modules(categoryID, keyword string) []Module {
 		cp := m
 		cp.AvailableVers = s.versionsForLocked(m.ModuleKey)
 		cp.DeployTokenSet = cp.DeployToken != ""
+		cp.CreatedByName = s.userDisplayNameLocked(cp.CreatedBy)
+		cp.Reads7d, cp.Reads30d = s.moduleReadCountsLocked(cp.ModuleKey, cp.Reads7d, cp.Reads30d)
 		out = append(out, cp)
 	}
 	return out
+}
+
+func (s *MemoryStore) userDisplayNameLocked(userID string) string {
+	if userID == "" {
+		return ""
+	}
+	for _, u := range s.users {
+		if u.ID == userID || strings.EqualFold(u.Username, userID) {
+			if u.DisplayName != "" {
+				return u.DisplayName
+			}
+			return u.Username
+		}
+	}
+	return userID
+}
+
+func (s *MemoryStore) moduleReadCountsLocked(moduleKey string, fallback7d, fallback30d int) (int, int) {
+	now := time.Now().UTC()
+	week := now.AddDate(0, 0, -7)
+	month := now.AddDate(0, 0, -30)
+	total, reads7d, reads30d := 0, 0, 0
+	for _, pv := range s.pageViews {
+		if !strings.EqualFold(pv.ModuleKey, moduleKey) {
+			continue
+		}
+		total++
+		if pv.ViewedAt.After(week) {
+			reads7d++
+		}
+		if pv.ViewedAt.After(month) {
+			reads30d++
+		}
+	}
+	if total == 0 {
+		return fallback7d, fallback30d
+	}
+	return reads7d, reads30d
 }
 
 func (s *MemoryStore) Module(moduleKey string) (Module, error) {
