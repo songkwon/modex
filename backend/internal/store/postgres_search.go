@@ -50,9 +50,17 @@ func (p *PostgresRepository) Modules(categoryID, keyword string) []Module {
 		jsonb_build_object(
 			'category_ids',COALESCE((SELECT jsonb_agg(mc.category_id ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc WHERE mc.module_id=m.id),'[]'::jsonb),
 			'category_path',COALESCE(NULLIF(m.category_path,''),(SELECT string_agg(c.name,' / ' ORDER BY mc.is_primary DESC,mc.category_id) FROM docs_module_category mc JOIN docs_category c ON c.id=mc.category_id WHERE mc.module_id=m.id),''),
-			'deploy_token_set',COALESCE(m.deploy_token,'')<>''
+			'created_by_name',COALESCE(NULLIF(u.display_name,''),NULLIF(u.username,''),''),
+			'deploy_token_set',COALESCE(m.deploy_token,'')<>'',
+			'reads_7d',CASE WHEN count(pv.id)=0 THEN m.reads_7d ELSE count(pv.id) FILTER(WHERE pv.viewed_at>now()-interval '7 days') END,
+			'reads_30d',CASE WHEN count(pv.id)=0 THEN m.reads_30d ELSE count(pv.id) FILTER(WHERE pv.viewed_at>now()-interval '30 days') END
 		)
-		FROM docs_module m WHERE ` + strings.Join(where, " AND ") + ` ORDER BY m.updated_at DESC,m.id`
+		FROM docs_module m
+		LEFT JOIN users u ON u.id=m.created_by
+		LEFT JOIN docs_page_view pv ON pv.module_key=m.module_key
+		WHERE ` + strings.Join(where, " AND ") + `
+		GROUP BY m.id,u.id
+		ORDER BY m.updated_at DESC,m.id`
 	if err := loadQuery(context.Background(), p.pool, query, &modules, args...); err != nil {
 		return []Module{}
 	}

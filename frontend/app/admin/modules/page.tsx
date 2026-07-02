@@ -230,6 +230,7 @@ export default function AdminModulesPage() {
                 <th>{t("common.category")}</th>
                 <th>{t("admin.modules.framework_mount")}</th>
                 <th>{t("admin.modules.source")}</th>
+                <th>{t("admin.modules.creator")}</th>
                 <th>{t("admin.modules.last_synced")}</th>
                 <th className="table-actions-col">{t("admin.modules.actions")}</th>
               </tr>
@@ -258,6 +259,7 @@ export default function AdminModulesPage() {
                       <div className="muted mt-1">{m.gitlab_path}</div>
                     ) : null}
                   </td>
+                  <td className="muted" style={{ fontSize: 12 }}>{m.created_by_name || m.created_by || "-"}</td>
                   <td className="muted" style={{ fontSize: 12 }}>
                     {m.last_synced_at ? (
                       <>
@@ -276,7 +278,7 @@ export default function AdminModulesPage() {
                 </tr>
               ))}
               {!pageItems.length ? (
-                <tr><td colSpan={6}>
+                <tr><td colSpan={7}>
                   <EmptyState
                     icon={Boxes}
                     title={t("admin.modules.no_document_sources")}

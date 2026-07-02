@@ -25,7 +25,7 @@ export function DocReadStats({ docId }: { docId: string }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || data) return;
+    if (data) return;
     setLoading(true);
     setError(false);
     getDocAnalytics(docId, days)
@@ -35,7 +35,7 @@ export function DocReadStats({ docId }: { docId: string }) {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [open, docId, days, data]);
+  }, [docId, days, data]);
 
   useEffect(() => {
     setData(null);

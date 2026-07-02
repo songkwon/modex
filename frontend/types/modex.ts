@@ -35,6 +35,8 @@ export type ModuleInfo = {
   maintainers: string[];
   category_ids?: string[];
   category_path: string;
+  created_by?: string;
+  created_by_name?: string;
 
   // GitLab integration fields (for CI-driven sync like Mintlify)
   source_type?: string;      // "gitlab" | "manual"

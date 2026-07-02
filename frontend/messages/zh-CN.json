@@ -140,6 +140,7 @@
   "admin.modules.integrationStepTokenCopyPrefix": "复制 Token，并在 GitLab CI 变量中保存为",
   "admin.modules.integrationStepTokenCopySuffix": "。",
   "admin.modules.integrationStepTokenTitle": "生成部署 Token",
+  "admin.modules.creator": "创建人",
   "admin.modules.last_synced": "最后同步",
   "admin.modules.local_one_time_deployment": "本地一次性部署",
   "admin.modules.manual_source": "手动推送",
