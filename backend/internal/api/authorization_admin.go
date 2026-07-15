@@ -296,6 +296,33 @@ func (s *Server) requirePlatform(w http.ResponseWriter, r *http.Request, categor
 	return store.User{}, false
 }
 
+func (s *Server) canManageEveryCategory(user store.User, categoryIDs []string) bool {
+	if s.app.Auth().IsSuperAdmin(user) {
+		return true
+	}
+	if len(categoryIDs) == 0 {
+		return false
+	}
+	if isAdmin(user) {
+		for _, id := range categoryIDs {
+			if strings.TrimSpace(id) == "" || !canManageCategory(user, id) {
+				return false
+			}
+		}
+		return true
+	}
+	set, all := s.accessibleCategoryIDs(user)
+	if all {
+		return true
+	}
+	for _, id := range categoryIDs {
+		if strings.TrimSpace(id) == "" || !set[id] {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) canAccessModule(user store.User, module store.Module) bool {
 	if s.app.Auth().IsSuperAdmin(user) {
 		return true
@@ -360,9 +387,6 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 	// Drag-and-drop move: POST /api/admin/categories/{id}/move {parent_id, index}.
 	if strings.HasSuffix(id, "/move") {
 		id = strings.TrimSuffix(id, "/move")
-		if _, ok := s.requireSuperAdmin(w, r); !ok {
-			return
-		}
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "use POST")
 			return
@@ -373,6 +397,19 @@ func (s *Server) handleAdminCategoryByID(w http.ResponseWriter, r *http.Request)
 		}
 		if err := decodeBody(r, &body); err != nil {
 			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		user, ok := s.requireUser(w, r)
+		if !ok {
+			return
+		}
+		if body.ParentID == "" {
+			if !s.app.Auth().IsSuperAdmin(user) {
+				writeError(w, http.StatusForbidden, "forbidden", "super admin required")
+				return
+			}
+		} else if !s.canManageEveryCategory(user, []string{id, body.ParentID}) {
+			writeError(w, http.StatusForbidden, "forbidden", "no management permission for this platform")
 			return
 		}
 		moved, err := s.app.Store().MoveCategory(id, body.ParentID, body.Index)
