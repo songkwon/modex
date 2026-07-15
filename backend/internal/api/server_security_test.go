@@ -77,6 +77,39 @@ func TestAdminPluginsRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestTeamLeaderCanMoveChildCategoryWithinResponsibleParent(t *testing.T) {
+	t.Setenv("SUPER_ADMIN_USERS", "")
+	st := store.NewSeededTestStore()
+	srv := New(st)
+	alice, err := st.UserByID("u-alice")
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	login := httptest.NewRecorder()
+	if err := srv.app.Auth().CreateSession(login, alice); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/categories/standards.tools/move", strings.NewReader(`{"parent_id":"standards","index":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	for _, cookie := range login.Result().Cookies() {
+		req.AddCookie(cookie)
+	}
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var moved store.Category
+	if err := json.Unmarshal(rr.Body.Bytes(), &moved); err != nil {
+		t.Fatal(err)
+	}
+	if moved.ID != "standards.tools" || moved.ParentID != "standards" || moved.SortOrder != 10 {
+		t.Fatalf("moved category = %+v", moved)
+	}
+}
+
 func TestMCPLogRequiresAuthenticatedCaller(t *testing.T) {
 	srv := New(store.NewSeededTestStore())
 	req := httptest.NewRequest(http.MethodPost, "/api/mcp/log", strings.NewReader(`{"tool_name":"search_docs"}`))
